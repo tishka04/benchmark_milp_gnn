@@ -1,0 +1,4 @@
+# Ignore extracted PDF artifacts
+extracted_pdfs/
+Literature/
+Writings/
