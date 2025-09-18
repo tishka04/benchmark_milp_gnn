@@ -1,0 +1,67 @@
+data:
+  index_path: C:\Users\Dell\projects\multilayer_milp_gnn\benchmark\config\gnn\outputs\datasets\graphs\dataset_index.json
+  train_split: train
+  val_split: val
+  test_split: test
+  batch_size: 8
+  num_workers: 0
+  shuffle: true
+  pin_memory: false
+  include_duals: true
+  preload: false
+model:
+  name: gcn
+  hidden_dims:
+  - 128
+  - 128
+  dropout: 0.15
+  activation: relu
+  heads: 4
+  aggregator: mean
+  typed_message_passing: true
+  output_dim: 8
+  type_embedding_dim: 16
+  attn_dropout: 0.1
+optimizer:
+  name: adamw
+  lr: 0.001
+  weight_decay: 0.0005
+  betas: null
+scheduler:
+  name: none
+  warmup_steps: 0
+  decay_steps: 0
+  min_lr: 0.0
+loop:
+  epochs: 50
+  device: cpu
+  gradient_clip_norm: 1.0
+  log_every: 25
+  eval_every: 1
+  save_every: 5
+  seed: 1234
+  loss: mse
+decoder:
+  name: feasibility
+  enforce_nonneg: true
+  respect_capacity: true
+  dual_keys:
+  - power_balance
+  blend_dual_fraction: 0.1
+  residual_tolerance: 0.001
+metrics:
+  dispatch_error:
+    reduction: mean
+  cost_gap:
+    weights:
+      thermal: 55.0
+      nuclear: 18.0
+      solar: 5.0
+      wind: 7.0
+      renewable: 0.0
+      hydro_release: 15.0
+      demand_response: 80.0
+      unserved: 500.0
+  constraint_violation_rate:
+    tolerance: 0.001
+output_dir: C:\Users\Dell\projects\multilayer_milp_gnn\benchmark\config\gnn\outputs\gnn_runs\baseline
