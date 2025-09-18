@@ -3,12 +3,14 @@
   "mip": {
     "objective": 107703260.50558282,
     "termination": "optimal",
-    "status": "ok"
+    "status": "ok",
+    "solve_seconds": 3.2713272999972105
   },
   "lp": {
     "objective": 107703260.50558285,
     "termination": "optimal",
-    "status": "ok"
+    "status": "ok",
+    "solve_seconds": 3.4387294000480324
   },
   "cost_components": {
     "thermal_fuel": 0.0,

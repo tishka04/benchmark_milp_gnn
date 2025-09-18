@@ -5,6 +5,10 @@
   "objective_avg": 77792041.7,
   "objective_min": 400014.92,
   "objective_max": 214533126.09,
+  "solve_seconds_total": 26.87,
+  "solve_seconds_avg": 2.69,
+  "solve_seconds_min": 1.39,
+  "solve_seconds_max": 4.25,
   "cost_totals": {
     "thermal_fuel": 0.0,
     "nuclear_fuel": 4743799.16,

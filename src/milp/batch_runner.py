@@ -24,6 +24,7 @@ class BatchResult:
     hdf_path: Optional[Path] = None
     cost_components: Optional[Dict[str, float]] = None
     objective: Optional[float] = None
+    solve_seconds: Optional[float] = None
 
 
 def _ensure_parent(path: Path) -> None:
@@ -109,6 +110,7 @@ def _run_single(
             hdf_path=export_hdf,
             cost_components=report.get("cost_components"),
             objective=float(report["mip"].objective),
+            solve_seconds=report["mip"].solve_seconds,
         )
     except Exception as exc:  # pylint: disable=broad-except
         return BatchResult(
@@ -160,6 +162,14 @@ def _aggregate_summary(results: List[BatchResult]) -> Dict[str, Any]:
         summary["objective_avg"] = round(float(mean(objectives)), 2)
         summary["objective_min"] = round(float(min(objectives)), 2)
         summary["objective_max"] = round(float(max(objectives)), 2)
+
+        solve_times = [r.solve_seconds for r in success_results if r.solve_seconds is not None]
+        if solve_times:
+            total_time = sum(solve_times)
+            summary["solve_seconds_total"] = round(float(total_time), 2)
+            summary["solve_seconds_avg"] = round(float(total_time / len(solve_times)), 2)
+            summary["solve_seconds_min"] = round(float(min(solve_times)), 2)
+            summary["solve_seconds_max"] = round(float(max(solve_times)), 2)
 
         cost_totals: Dict[str, float] = {}
         for r in success_results:

@@ -1,4 +1,4 @@
-# Multilayer MILP + GNN Benchmark
+﻿# Multilayer MILP + GNN Benchmark
 
 This repository bundles three tightly coupled pieces:
 - a scenario generator that samples synthetic power-system cases;
@@ -82,14 +82,7 @@ Flags of interest:
 ### 4.2 Batch solving
 
 ```bash
-python -m src.milp.batch_runner outputs/scenarios_v1 \
-    --solver highs \
-    --workers 4 \
-    --reports-dir outputs/scenarios_v1/reports \
-    --dispatch-dir outputs/scenarios_v1/dispatch_batch \
-    --plots-dir outputs/scenarios_v1/plots \
-    --summary-json outputs/scenarios_v1/batch_summary.json \
-    --plot --tee
+python -m src.milp.batch_runner outputs/scenarios_v1 --solver highs --workers 4 --reports-dir outputs/scenarios_v1/reports --dispatch-dir outputs/scenarios_v1/dispatch_batch --plots-dir outputs/scenarios_v1/plots --summary-json outputs/scenarios_v1/batch_summary.json --plot --tee
 ```
 
 Notes:
@@ -99,7 +92,7 @@ Notes:
 - The summary JSON aggregates success/failure counts, objective statistics, and cost totals for quick QA.
 
 Troubleshooting:
-- A `FAILED: 'solar_per_site'` message means the JSON predates the solar/wind split. Regenerate reports with the current loader�all legacy `res_per_site` cases are now auto-split.
+- A `FAILED: 'solar_per_site'` message means the JSON predates the solar/wind split. Regenerate reports with the current loaderï¿½all legacy `res_per_site` cases are now auto-split.
 - If Pyomo says it cannot locate the solver, confirm `highspy` is installed or add the HiGHS binary folder to PATH.
 
 ## 5. Build GNN graph datasets
@@ -141,6 +134,32 @@ python -m src.gnn.train --config config/gnn/baseline.yaml
 
 During training the CLI logs epoch losses and validation metrics, writes the fully-resolved config to the run directory, and saves `best_model.pt`, `final_model.pt`, plus `test_metrics.json` under `outputs/gnn_runs/<run_name>/`. Use `--device cuda` (or set `loop.device: cuda` in the YAML) if you have a GPU-capable PyTorch install.
 
+
+
+Each run now also emits: 
+- `training_history.json` / `.csv`: epoch-level train/validation metrics with an `is_best` flag for the checkpointed model.
+- `training_step_losses.json` / `.csv`: mini-batch loss snapshots logged at the configured interval (default: every `log_every` steps).
+- `training_summary.json`: quick metadata overview (best epoch, total steps).
+- `test_metrics.json`: nested metric dictionaries (`value` + `details`) for easier downstream analysis.
+
+
+
+### 6.1 Analyse GNN vs MILP performance
+
+
+
+Open `notebooks/performance_comparison.ipynb` to combine MILP scenario metadata with GNN predictions. The notebook loads speed-up estimates, cost gaps, and feasibility rates using the helpers in `src.analysis.performance`. Speed-up calculations now use the measured MILP solve time stored in each report (falling back to the historical estimates when needed). Update `RUN_DIR` if you want to compare a different experiment.
+
+
+
+### 6.2 Inspect training curves
+
+
+
+`notebooks/training_visualization.ipynb` reads the history files above and renders epoch-level and step-level diagnostics. If the notebook reports missing logs, re-run training with the updated pipeline to regenerate them.
+
+
+
 ## 7. Optional tooling & best practices
 
 - **Visual QA**: `src/milp/visualize.py` contains helper functions to overlay capacities and dispatch. The batch runner can auto-save plots if `--plot` is set.
@@ -158,13 +177,13 @@ A: Install `highspy` (`pip install highspy`) or download the HiGHS binary and ad
 A: Use `python -m src.generator.inspect_scenarios outputs/scenarios_v1/scenario_00010.json` to print headline stats.
 
 **Q: Can I add my own solver?**
-A: Yes�pass any Pyomo-supported solver via `--solver`. For commercial solvers (CPLEX/Gurobi), ensure licences and bindings are configured.
+A: Yesï¿½pass any Pyomo-supported solver via `--solver`. For commercial solvers (CPLEX/Gurobi), ensure licences and bindings are configured.
 
 **Q: Do the NPZs include cost information?**
 A: Cost components live in the JSON reports; the NPZ stores structural/time-series tensors. Load the JSON alongside the NPZ in your ML pipeline if you need economics.
 
 ---
-Happy benchmarking! File issues or ideas to extend the workflow�there is plenty of room for new weather regimes, solver configurations, and richer graph targets.
+Happy benchmarking! File issues or ideas to extend the workflowï¿½there is plenty of room for new weather regimes, solver configurations, and richer graph targets.
 
 
 ## 9. License
