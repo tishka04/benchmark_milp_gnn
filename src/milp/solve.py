@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
@@ -17,14 +18,17 @@ class SolveSummary:
     objective: float
     termination_condition: TerminationCondition
     solver_status: SolverStatus
+    solve_seconds: float | None = None
 
     def as_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "objective": float(self.objective),
             "termination": self.termination_condition.name,
             "status": self.solver_status.name,
         }
-
+        if self.solve_seconds is not None:
+            payload["solve_seconds"] = float(self.solve_seconds)
+        return payload
 
 def _relax_integrality(model) -> None:
     TransformationFactory("core.relax_integer_vars").apply_to(model)
@@ -236,11 +240,20 @@ def solve_scenario(
     solver = SolverFactory(solver_name)
 
     mip_model = build_uc_model(data, enable_duals=False)
+    mip_start = time.perf_counter()
     mip_results = solver.solve(mip_model, tee=tee)
+    mip_elapsed = time.perf_counter() - mip_start
+    mip_reported = getattr(mip_results.solver, 'time', None)
+    try:
+        mip_reported_seconds = float(mip_reported) if mip_reported is not None else None
+    except (TypeError, ValueError):
+        mip_reported_seconds = None
+    mip_time_seconds = mip_reported_seconds if mip_reported_seconds and mip_reported_seconds > 0 else mip_elapsed
     mip_summary = SolveSummary(
         objective=value(mip_model.obj),
         termination_condition=mip_results.solver.termination_condition,
         solver_status=mip_results.solver.status,
+        solve_seconds=mip_time_seconds,
     )
 
     cost_components = _compute_cost_components(mip_model)
@@ -302,13 +315,23 @@ def solve_scenario(
 
     lp_model = build_uc_model(data, enable_duals=True)
     _relax_integrality(lp_model)
+    lp_start = time.perf_counter()
     lp_results = solver.solve(lp_model, tee=tee)
+    lp_elapsed = time.perf_counter() - lp_start
+    lp_reported = getattr(lp_results.solver, 'time', None)
+    try:
+        lp_reported_seconds = float(lp_reported) if lp_reported is not None else None
+    except (TypeError, ValueError):
+        lp_reported_seconds = None
+    lp_time_seconds = lp_reported_seconds if lp_reported_seconds and lp_reported_seconds > 0 else lp_elapsed
     lp_summary = SolveSummary(
         objective=value(lp_model.obj),
         termination_condition=lp_results.solver.termination_condition,
         solver_status=lp_results.solver.status,
+        solve_seconds=lp_time_seconds,
     )
 
+    duals: Dict[str, Dict[Tuple[str, int], float]] = {}
     duals: Dict[str, Dict[Tuple[str, int], float]] = {}
     duals["power_balance"] = _collect_duals_zone_time(lp_model, lp_model.power_balance)
     duals["flow_upper"] = _collect_duals_line_time(lp_model, lp_model.flow_upper)

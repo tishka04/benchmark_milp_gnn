@@ -27,7 +27,7 @@ optimizer:
 scheduler:
   name: none
 loop:
-  epochs: 50
+  epochs: 30
   device: cpu
   gradient_clip_norm: 1.0
   log_every: 25
