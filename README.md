@@ -23,11 +23,12 @@ The code is pure Python (3.10 or newer recommended) built on top of [Pyomo](http
 python -m venv .venv
 . .venv/Scripts/activate        # Windows PowerShell: .\.venv\Scripts\Activate.ps1
 pip install --upgrade pip
-pip install pyomo highspy numpy scipy pandas matplotlib pyarrow tqdm pyyaml
+pip install pyomo highspy numpy scipy pandas matplotlib pyarrow tqdm pyyaml torch
 ```
 Optional extras:
 - `pip install hvplot` if you want richer plotting backends.
 - `pip install black ruff` if you plan to contribute code.
+- Install [PyTorch](https://pytorch.org/get-started/locally/) with the build that matches your platform if you prefer GPU acceleration.
 
 ## 2. Repository layout primer
 
@@ -37,7 +38,7 @@ outputs/                 # Generated scenarios, solve reports, dispatch CSVs, pl
 src/
   generator/             # Scenario generator entry points
   milp/                  # MILP model, single/batch runners, plotting helpers
-  gnn/                   # Graph dataset exporter
+  gnn/                   # Graph dataset exporter, models, and training utilities
 ```
 
 Keep everything relative to the project root (`benchmark/` in this checkout). All commands below assume you run them from that directory.
@@ -126,7 +127,21 @@ python -m src.gnn.build_graph_dataset outputs/scenarios_v1 outputs/scenarios_v1/
 
 The command above mirrors scenario/report stems into `outputs/datasets/graphs`, emitting one compressed NPZ per solved case.
 
-## 6. Optional tooling & best practices
+## 6. Train GNN models
+
+With NPZ graph files in hand you can train the baseline dispatch predictors provided in `src/gnn`.
+
+1. **Prepare the dataset index**: Step 5 writes `dataset_index.json` beside the NPZs (default: `outputs/datasets/graphs/dataset_index.json`). If you store datasets elsewhere, update `data.index_path` in the training config accordingly.
+2. **Review the training config**: `config/gnn/baseline.yaml` lists the data splits, model backbone (`gcn`, `graphsage`, or `gat`), optimisation hyperparameters, feasibility decoder options, and metric settings. Paths are resolved relative to the repository root unless they start with `./` or `../`, in which case they are relative to the config file.
+3. **Launch training**:
+
+```bash
+python -m src.gnn.train --config config/gnn/baseline.yaml
+```
+
+During training the CLI logs epoch losses and validation metrics, writes the fully-resolved config to the run directory, and saves `best_model.pt`, `final_model.pt`, plus `test_metrics.json` under `outputs/gnn_runs/<run_name>/`. Use `--device cuda` (or set `loop.device: cuda` in the YAML) if you have a GPU-capable PyTorch install.
+
+## 7. Optional tooling & best practices
 
 - **Visual QA**: `src/milp/visualize.py` contains helper functions to overlay capacities and dispatch. The batch runner can auto-save plots if `--plot` is set.
 - **Scenario tweaks**: adjust `config/scenario_space.yaml` to change weather regimes, asset distributions, or solver budget guards. The defaults target a moderate-size UC instance solvable in minutes.
@@ -134,7 +149,7 @@ The command above mirrors scenario/report stems into `outputs/datasets/graphs`, 
 - **Performance knobs**: the MILP model supports a `--workers` parallel solve, but also consider tightening horizons or asset counts if solve times spike.
 - **Data hygiene**: clear `outputs/` between major runs to avoid mixing corpora with different configuration baselines.
 
-## 7. Frequently asked questions
+## 8. Frequently asked questions
 
 **Q: Pyomo throws `ApplicationError: No executable found for solver 'highs'`.**
 A: Install `highspy` (`pip install highspy`) or download the HiGHS binary and add it to PATH.
@@ -152,7 +167,7 @@ A: Cost components live in the JSON reports; the NPZ stores structural/time-seri
 Happy benchmarking! File issues or ideas to extend the workflow�there is plenty of room for new weather regimes, solver configurations, and richer graph targets.
 
 
-## 8. License
+## 9. License
 
 MIT License
 

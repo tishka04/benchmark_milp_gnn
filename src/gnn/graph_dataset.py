@@ -3,7 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -20,6 +20,15 @@ def _load_json(path: Path) -> Dict:
 
 def _build_zone_index(zones: List[str]) -> Dict[str, int]:
     return {zone: idx for idx, zone in enumerate(zones)}
+
+
+def _zone_region_indices(data: ScenarioData, zones: List[str]) -> Tuple[np.ndarray, Dict[str, int]]:
+    region_names = [data.region_of_zone.get(zone, "unknown") for zone in zones]
+    unique_regions = sorted(set(region_names))
+    region_to_index = {region: idx for idx, region in enumerate(unique_regions)}
+    zone_to_region = {zone: region_to_index[region_names[i]] for i, zone in enumerate(zones)}
+    indices = np.asarray([zone_to_region[zone] for zone in zones], dtype=np.int64)
+    return indices, zone_to_region
 
 
 def _node_static_features(data: ScenarioData, zones: List[str]) -> np.ndarray:
@@ -77,28 +86,39 @@ def _node_labels(detail: Dict, zones: List[str]) -> np.ndarray:
     return np.stack(labels, axis=1).astype(np.float32)
 
 
-def _edge_structure(detail: Dict, data: ScenarioData, zones: List[str]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def _edge_structure(
+    detail: Dict,
+    data: ScenarioData,
+    zones: List[str],
+    zone_to_region: Dict[str, int],
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     zone_index = _build_zone_index(zones)
     adjacency: List[List[int]] = []
     capacities: List[float] = []
-    flows: List[List[float]] = []
+    flows: List[np.ndarray] = []
+    edge_types: List[int] = []
     time_len = len(detail["time_steps"])
     for lid, line in data.lines.items():
         if line.from_zone not in zone_index or line.to_zone not in zone_index:
             continue
         adjacency.append([zone_index[line.from_zone], zone_index[line.to_zone]])
         capacities.append(float(line.capacity_mw))
-        flows.append(detail["flows"].get(lid, [0.0] * time_len))
+        flows.append(np.asarray(detail["flows"].get(lid, [0.0] * time_len), dtype=np.float32))
+        from_region = zone_to_region.get(line.from_zone)
+        to_region = zone_to_region.get(line.to_zone)
+        edge_types.append(0 if from_region == to_region else 1)
     if not adjacency:
         return (
             np.zeros((0, 2), dtype=np.int64),
             np.zeros((0,), dtype=np.float32),
             np.zeros((0, time_len), dtype=np.float32),
+            np.zeros((0,), dtype=np.int64),
         )
     return (
         np.asarray(adjacency, dtype=np.int64),
         np.asarray(capacities, dtype=np.float32),
-        np.asarray(flows, dtype=np.float32),
+        np.stack(flows, axis=0),
+        np.asarray(edge_types, dtype=np.int64),
     )
 
 
@@ -131,8 +151,11 @@ def build_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray
     record["node_static"] = _node_static_features(data, zones)
     record["node_time"] = _node_time_features(detail, zones)
     record["node_labels"] = _node_labels(detail, zones)
-    edge_index, edge_capacity, edge_flows = _edge_structure(detail, data, zones)
+    zone_region_index, zone_to_region = _zone_region_indices(data, zones)
+    record["zone_region_index"] = zone_region_index
+    edge_index, edge_capacity, edge_flows, edge_type = _edge_structure(detail, data, zones, zone_to_region)
     record["edge_index"] = edge_index
+    record["edge_type"] = edge_type
     record["edge_capacity"] = edge_capacity
     record["edge_flows"] = edge_flows
     record["time_steps"] = np.asarray(detail["time_steps"], dtype=np.int64)
