@@ -1,15 +1,15 @@
 {
-  "count": 3,
-  "target": 3,
-  "attempts": 3,
+  "count": 10,
+  "target": 10,
+  "attempts": 18,
   "T": 96,
   "note": "Generated with greedy-cover & budget guard.",
   "stats": {
-    "avg_regions": 3.67,
-    "avg_zones": 20.0,
-    "avg_sites": 20.0,
-    "avg_vars_est": 97600.0,
-    "avg_cons_est": 126880.0,
-    "avg_est_cpu_hours": 1.81
+    "avg_regions": 3.1,
+    "avg_zones": 16.5,
+    "avg_sites": 16.5,
+    "avg_vars_est": 82454.0,
+    "avg_cons_est": 107190.0,
+    "avg_est_cpu_hours": 1.54
   }
 }

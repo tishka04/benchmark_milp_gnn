@@ -48,6 +48,8 @@ class ScenarioData:
     dt_hours: float
     zones: List[str]
     region_of_zone: Dict[str, str]
+    region_weather_profile: Dict[str, str]
+    region_weather_spread: Dict[str, float]
 
     demand: Dict[Tuple[str, int], float]
     peak_demand: Dict[str, float]
@@ -131,10 +133,14 @@ def _base_solar_share(weather_profile: str | None) -> float:
     return 0.5
 
 
-def _split_legacy_res_counts(res_counts: list[int], weather_profile: str | None) -> tuple[list[int], list[int]]:
+def _split_legacy_res_counts(
+    res_counts: list[int],
+    weather_profile: str | None,
+    *,
+    zone_weather_profiles: list[str] | None = None,
+) -> tuple[list[int], list[int]]:
     if not res_counts:
         return ([], [])
-    base_share = _base_solar_share(weather_profile)
     solar: list[int] = []
     wind: list[int] = []
     for idx, units in enumerate(res_counts):
@@ -143,6 +149,10 @@ def _split_legacy_res_counts(res_counts: list[int], weather_profile: str | None)
             solar.append(0)
             wind.append(0)
             continue
+        zone_profile = None
+        if zone_weather_profiles is not None and idx < len(zone_weather_profiles):
+            zone_profile = zone_weather_profiles[idx]
+        base_share = _base_solar_share(zone_profile or weather_profile)
         offset = ((idx * 37) % 11 - 5) / 55.0
         share = float(np.clip(base_share + offset, 0.1, 0.9))
         solar_units = int(round(units_int * share))
@@ -312,6 +322,29 @@ def load_scenario_data(path: Path) -> ScenarioData:
 
     scenario_seed = _uuid_to_seed(scenario["id"])
     rng = np.random.default_rng(scenario_seed)
+    region_names = sorted(set(region_of_zone.values()))
+    raw_region_weather = exo.get("region_weather") or {}
+    region_weather_profile: Dict[str, str] = {}
+    region_weather_spread: Dict[str, float] = {}
+    region_solar_base: Dict[str, np.ndarray] = {}
+    region_wind_base: Dict[str, np.ndarray] = {}
+    for ridx, region_name in enumerate(region_names):
+        cell = raw_region_weather.get(region_name) or {}
+        profile_name = cell.get("weather_profile") or exo.get("weather_profile") or "default"
+        spread_value = cell.get("weather_spread_intensity", exo.get("weather_spread_intensity"))
+        try:
+            spread_float = float(spread_value)
+        except (TypeError, ValueError):
+            spread_float = float(exo.get("weather_spread_intensity", 1.0) or 1.0)
+        spread_float = max(0.0, spread_float)
+        region_weather_profile[region_name] = profile_name
+        region_weather_spread[region_name] = spread_float
+        base_seed = scenario_seed + 104729 * (ridx + 1)
+        solar_rng = np.random.default_rng(base_seed)
+        wind_rng = np.random.default_rng(base_seed + 1)
+        region_solar_base[region_name] = build_solar_profile(profile_name, periods_count, dt_hours, solar_rng, spread_float)
+        region_wind_base[region_name] = build_wind_profile(profile_name, periods_count, dt_hours, wind_rng, spread_float)
+
 
     base_demand_profile = build_demand_profile(exo["demand_profile"], periods_count, dt_hours, rng)
 
@@ -325,8 +358,6 @@ def load_scenario_data(path: Path) -> ScenarioData:
     curvature_range = _bounded_range(max(0.1, curvature_range[0]), max(0.11, curvature_range[1]), lower=0.1, min_span=0.01)
 
     zone_profiles: Dict[str, np.ndarray] = {}
-    solar_base = build_solar_profile(exo["weather_profile"], periods_count, dt_hours, rng, exo["weather_spread_intensity"])
-    wind_base = build_wind_profile(exo["weather_profile"], periods_count, dt_hours, rng, exo["weather_spread_intensity"])
 
     solar_profiles: Dict[str, np.ndarray] = {}
     wind_profiles: Dict[str, np.ndarray] = {}
@@ -344,14 +375,40 @@ def load_scenario_data(path: Path) -> ScenarioData:
             noise_range,
             curvature_range,
         )
+        region_name = region_of_zone.get(zone)
+        if region_name is None and region_names:
+            region_name = region_names[0]
+        spread_val = region_weather_spread.get(
+            region_name,
+            float(exo.get("weather_spread_intensity", 1.0) or 1.0),
+        )
+        spread_val = max(0.0, float(spread_val))
         solar_scale = rng.uniform(0.85, 1.15)
-        solar_noise = rng.normal(scale=0.05 * exo["weather_spread_intensity"], size=periods_count)
-        solar_profiles[zone] = np.clip(solar_base * solar_scale + solar_noise, 0.0, 1.0)
-        wind_noise = rng.normal(scale=0.1 * exo["weather_spread_intensity"], size=periods_count)
+        solar_noise = rng.normal(scale=0.05 * spread_val, size=periods_count)
+        base_solar = region_solar_base.get(region_name)
+        if base_solar is None:
+            profile_name = region_weather_profile.get(region_name, exo.get("weather_profile") or "default")
+            fallback_rng = np.random.default_rng(scenario_seed + 65537 * (idx + 1))
+            base_solar = build_solar_profile(profile_name, periods_count, dt_hours, fallback_rng, spread_val)
+            region_solar_base[region_name] = base_solar
+        solar_profiles[zone] = np.clip(base_solar * solar_scale + solar_noise, 0.0, 1.0)
+
+        wind_noise = rng.normal(scale=0.1 * spread_val, size=periods_count)
         wind_shift = rng.integers(-3, 4) if periods_count > 0 else 0
-        wind_profiles[zone] = np.clip(np.roll(wind_base, wind_shift) + wind_noise, 0.0, 1.0)
+        base_wind = region_wind_base.get(region_name)
+        if base_wind is None:
+            profile_name = region_weather_profile.get(region_name, exo.get("weather_profile") or "default")
+            fallback_rng = np.random.default_rng(scenario_seed + 73421 * (idx + 1))
+            base_wind = build_wind_profile(profile_name, periods_count, dt_hours, fallback_rng, spread_val)
+            region_wind_base[region_name] = base_wind
+        wind_profiles[zone] = np.clip(np.roll(base_wind, wind_shift) + wind_noise, 0.0, 1.0)
 
     total_zones = len(zones)
+    zone_weather_profiles = [region_weather_profile.get(region_of_zone.get(zone), exo.get("weather_profile")) for zone in zones]
+    if region_weather_spread:
+        avg_region_spread = float(np.mean(list(region_weather_spread.values())))
+    else:
+        avg_region_spread = float(exo.get("weather_spread_intensity", 1.0) or 1.0)
     raw_solar_per_site = assets.get("solar_per_site")
     raw_wind_per_site = assets.get("wind_per_site")
 
@@ -375,7 +432,11 @@ def load_scenario_data(path: Path) -> ScenarioData:
         res_counts = res_counts[:total_zones]
 
     if solar_units_per_zone is None and wind_units_per_zone is None:
-        solar_units_per_zone, wind_units_per_zone = _split_legacy_res_counts(res_counts, exo.get("weather_profile"))
+        solar_units_per_zone, wind_units_per_zone = _split_legacy_res_counts(
+            res_counts,
+            exo.get("weather_profile"),
+            zone_weather_profiles=zone_weather_profiles,
+        )
     elif solar_units_per_zone is None:
         solar_units_per_zone = []
         for idx in range(total_zones):
@@ -396,7 +457,7 @@ def load_scenario_data(path: Path) -> ScenarioData:
     hydro_reservoir_per_zone = _distribute_per_region(assets["hydro_reservoir_per_region"], zones_per_region) if assets.get("hydro_reservoir_per_region") else [0] * sum(zones_per_region)
     hydro_pumped_per_zone = _distribute_per_region(assets["hydro_pumped_per_region"], zones_per_region) if assets.get("hydro_pumped_per_region") else [0] * sum(zones_per_region)
 
-    runofriver_profile = build_runofriver_profile(periods_count, dt_hours, exo["weather_spread_intensity"], rng)
+    runofriver_profile = build_runofriver_profile(periods_count, dt_hours, avg_region_spread, rng)
     inflow_profile = build_inflow_profile(periods_count, dt_hours, exo["inflow_factor"], rng)
 
     demand_scale = scenario["exogenous"]["demand_scale_factor"]
@@ -532,6 +593,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
         dt_hours=dt_hours,
         zones=zones,
         region_of_zone=region_of_zone,
+        region_weather_profile=region_weather_profile,
+        region_weather_spread=region_weather_spread,
         demand=demand,
         peak_demand=peak_demand,
         thermal_capacity=thermal_capacity,

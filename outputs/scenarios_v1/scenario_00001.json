@@ -1,5 +1,5 @@
 {
-  "id": "ad3aa759-4a42-4446-ac9c-f2398f38e722",
+  "id": "29edaf7f-c215-4828-8d66-48ec1fcaae8b",
   "horizon_hours": 24,
   "dt_minutes": 15,
   "graph": {
@@ -141,11 +141,11 @@
     "overgen_spill_cost_eur_per_mwh": 7487.285538443261
   },
   "exogenous": {
-    "weather_profile": "overcast_summer",
-    "weather_spread_intensity": 0.6428715904420627,
-    "demand_profile": "wkend_flat",
-    "demand_scale_factor": 0.8226392553857884,
-    "inflow_factor": 1.129778574412096,
+    "weather_profile": "stormy_winter",
+    "weather_spread_intensity": 0.6947495490680231,
+    "demand_profile": "shoulder",
+    "demand_scale_factor": 1.0272841027671034,
+    "inflow_factor": 1.371117955147935,
     "zone_profile_variants": {
       "evening_peak": 0.28,
       "double_peak": 0.16,
@@ -169,9 +169,19 @@
     "zone_profile_curvature_exp": [
       0.9,
       1.18
-    ]
+    ],
+    "region_weather": {
+      "R1": {
+        "weather_profile": "overcast_summer",
+        "weather_spread_intensity": 0.6428715904420627
+      },
+      "R2": {
+        "weather_profile": "stormy_winter",
+        "weather_spread_intensity": 0.7466275076939834
+      }
+    }
   },
-  "mip_gap_target_pct": 0.6890157693752288,
+  "mip_gap_target_pct": 0.8712772100240377,
   "estimates": {
     "vars_total": 53184,
     "cons_total": 69139,
@@ -194,7 +204,7 @@
       "hydro_ror": 14,
       "hydro_pumped": 2
     },
-    "demand_scale_factor": 0.8226392553857884,
+    "demand_scale_factor": 1.0272841027671034,
     "zone_profile_variants": {
       "evening_peak": 0.28,
       "double_peak": 0.16,
@@ -207,7 +217,7 @@
       0.4,
       0.8
     ],
-    "weather_profile": "overcast_summer",
+    "weather_profile": "stormy_winter",
     "cross_border_policy": "block",
     "price_cap": 4177.68989596366,
     "co2_price": 93.03878275861976,
