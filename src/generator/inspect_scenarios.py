@@ -41,7 +41,6 @@ def summarize(scenarios: List[Dict[str, Any]]) -> Dict[str, Any]:
         'weather_profile_counts': profiles,
     }
 
-
 def print_meta_table(scenarios: List[Dict[str, Any]]) -> None:
     print("\nScenario overview (id, regions, zones, demand_scale_factor, weather_profile):")
     for s in scenarios:
@@ -55,10 +54,14 @@ def print_meta_table(scenarios: List[Dict[str, Any]]) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description='Inspect generated scenario metadata.')
-    parser.add_argument('directory', type=Path, help='Scenario output directory (e.g., outputs/scenarios_v1)')
+    parser.add_argument('directory', nargs='?', type=Path, default=Path('outputs/scenarios_v1'), help='Scenario output directory (e.g., outputs/scenarios_v1)')
     args = parser.parse_args()
+    directory = args.directory
+    if not directory.exists():
+        print(f"No scenarios found. Directory {directory} does not exist.")
+        return
 
-    scenarios = load_scenarios(args.directory)
+    scenarios = load_scenarios(directory)
     summary = summarize(scenarios)
     if not summary:
         print('No scenarios found.')
@@ -70,3 +73,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+

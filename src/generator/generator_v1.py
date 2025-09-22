@@ -4,7 +4,7 @@ import json
 import random
 import uuid
 import pathlib
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from typing import Dict, Any, List, Tuple
 
 import numpy as np
@@ -144,6 +144,12 @@ class OperationCosts:
 
 
 @dataclass
+class RegionWeatherCell:
+    weather_profile: str
+    weather_spread_intensity: float
+
+
+@dataclass
 class ExogenousSpec:
     weather_profile: str
     weather_spread_intensity: float
@@ -155,6 +161,7 @@ class ExogenousSpec:
     zone_profile_phase_shift_hours: Tuple[float, float]
     zone_profile_noise_std: Tuple[float, float]
     zone_profile_curvature_exp: Tuple[float, float]
+    region_weather: Dict[str, RegionWeatherCell] = field(default_factory=dict)
 
 
 @dataclass
@@ -246,7 +253,7 @@ def sample_operation_costs(space: Dict[str, Any]) -> OperationCosts:
     )
 
 
-def sample_exogenous(space: Dict[str, Any]) -> ExogenousSpec:
+def sample_exogenous(space: Dict[str, Any], graph: GraphSpec) -> ExogenousSpec:
     exo_cfg = space["exogenous"]
     variants = normalize_weights(exo_cfg.get("zone_profile_variants"))
     mix_range = resolve_range(exo_cfg.get("zone_profile_mix_weight"), (0.4, 0.8), lo=0.0, hi=1.0, min_span=0.05)
@@ -254,9 +261,36 @@ def sample_exogenous(space: Dict[str, Any]) -> ExogenousSpec:
     noise_range = resolve_range(exo_cfg.get("zone_profile_noise_std"), (0.02, 0.06), lo=0.0, min_span=0.003)
     curvature_range = resolve_range(exo_cfg.get("zone_profile_curvature_exp"), (0.9, 1.18), lo=0.1, min_span=0.01)
 
+    weather_choices = exo_cfg["weather_profiles"]
+    spread_bounds = exo_cfg["weather_spread_intensity"]
+    region_weather: Dict[str, RegionWeatherCell] = {}
+    region_profiles: List[str] = []
+    region_spreads: List[float] = []
+    for ridx in range(graph.regions):
+        region_name = f"R{ridx + 1}"
+        profile = rand_choice(weather_choices)
+        spread = rand_float(*spread_bounds)
+        region_weather[region_name] = RegionWeatherCell(
+            weather_profile=profile,
+            weather_spread_intensity=spread,
+        )
+        region_profiles.append(profile)
+        region_spreads.append(spread)
+
+    if region_profiles:
+        profile_counts: Dict[str, int] = {}
+        for profile in region_profiles:
+            profile_counts[profile] = profile_counts.get(profile, 0) + 1
+        dominant_profile = max(profile_counts.items(), key=lambda item: (item[1], item[0]))[0]
+        avg_spread = float(sum(region_spreads) / len(region_spreads))
+        avg_spread = max(spread_bounds[0], min(spread_bounds[1], avg_spread))
+    else:
+        dominant_profile = rand_choice(weather_choices)
+        avg_spread = rand_float(*spread_bounds)
+
     return ExogenousSpec(
-        weather_profile=rand_choice(exo_cfg["weather_profiles"]),
-        weather_spread_intensity=rand_float(*exo_cfg["weather_spread_intensity"]),
+        weather_profile=dominant_profile,
+        weather_spread_intensity=avg_spread,
         demand_profile=rand_choice(exo_cfg["demand_profiles"]),
         demand_scale_factor=rand_float(*exo_cfg["demand_scale_factor"]),
         inflow_factor=rand_float(*exo_cfg["inflow_factor"]),
@@ -265,6 +299,7 @@ def sample_exogenous(space: Dict[str, Any]) -> ExogenousSpec:
         zone_profile_phase_shift_hours=phase_range,
         zone_profile_noise_std=noise_range,
         zone_profile_curvature_exp=curvature_range,
+        region_weather=region_weather,
     )
 
 
@@ -467,7 +502,7 @@ def generate_scenarios(space_path: str, out_dir: str):
         econ = sample_econ(space)
         tech = sample_tech(space)
         costs = sample_operation_costs(space)
-        exo = sample_exogenous(space)
+        exo = sample_exogenous(space, graph)
         mip_gap = sample_mip_gap(space)
 
         cfg = ScenarioConfig(

@@ -56,7 +56,7 @@ This reads `config/scenario_space.yaml` and writes JSON payloads plus a `manifes
 Useful tips:
 - Re-run the generator with a different `outputs/<folder>` to keep multiple corpora side-by-side.
 - Set `scenario_space.global.target` to control how many scenarios to keep.
-- Inspect a sample file with `python -m src.generator.inspect_scenarios outputs/scenarios_v1/scenario_00001.json`.
+- Inspect scenarios files with `python -m src.generator.inspect_scenarios outputs/scenarios_v1`.
 
 ## 4. Solve scenarios with the MILP
 
