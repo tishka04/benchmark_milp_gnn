@@ -3,7 +3,7 @@ global:
   seed: 42
   horizon_hours: 24
   dt_minutes: 15
-  target_scenarios: 10
+  target_scenarios: 1000
   max_scenarios_per_hour_per_core: 0.5   # calibration locale
   cpu_cores: 32
   max_compute_hours: 168
@@ -55,8 +55,8 @@ operation_costs:
   renewable_spill_cost_eur_per_mwh: [500, 2000]
   hydro_spill_cost_eur_per_mwh: [250, 1200]
   overgen_spill_cost_eur_per_mwh: [2000, 8000]
-  battery_cycle_cost_eur_per_mwh: [2.0, 8.0]
-  pumped_cycle_cost_eur_per_mwh: [1.0, 4.5]
+  battery_cycle_cost_eur_per_mwh: [60, 120]
+  pumped_cycle_cost_eur_per_mwh: [45, 80]
 
 exogenous:
   weather_profiles: ["calm_winter", "stormy_winter", "sunny_summer", "overcast_summer", "mixed"]

@@ -1,5 +1,5 @@
 {
-  "id": "60efdf80-6c1f-4028-b72a-68bbbf2ce380",
+  "id": "441c0e8c-742c-49f7-a20e-6992b7a36d91",
   "horizon_hours": 24,
   "dt_minutes": 15,
   "graph": {
@@ -233,8 +233,8 @@
     "renewable_spill_cost_eur_per_mwh": 1128.8373730038088,
     "hydro_spill_cost_eur_per_mwh": 804.4886748266634,
     "overgen_spill_cost_eur_per_mwh": 5136.696293191753,
-    "battery_cycle_cost_eur_per_mwh": 7.608237546418564,
-    "pumped_cycle_cost_eur_per_mwh": 1.7149071979823776
+    "battery_cycle_cost_eur_per_mwh": 116.08237546418563,
+    "pumped_cycle_cost_eur_per_mwh": 52.14907197982377
   },
   "exogenous": {
     "weather_profile": "sunny_summer",
@@ -330,8 +330,8 @@
       "renewable_spill_cost_eur_per_mwh": 1128.8373730038088,
       "hydro_spill_cost_eur_per_mwh": 804.4886748266634,
       "overgen_spill_cost_eur_per_mwh": 5136.696293191753,
-      "battery_cycle_cost_eur_per_mwh": 7.608237546418564,
-      "pumped_cycle_cost_eur_per_mwh": 1.7149071979823776
+      "battery_cycle_cost_eur_per_mwh": 116.08237546418563,
+      "pumped_cycle_cost_eur_per_mwh": 52.14907197982377
     },
     "tech_scalers": {
       "thermal_marg_cost": 11.219633405685961,
