@@ -118,9 +118,43 @@ def compute_constraint_violation_rate(
     tolerance: float = 1e-3,
 ) -> MetricResult:
     demand = batch.node_time[:, 0]
-    supply = pred[:, 0] + pred[:, 1] + pred[:, 4] + pred[:, 5] + pred[:, 6]
-    served = supply + pred[:, 7]
-    shortage = demand - served
+    thermal = pred[:, 0]
+    nuclear = pred[:, 1]
+    renewable = pred[:, 4]
+    hydro_release = pred[:, 5]
+    demand_response = pred[:, 6]
+    unserved = pred[:, 7]
+
+    node_time = batch.node_time
+    battery_charge = node_time[:, 7]
+    battery_discharge = node_time[:, 8]
+    pumped_charge = node_time[:, 9]
+    pumped_discharge = node_time[:, 10]
+    net_import = node_time[:, 15] if node_time.size(1) > 15 else torch.zeros_like(demand)
+    net_export = node_time[:, 16] if node_time.size(1) > 16 else torch.zeros_like(demand)
+
+    net_exchange = net_import - net_export
+
+    flows = batch.edge_attr[:, 1]
+    net_flow = torch.zeros_like(demand)
+    if flows.numel():
+        net_flow.index_add_(0, batch.edge_index[1], flows)
+        net_flow.index_add_(0, batch.edge_index[0], -flows)
+
+    supply = (
+        thermal
+        + nuclear
+        + renewable
+        + hydro_release
+        + demand_response
+        + battery_discharge
+        + pumped_discharge
+        + net_exchange
+        + net_flow
+    )
+    demand_side = demand + battery_charge + pumped_charge
+    served = supply + unserved
+    shortage = demand_side - served
     violation = shortage.abs() > tolerance
     rate = violation.float().mean().item()
     per_graph = torch.zeros(batch.batch_size, device=pred.device)

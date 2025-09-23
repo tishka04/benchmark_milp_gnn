@@ -253,15 +253,37 @@ def evaluate_gnn_performance(
                 stats['cost_pred'] += float(node_cost_pred.sum().item())
                 stats['cost_true'] += float(node_cost_true.sum().item())
 
+                node_time_graph = batch_cpu.node_time[mask]
+                battery_charge = node_time_graph[:, 7]
+                battery_discharge = node_time_graph[:, 8]
+                pumped_charge = node_time_graph[:, 9]
+                pumped_discharge = node_time_graph[:, 10]
+                net_import = node_time_graph[:, 15] if node_time_graph.size(1) > 15 else torch.zeros_like(demand_graph)
+                net_export = node_time_graph[:, 16] if node_time_graph.size(1) > 16 else torch.zeros_like(demand_graph)
+
+                net_exchange = net_import - net_export
+
+                flows = batch_cpu.edge_attr[:, 1]
+                net_flow = torch.zeros_like(batch_cpu.node_time[:, 0])
+                if flows.numel():
+                    net_flow.index_add_(0, batch_cpu.edge_index[1], flows)
+                    net_flow.index_add_(0, batch_cpu.edge_index[0], -flows)
+                net_flow_graph = net_flow[mask]
+
                 supply = (
                     pred_graph[:, 0]
                     + pred_graph[:, 1]
                     + pred_graph[:, 4]
                     + pred_graph[:, 5]
                     + pred_graph[:, 6]
+                    + battery_discharge
+                    + pumped_discharge
+                    + net_exchange
+                    + net_flow_graph
                 )
+                demand_side = demand_graph + battery_charge + pumped_charge
                 served = supply + pred_graph[:, 7]
-                shortage = demand_graph - served
+                shortage = demand_side - served
                 violation_mask = (shortage.abs() > tolerance)
                 stats['violation_count'] += int(violation_mask.sum().item())
                 stats['node_count'] += int(violation_mask.numel())
