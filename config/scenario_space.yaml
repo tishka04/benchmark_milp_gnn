@@ -40,6 +40,12 @@ techno_params_scalers:
   dr_max_shed_share: [0.05, 0.35]
   dr_duration_hours: [1, 6]
   hydro_reservoir_head_eff: [0.75, 1.05]
+  battery_initial_soc_fraction: [0.35, 0.65]
+  battery_final_soc_tolerance: [0.05, 0.18]
+  battery_self_discharge_per_hour: [0.001, 0.01]
+  pumped_initial_level_fraction: [0.4, 0.7]
+  pumped_final_level_tolerance: [0.05, 0.18]
+  pumped_self_discharge_per_hour: [0.0005, 0.004]
 
 operation_costs:
   thermal_fuel_eur_per_mwh: [45, 85]
@@ -49,6 +55,8 @@ operation_costs:
   renewable_spill_cost_eur_per_mwh: [500, 2000]
   hydro_spill_cost_eur_per_mwh: [250, 1200]
   overgen_spill_cost_eur_per_mwh: [2000, 8000]
+  battery_cycle_cost_eur_per_mwh: [2.0, 8.0]
+  pumped_cycle_cost_eur_per_mwh: [1.0, 4.5]
 
 exogenous:
   weather_profiles: ["calm_winter", "stormy_winter", "sunny_summer", "overcast_summer", "mixed"]

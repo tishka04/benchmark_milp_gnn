@@ -19,9 +19,14 @@ _COMPONENT_ORDER = [
     "nuclear",
     "solar",
     "wind",
-    "renewable",
     "hydro_release",
+    "hydro_ror",
     "demand_response",
+    "battery_charge",
+    "battery_discharge",
+    "pumped_charge",
+    "pumped_discharge",
+    "net_import",
     "unserved",
 ]
 
@@ -82,9 +87,14 @@ def compute_cost_gap(
             "nuclear": 18.0,
             "solar": 5.0,
             "wind": 7.0,
-            "renewable": 0.0,
             "hydro_release": 15.0,
+            "hydro_ror": 10.0,
             "demand_response": 80.0,
+            "battery_charge": 0.0,
+            "battery_discharge": 20.0,
+            "pumped_charge": 0.0,
+            "pumped_discharge": 20.0,
+            "net_import": 45.0,
             "unserved": 500.0,
         }
     weight_vec = torch.tensor([weights.get(name, 0.0) for name in _COMPONENT_ORDER], device=device)
@@ -118,39 +128,33 @@ def compute_constraint_violation_rate(
     tolerance: float = 1e-3,
 ) -> MetricResult:
     demand = batch.node_time[:, 0]
-    thermal = pred[:, 0]
-    nuclear = pred[:, 1]
-    renewable = pred[:, 4]
-    hydro_release = pred[:, 5]
-    demand_response = pred[:, 6]
-    unserved = pred[:, 7]
+    idx = {name: index for index, name in enumerate(_COMPONENT_ORDER)}
 
-    node_time = batch.node_time
-    battery_charge = node_time[:, 7]
-    battery_discharge = node_time[:, 8]
-    pumped_charge = node_time[:, 9]
-    pumped_discharge = node_time[:, 10]
-    net_import = node_time[:, 15] if node_time.size(1) > 15 else torch.zeros_like(demand)
-    net_export = node_time[:, 16] if node_time.size(1) > 16 else torch.zeros_like(demand)
-
-    net_exchange = net_import - net_export
-
-    flows = batch.edge_attr[:, 1]
-    net_flow = torch.zeros_like(demand)
-    if flows.numel():
-        net_flow.index_add_(0, batch.edge_index[1], flows)
-        net_flow.index_add_(0, batch.edge_index[0], -flows)
+    thermal = pred[:, idx["thermal"]]
+    nuclear = pred[:, idx["nuclear"]]
+    solar = pred[:, idx["solar"]]
+    wind = pred[:, idx["wind"]]
+    hydro_release = pred[:, idx["hydro_release"]]
+    hydro_ror = pred[:, idx["hydro_ror"]]
+    demand_response = pred[:, idx["demand_response"]]
+    battery_charge = pred[:, idx["battery_charge"]]
+    battery_discharge = pred[:, idx["battery_discharge"]]
+    pumped_charge = pred[:, idx["pumped_charge"]]
+    pumped_discharge = pred[:, idx["pumped_discharge"]]
+    net_import = pred[:, idx["net_import"]]
+    unserved = pred[:, idx["unserved"]]
 
     supply = (
         thermal
         + nuclear
-        + renewable
+        + solar
+        + wind
         + hydro_release
+        + hydro_ror
         + demand_response
         + battery_discharge
         + pumped_discharge
-        + net_exchange
-        + net_flow
+        + net_import
     )
     demand_side = demand + battery_charge + pumped_charge
     served = supply + unserved

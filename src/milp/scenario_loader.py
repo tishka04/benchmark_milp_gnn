@@ -78,6 +78,10 @@ class ScenarioData:
     battery_initial: Dict[str, float]
     battery_eta_charge: float
     battery_eta_discharge: float
+    battery_cycle_cost: Dict[str, float]
+    battery_retention: Dict[str, float]
+    battery_final_min: Dict[str, float]
+    battery_final_max: Dict[str, float]
 
     hydro_res_capacity: Dict[str, float]
     hydro_res_energy: Dict[str, float]
@@ -93,10 +97,14 @@ class ScenarioData:
     pumped_initial: Dict[str, float]
     pumped_eta_charge: float
     pumped_eta_discharge: float
+    pumped_cycle_cost: Dict[str, float]
+    pumped_retention: Dict[str, float]
+    pumped_final_min: Dict[str, float]
+    pumped_final_max: Dict[str, float]
 
     dr_cost_per_mwh: float
     voll: float
-    renewable_spill_cost: float
+    variable_spill_cost: float
     import_capacity: float
     import_cost: float
     export_cost: float
@@ -467,12 +475,29 @@ def load_scenario_data(path: Path) -> ScenarioData:
     )
     import_cost = econ["price_cap"] * 0.9
     export_cost = import_cost * 0.2
-    renewable_spill_cost = costs["renewable_spill_cost_eur_per_mwh"]
+    variable_spill_cost = costs["renewable_spill_cost_eur_per_mwh"]
     hydro_spill_cost_value = costs["hydro_spill_cost_eur_per_mwh"]
     overgen_spill_penalty = costs["overgen_spill_cost_eur_per_mwh"]
 
     battery_eta = math.sqrt(max(0.05, tech["battery_roundtrip_eff"]))
     pumped_eta = math.sqrt(max(0.05, PUMPED.efficiency))
+
+    battery_cycle_cost_value = float(costs.get("battery_cycle_cost_eur_per_mwh", 0.0) or 0.0)
+    pumped_cycle_cost_value = float(costs.get("pumped_cycle_cost_eur_per_mwh", 0.0) or 0.0)
+
+    battery_initial_base = float(tech.get("battery_initial_soc_fraction", 0.5) or 0.5)
+    battery_final_tol = float(tech.get("battery_final_soc_tolerance", 0.1) or 0.1)
+    battery_self_discharge_rate = max(0.0, float(tech.get("battery_self_discharge_per_hour", 0.0) or 0.0))
+
+    pumped_initial_base = float(tech.get("pumped_initial_level_fraction", 0.5) or 0.5)
+    pumped_final_tol = float(tech.get("pumped_final_level_tolerance", 0.1) or 0.1)
+    pumped_self_discharge_rate = max(0.0, float(tech.get("pumped_self_discharge_per_hour", 0.0) or 0.0))
+
+    def _retention_factor(rate_per_hour: float) -> float:
+        rate = max(0.0, min(0.999, rate_per_hour))
+        if rate <= 0.0:
+            return 1.0
+        return float(math.exp(math.log(1.0 - rate) * dt_hours))
 
     demand: Dict[Tuple[str, int], float] = {}
     peak_demand: Dict[str, float] = {}
@@ -498,6 +523,10 @@ def load_scenario_data(path: Path) -> ScenarioData:
     battery_power: Dict[str, float] = {}
     battery_energy: Dict[str, float] = {}
     battery_initial: Dict[str, float] = {}
+    battery_cycle_cost_map: Dict[str, float] = {}
+    battery_retention: Dict[str, float] = {}
+    battery_final_min: Dict[str, float] = {}
+    battery_final_max: Dict[str, float] = {}
 
     hydro_res_capacity: Dict[str, float] = {}
     hydro_res_energy: Dict[str, float] = {}
@@ -509,6 +538,10 @@ def load_scenario_data(path: Path) -> ScenarioData:
     pumped_power: Dict[str, float] = {}
     pumped_energy: Dict[str, float] = {}
     pumped_initial: Dict[str, float] = {}
+    pumped_cycle_cost_map: Dict[str, float] = {}
+    pumped_retention: Dict[str, float] = {}
+    pumped_final_min: Dict[str, float] = {}
+    pumped_final_max: Dict[str, float] = {}
 
     dr_cost_value = costs["demand_response_cost_eur_per_mwh"]
     voll_value = costs["value_of_lost_load_eur_per_mwh"]
@@ -560,8 +593,30 @@ def load_scenario_data(path: Path) -> ScenarioData:
 
         bat_units = max(0, assets["battery_per_site"][idx])
         battery_power[zone] = bat_units * BATTERY.power_per_unit_mw
-        battery_energy[zone] = battery_power[zone] * max(1.0, tech["battery_e_to_p_hours"])
-        battery_initial[zone] = 0.5 * battery_energy[zone]
+        energy_cap = battery_power[zone] * max(1.0, tech["battery_e_to_p_hours"])
+        battery_energy[zone] = energy_cap
+        if energy_cap > 1e-6:
+            init_low = max(0.05, battery_initial_base - 0.1)
+            init_high = min(0.95, battery_initial_base + 0.1)
+            if init_low > init_high:
+                init_low, init_high = init_high, init_low
+            init_frac = float(rng.uniform(init_low, init_high))
+            init_frac = float(np.clip(init_frac, 0.05, 0.95))
+            battery_initial[zone] = energy_cap * init_frac
+            final_min_frac = max(0.0, min(init_frac - battery_final_tol, 1.0))
+            final_max_frac = min(1.0, init_frac + battery_final_tol)
+            if final_max_frac < final_min_frac + 1e-4:
+                final_max_frac = min(1.0, final_min_frac + 1e-4)
+            battery_final_min[zone] = energy_cap * final_min_frac
+            battery_final_max[zone] = energy_cap * final_max_frac
+            battery_cycle_cost_map[zone] = battery_cycle_cost_value
+            battery_retention[zone] = _retention_factor(battery_self_discharge_rate)
+        else:
+            battery_initial[zone] = 0.0
+            battery_final_min[zone] = 0.0
+            battery_final_max[zone] = 0.0
+            battery_cycle_cost_map[zone] = 0.0
+            battery_retention[zone] = 1.0
 
         hydro_res_units = max(0, hydro_reservoir_per_zone[idx])
         hydro_res_capacity[zone] = hydro_res_units * HYDRO_RES.power_per_unit_mw
@@ -577,8 +632,30 @@ def load_scenario_data(path: Path) -> ScenarioData:
 
         pumped_units = max(0, hydro_pumped_per_zone[idx])
         pumped_power[zone] = pumped_units * PUMPED.power_per_unit_mw
-        pumped_energy[zone] = pumped_power[zone] * PUMPED.energy_hours
-        pumped_initial[zone] = 0.5 * pumped_energy[zone]
+        pumped_cap = pumped_power[zone] * PUMPED.energy_hours
+        pumped_energy[zone] = pumped_cap
+        if pumped_cap > 1e-6:
+            init_low = max(0.05, pumped_initial_base - 0.12)
+            init_high = min(0.95, pumped_initial_base + 0.12)
+            if init_low > init_high:
+                init_low, init_high = init_high, init_low
+            init_frac = float(rng.uniform(init_low, init_high))
+            init_frac = float(np.clip(init_frac, 0.05, 0.95))
+            pumped_initial[zone] = pumped_cap * init_frac
+            final_min_frac = max(0.0, min(init_frac - pumped_final_tol, 1.0))
+            final_max_frac = min(1.0, init_frac + pumped_final_tol)
+            if final_max_frac < final_min_frac + 1e-4:
+                final_max_frac = min(1.0, final_min_frac + 1e-4)
+            pumped_final_min[zone] = pumped_cap * final_min_frac
+            pumped_final_max[zone] = pumped_cap * final_max_frac
+            pumped_cycle_cost_map[zone] = pumped_cycle_cost_value
+            pumped_retention[zone] = _retention_factor(pumped_self_discharge_rate)
+        else:
+            pumped_initial[zone] = 0.0
+            pumped_final_min[zone] = 0.0
+            pumped_final_max[zone] = 0.0
+            pumped_cycle_cost_map[zone] = 0.0
+            pumped_retention[zone] = 1.0
 
     lines = _build_lines(zones, zones_per_region, graph["intertie_density"])
     from_idx: Dict[str, List[str]] = defaultdict(list)
@@ -617,6 +694,10 @@ def load_scenario_data(path: Path) -> ScenarioData:
         battery_initial=battery_initial,
         battery_eta_charge=battery_eta,
         battery_eta_discharge=battery_eta,
+        battery_cycle_cost=battery_cycle_cost_map,
+        battery_retention=battery_retention,
+        battery_final_min=battery_final_min,
+        battery_final_max=battery_final_max,
         hydro_res_capacity=hydro_res_capacity,
         hydro_res_energy=hydro_res_energy,
         hydro_initial=hydro_initial,
@@ -629,9 +710,13 @@ def load_scenario_data(path: Path) -> ScenarioData:
         pumped_initial=pumped_initial,
         pumped_eta_charge=pumped_eta,
         pumped_eta_discharge=pumped_eta,
+        pumped_cycle_cost=pumped_cycle_cost_map,
+        pumped_retention=pumped_retention,
+        pumped_final_min=pumped_final_min,
+        pumped_final_max=pumped_final_max,
         dr_cost_per_mwh=dr_cost_value,
         voll=voll_value,
-        renewable_spill_cost=renewable_spill_cost,
+        variable_spill_cost=variable_spill_cost,
         import_capacity=import_cap,
         import_cost=import_cost,
         export_cost=export_cost,

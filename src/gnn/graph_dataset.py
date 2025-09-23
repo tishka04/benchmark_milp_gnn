@@ -44,6 +44,25 @@ def _node_static_features(data: ScenarioData, zones: List[str]) -> np.ndarray:
         hydro_res_cap = float(data.hydro_res_capacity.get(zone, 0.0))
         hydro_ror_avg = float(np.mean([data.hydro_ror_generation.get((zone, t), 0.0) for t in periods])) if periods else 0.0
         pumped_power = float(data.pumped_power.get(zone, 0.0))
+        battery_energy = float(data.battery_energy.get(zone, 0.0))
+        battery_initial = float(data.battery_initial.get(zone, 0.0))
+        battery_initial_frac = battery_initial / battery_energy if battery_energy > 1e-6 else 0.0
+        battery_final_min = float(data.battery_final_min.get(zone, 0.0))
+        battery_final_max = float(data.battery_final_max.get(zone, 0.0))
+        battery_final_min_frac = battery_final_min / battery_energy if battery_energy > 1e-6 else 0.0
+        battery_final_max_frac = battery_final_max / battery_energy if battery_energy > 1e-6 else 0.0
+        battery_retention = float(data.battery_retention.get(zone, 1.0))
+        battery_cycle_cost = float(data.battery_cycle_cost.get(zone, 0.0))
+        pumped_energy = float(data.pumped_energy.get(zone, 0.0))
+        pumped_initial = float(data.pumped_initial.get(zone, 0.0))
+        pumped_initial_frac = pumped_initial / pumped_energy if pumped_energy > 1e-6 else 0.0
+        pumped_final_min = float(data.pumped_final_min.get(zone, 0.0))
+        pumped_final_max = float(data.pumped_final_max.get(zone, 0.0))
+        pumped_final_min_frac = pumped_final_min / pumped_energy if pumped_energy > 1e-6 else 0.0
+        pumped_final_max_frac = pumped_final_max / pumped_energy if pumped_energy > 1e-6 else 0.0
+        pumped_retention = float(data.pumped_retention.get(zone, 1.0))
+        pumped_cycle_cost = float(data.pumped_cycle_cost.get(zone, 0.0))
+        import_cap = float(data.import_capacity) if zone == getattr(data, "import_anchor_zone", None) else 0.0
         features.append([
             thermal_cap,
             solar_cap,
@@ -54,35 +73,134 @@ def _node_static_features(data: ScenarioData, zones: List[str]) -> np.ndarray:
             hydro_res_cap,
             hydro_ror_avg,
             pumped_power,
+            battery_energy,
+            battery_initial_frac,
+            battery_final_min_frac,
+            battery_final_max_frac,
+            battery_retention,
+            battery_cycle_cost,
+            pumped_energy,
+            pumped_initial_frac,
+            pumped_final_min_frac,
+            pumped_final_max_frac,
+            pumped_retention,
+            pumped_cycle_cost,
+            import_cap,
         ])
     return np.asarray(features, dtype=np.float32)
 
 
-def _node_time_features(detail: Dict, zones: List[str]) -> np.ndarray:
+def _node_time_features(detail: Dict, zones: List[str], anchor_zone: str | None) -> np.ndarray:
     features = []
+    net_import_series = detail.get("net_import", {}).get("values")
+    net_export_series = detail.get("net_export", {}).get("values")
+    net_import_arr = np.asarray(net_import_series, dtype=np.float32) if net_import_series is not None else None
+    net_export_arr = np.asarray(net_export_series, dtype=np.float32) if net_export_series is not None else None
     for zone in zones:
         demand = detail["demand"][zone]
         solar = detail["solar"][zone]
         wind = detail["wind"][zone]
-        renewable = detail["renewable"][zone]
         hydro_release = detail["hydro_release"][zone]
         battery_soc = detail["battery_soc"][zone]
-        features.append(np.stack([demand, solar, wind, renewable, hydro_release, battery_soc], axis=1))
+        hydro_ror_series = detail.get("hydro_ror")
+        hydro_ror = hydro_ror_series.get(zone) if hydro_ror_series is not None else None
+        if hydro_ror is None:
+            hydro_ror = [0.0] * len(hydro_release)
+        battery_charge = detail["battery_charge"][zone]
+        battery_discharge = detail["battery_discharge"][zone]
+        pumped_level = detail["pumped_level"][zone]
+        pumped_charge = detail["pumped_charge"][zone]
+        pumped_discharge = detail["pumped_discharge"][zone]
+        demand_response = detail["demand_response"][zone]
+        unserved = detail["unserved"][zone]
+        solar_spill_series = detail.get("solar_spill")
+        solar_spill = solar_spill_series.get(zone) if solar_spill_series is not None else None
+        if solar_spill is None:
+            solar_spill = [0.0] * len(hydro_release)
+        wind_spill_series = detail.get("wind_spill")
+        wind_spill = wind_spill_series.get(zone) if wind_spill_series is not None else None
+        if wind_spill is None:
+            wind_spill = [0.0] * len(hydro_release)
+        hydro_spill = detail["hydro_spill"][zone]
+        is_anchor = anchor_zone is not None and zone == anchor_zone
+        if net_import_arr is not None and is_anchor:
+            net_import = net_import_arr
+        else:
+            net_import = np.zeros_like(demand, dtype=np.float32)
+        if net_export_arr is not None and is_anchor:
+            net_export = net_export_arr
+        else:
+            net_export = np.zeros_like(demand, dtype=np.float32)
+        features.append(
+            np.stack(
+                [
+                    demand,
+                    solar,
+                    wind,
+                    hydro_release,
+                    hydro_ror,
+                    battery_soc,
+                    pumped_level,
+                    battery_charge,
+                    battery_discharge,
+                    pumped_charge,
+                    pumped_discharge,
+                    demand_response,
+                    unserved,
+                    solar_spill,
+                    wind_spill,
+                    hydro_spill,
+                    net_import,
+                    net_export,
+                ],
+                axis=1,
+            )
+        )
     return np.stack(features, axis=1).astype(np.float32)
 
 
-def _node_labels(detail: Dict, zones: List[str]) -> np.ndarray:
+def _node_labels(dispatch: Dict[str, Dict[str, List[float]]], zones: List[str], anchor_zone: str | None) -> np.ndarray:
     labels = []
+    net_import_dispatch = dispatch.get("net_import") or {}
     for zone in zones:
-        thermal = detail["thermal"][zone]
-        nuclear = detail["nuclear"][zone]
-        solar = detail["solar"][zone]
-        wind = detail["wind"][zone]
-        renewable = detail["renewable"][zone]
-        hydro_release = detail["hydro_release"][zone]
-        dr = detail["demand_response"][zone]
-        unserved = detail["unserved"][zone]
-        labels.append(np.stack([thermal, nuclear, solar, wind, renewable, hydro_release, dr, unserved], axis=1))
+        thermal = dispatch["thermal"][zone]
+        nuclear = dispatch["nuclear"][zone]
+        solar = dispatch["solar"][zone]
+        wind = dispatch["wind"][zone]
+        hydro_release = dispatch["hydro_release"][zone]
+        hydro_ror = dispatch.get("hydro_ror", {}).get(zone)
+        if hydro_ror is None:
+            hydro_ror = [0.0] * len(thermal)
+        dr = dispatch["demand_response"][zone]
+        battery_charge = dispatch["battery_charge"][zone]
+        battery_discharge = dispatch["battery_discharge"][zone]
+        pumped_charge = dispatch["pumped_charge"][zone]
+        pumped_discharge = dispatch["pumped_discharge"][zone]
+        if zone == anchor_zone and zone in net_import_dispatch:
+            net_import = net_import_dispatch[zone]
+        else:
+            net_import = [0.0] * len(thermal)
+        unserved = dispatch["unserved"][zone]
+        labels.append(
+            np.stack(
+                [
+                    thermal,
+                    nuclear,
+                    solar,
+                    wind,
+                    hydro_release,
+                    hydro_ror,
+                    dr,
+                    battery_charge,
+                    battery_discharge,
+                    pumped_charge,
+                    pumped_discharge,
+                    net_import,
+                    unserved,
+                ],
+                axis=1,
+            )
+        )
     return np.stack(labels, axis=1).astype(np.float32)
 
 
@@ -148,9 +266,10 @@ def build_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray
         raise RuntimeError("Report missing 'detail'; rerun MILP with --save-json")
     zones = detail["zones"]
     record: Dict[str, np.ndarray] = {}
+    anchor_zone = getattr(data, "import_anchor_zone", None)
     record["node_static"] = _node_static_features(data, zones)
-    record["node_time"] = _node_time_features(detail, zones)
-    record["node_labels"] = _node_labels(detail, zones)
+    record["node_time"] = _node_time_features(detail, zones, anchor_zone)
+    record["node_labels"] = _node_labels(detail, zones, anchor_zone)
     zone_region_index, zone_to_region = _zone_region_indices(data, zones)
     record["zone_region_index"] = zone_region_index
     edge_index, edge_capacity, edge_flows, edge_type = _edge_structure(detail, data, zones, zone_to_region)
@@ -160,6 +279,14 @@ def build_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray
     record["edge_flows"] = edge_flows
     record["time_steps"] = np.asarray(detail["time_steps"], dtype=np.int64)
     record["time_hours"] = np.asarray(detail["time_hours"], dtype=np.float32)
+    pre_dispatch = detail.get("pre_dispatch")
+    if pre_dispatch:
+        pre_labels = _node_labels(pre_dispatch, zones, anchor_zone)
+        record["node_labels_pre"] = pre_labels
+        record["node_labels_correction"] = record["node_labels"] - pre_labels
+    else:
+        record["node_labels_pre"] = record["node_labels"].copy()
+        record["node_labels_correction"] = np.zeros_like(record["node_labels"], dtype=np.float32)
     for name, arr in _duals_to_arrays(report, zones).items():
         record[f"duals_{name}"] = arr
     return record

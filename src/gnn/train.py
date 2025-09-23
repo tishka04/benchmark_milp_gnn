@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 import yaml
 from torch import nn
 from torch.optim import Optimizer
@@ -73,15 +74,213 @@ def _build_optimizer(model: nn.Module, cfg: TrainingConfig) -> Optimizer:
     raise ValueError(f"Unsupported optimizer '{cfg.optimizer.name}'")
 
 
-def _build_loss(loop_cfg: LoopConfig) -> nn.Module:
+class _BasePointwiseLoss:
+    def __init__(
+        self,
+        mode: str,
+        *,
+        reduction: str = 'mean',
+        huber_beta: float = 1.0,
+        balance_penalty_weight: float = 0.0,
+        pre_target_weight: float = 0.0,
+    ) -> None:
+        self.mode = mode
+        self.reduction = reduction
+        self.huber_beta = huber_beta
+        self.balance_penalty_weight = balance_penalty_weight
+        self.pre_target_weight = pre_target_weight
+
+    def _elementwise(self, predictions: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        diff = predictions - target
+        if self.mode in {'mae', 'l1'}:
+            return diff.abs()
+        if self.mode == 'huber':
+            return F.smooth_l1_loss(predictions, target, reduction='none', beta=self.huber_beta)
+        # Default to MSE-style behaviour
+        return diff.pow(2)
+
+    def _reduce(self, values: torch.Tensor) -> torch.Tensor:
+        if self.reduction == 'none':
+            return values
+        if self.reduction == 'sum':
+            return values.sum()
+        return values.mean()
+
+    def _balance_penalty(self, predictions: torch.Tensor, batch) -> torch.Tensor | None:
+        if self.balance_penalty_weight <= 0.0:
+            return None
+        demand = batch.node_time[:, 0]
+        supply = (
+            predictions[:, 0]
+            + predictions[:, 1]
+            + predictions[:, 4]
+            + predictions[:, 5]
+            + predictions[:, 6]
+            + predictions[:, 7]
+        )
+        residual = supply - demand
+        if self.reduction == 'sum':
+            penalty = residual.pow(2).sum()
+        elif self.reduction == 'mean':
+            penalty = residual.pow(2).mean()
+        else:
+            raise ValueError(
+                "balance penalty only supports 'mean' or 'sum' reduction; got "
+                f"{self.reduction}"
+            )
+        return self.balance_penalty_weight * penalty
+
+    def __call__(self, predictions: torch.Tensor, batch) -> torch.Tensor:  # batch: GraphBatch
+        errors = self._elementwise(predictions, batch.target)
+        result = self._reduce(errors)
+        if self.pre_target_weight > 0.0 and hasattr(batch, "target_pre"):
+            pre_errors = self._elementwise(predictions, batch.target_pre)
+            pre_term = self._reduce(pre_errors)
+            result = result + self.pre_target_weight * pre_term
+        penalty = self._balance_penalty(predictions, batch)
+        if penalty is not None:
+            result = result + penalty
+        return result
+
+
+class _DualWeightedLoss(_BasePointwiseLoss):
+    def __init__(
+        self,
+        mode: str,
+        *,
+        reduction: str,
+        huber_beta: float,
+        dual_keys: Optional[List[str]],
+        dual_scale: float,
+        dual_power: float,
+        dual_clip: Optional[float],
+        balance_penalty_weight: float,
+        pre_target_weight: float,
+    ) -> None:
+        super().__init__(
+            mode,
+            reduction=reduction,
+            huber_beta=huber_beta,
+            balance_penalty_weight=balance_penalty_weight,
+            pre_target_weight=pre_target_weight,
+        )
+        self.dual_keys = [key for key in (dual_keys or []) if key]
+        self.dual_scale = float(dual_scale)
+        self.dual_power = float(dual_power)
+        self.dual_clip = float(dual_clip) if dual_clip is not None else None
+
+    def _collect_weights(self, batch) -> Optional[torch.Tensor]:
+        if not self.dual_keys:
+            return None
+        weights: Optional[torch.Tensor] = None
+        for key in self.dual_keys:
+            dual = batch.duals.get(key)
+            if dual is None:
+                continue
+            mag = dual.abs()
+            if self.dual_power != 1.0:
+                mag = mag.pow(self.dual_power)
+            if self.dual_clip is not None:
+                mag = mag.clamp(max=self.dual_clip)
+            weights = mag if weights is None else (weights + mag)
+        return weights
+
+    def __call__(self, predictions: torch.Tensor, batch) -> torch.Tensor:
+        errors = self._elementwise(predictions, batch.target)
+        weights = self._collect_weights(batch)
+        if weights is None:
+            result = self._reduce(errors)
+            if self.pre_target_weight > 0.0 and hasattr(batch, "target_pre"):
+                pre_errors = self._elementwise(predictions, batch.target_pre)
+                pre_term = self._reduce(pre_errors)
+                result = result + self.pre_target_weight * pre_term
+            penalty = self._balance_penalty(predictions, batch)
+            if penalty is not None:
+                result = result + penalty
+            return result
+        weights = (1.0 + self.dual_scale * weights).to(errors.dtype)
+        weight_matrix = weights.unsqueeze(1).expand_as(errors)
+        weighted_errors = errors * weight_matrix
+        if self.reduction == 'none':
+            return weighted_errors
+        if self.reduction == 'sum':
+            result = weighted_errors.sum()
+        else:
+            denom = weight_matrix.sum().clamp(min=1e-6)
+            result = weighted_errors.sum() / denom
+        if self.pre_target_weight > 0.0 and hasattr(batch, "target_pre"):
+            pre_errors = self._elementwise(predictions, batch.target_pre)
+            if self.reduction == 'sum':
+                pre_term = pre_errors.sum()
+            elif self.reduction == 'mean':
+                pre_term = pre_errors.mean()
+            else:
+                pre_term = pre_errors  # reduction 'none'
+                if not torch.is_tensor(pre_term):
+                    pre_term = torch.as_tensor(pre_term, device=result.device)
+            result = result + self.pre_target_weight * pre_term
+        penalty = self._balance_penalty(predictions, batch)
+        if penalty is not None:
+            result = result + penalty
+        return result
+
+
+def _build_loss(loop_cfg: LoopConfig):
     loss_name = loop_cfg.loss.lower()
-    if loss_name == 'mse':
-        return nn.MSELoss()
-    if loss_name in {'mae', 'l1'}:
-        return nn.L1Loss()
-    if loss_name == 'huber':
-        return nn.SmoothL1Loss()
-    raise ValueError(f"Unsupported loss '{loop_cfg.loss}'")
+    params = dict(loop_cfg.loss_params or {})
+    reduction = str(params.get('reduction', 'mean')).lower()
+    huber_beta = float(params.get('huber_beta', 1.0))
+    pre_target_weight = float(params.get('pre_target_weight', 0.0))
+    balance_weight = float(params.get('balance_penalty_weight', 0.0))
+
+    def _normalise_mode(name: str) -> str:
+        alias = name.lower()
+        if alias in {'l1'}:
+            alias = 'mae'
+        return alias
+
+    dual_keys = params.get('dual_keys')
+    if isinstance(dual_keys, str):
+        dual_keys = [dual_keys]
+
+    dual_scale = float(params.get('dual_scale', 1.0))
+    dual_power = float(params.get('dual_power', 1.0))
+    dual_clip = params.get('dual_clip')
+
+    base_mode: Optional[str] = None
+    if loss_name in {'mse', 'mae', 'l1', 'huber'}:
+        base_mode = _normalise_mode(loss_name)
+    elif loss_name.startswith('dual'):
+        base_mode = _normalise_mode(params.get('base', 'mse'))
+        if dual_keys is None:
+            dual_keys = ['power_balance']
+    else:
+        raise ValueError(f"Unsupported loss '{loop_cfg.loss}'")
+
+    if base_mode not in {'mse', 'mae', 'huber'}:
+        raise ValueError(f"Unsupported base loss '{base_mode}' for dual-aware training")
+
+    use_dual_weighting = bool(dual_keys)
+    if use_dual_weighting:
+        return _DualWeightedLoss(
+            base_mode,
+            reduction=reduction,
+            huber_beta=huber_beta,
+            dual_keys=dual_keys,
+            dual_scale=dual_scale,
+            dual_power=dual_power,
+            dual_clip=dual_clip,
+            balance_penalty_weight=balance_weight,
+            pre_target_weight=pre_target_weight,
+        )
+
+    return _BasePointwiseLoss(
+        base_mode,
+        reduction=reduction,
+        huber_beta=huber_beta,
+        balance_penalty_weight=balance_weight,
+        pre_target_weight=pre_target_weight,
+    )
 
 
 def _evaluate(
@@ -186,7 +385,7 @@ def train(config: TrainingConfig) -> None:
             batch_gpu = batch.to(device)
             optimizer.zero_grad()
             pred = model(batch_gpu)
-            loss = loss_fn(pred, batch_gpu.target)
+            loss = loss_fn(pred, batch_gpu)
             loss_value = float(loss.item())
             loss.backward()
             if config.loop.gradient_clip_norm is not None:
@@ -215,13 +414,26 @@ def train(config: TrainingConfig) -> None:
             display_metrics = {key: values['value'] for key, values in eval_metrics.items()}
             print(f"[Epoch {epoch}] validation metrics: {display_metrics}")
             dispatch_metric = eval_metrics.get('dispatch_error')
-            score = float(dispatch_metric['value']) if dispatch_metric is not None else float('inf')
+            violation_metric = eval_metrics.get('violation_rate')
+            cost_metric = eval_metrics.get('cost_gap')
+
+            dispatch_value = float(dispatch_metric['value']) if dispatch_metric is not None else float('inf')
+            violation_value = float(violation_metric['value']) if violation_metric is not None else float('inf')
+            cost_value = float(cost_metric['value']) if cost_metric is not None else float('inf')
+
+            dispatch_details = dispatch_metric.get('details', {}) if dispatch_metric is not None else {}
+            dispatch_norm = float(dispatch_details.get('normalized_mae', dispatch_value))
+            violation_norm = violation_value
+            cost_norm = abs(cost_value) if cost_value not in {float('inf'), float('-inf')} else float('inf')
+
+            score = 0.45 * dispatch_norm + 0.45 * violation_norm + 0.10 * cost_norm
             if score < best_val:
                 best_val = score
                 best_epoch = epoch
                 torch.save(model.state_dict(), best_path)
                 print(f"  New best model saved at {best_path}")
                 is_best = True
+            history_entry['val_weighted_score'] = float(score)
             history_entry.update(_flatten_metric_summary(eval_metrics, prefix='val_'))
         history_entry['is_best'] = is_best
         epoch_history.append(history_entry)
@@ -256,7 +468,7 @@ def train(config: TrainingConfig) -> None:
     summary_path = output_dir / 'training_summary.json'
     summary_payload = {
         'best_epoch': best_epoch,
-        'best_val_dispatch_error': best_val if best_val != float('inf') else None,
+        'best_val_score': best_val if best_val != float('inf') else None,
         'total_epochs': config.loop.epochs,
         'total_steps': global_step,
     }

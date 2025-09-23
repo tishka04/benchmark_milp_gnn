@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -36,7 +36,7 @@ class ModelConfig:
     heads: int = 4
     aggregator: str = "mean"
     typed_message_passing: bool = False
-    output_dim: int = 8
+    output_dim: Optional[int] = None
     type_embedding_dim: int = 16
     attn_dropout: float = 0.1
 
@@ -81,6 +81,7 @@ class LoopConfig:
     save_every: int = 1
     seed: Optional[int] = None
     loss: str = "mse"
+    loss_params: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "LoopConfig":
@@ -95,12 +96,16 @@ class DecoderConfig:
     dual_keys: Optional[List[str]] = None
     blend_dual_fraction: float = 0.3
     residual_tolerance: float = 1e-3
+    balance_iterations: int = 2
+    dual_adjustment_scale: float = 1.0
 
     @classmethod
     def from_dict(cls, data: Optional[Dict[str, Any]]) -> "DecoderConfig":
         if data is None:
             return cls()
-        return cls(**data)
+        allowed = {f.name for f in fields(cls)}
+        cleaned = {k: v for k, v in data.items() if k in allowed}
+        return cls(**cleaned)
 
 
 @dataclass

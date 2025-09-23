@@ -22,6 +22,8 @@ class GraphSample:
     edge_attr: torch.Tensor
     edge_type: torch.LongTensor
     target: torch.Tensor
+    target_pre: torch.Tensor
+    target_correction: torch.Tensor
     duals: Dict[str, torch.Tensor]
     metadata: Dict[str, Any]
 
@@ -43,6 +45,8 @@ class GraphBatch:
     edge_attr: torch.Tensor
     edge_type: torch.LongTensor
     target: torch.Tensor
+    target_pre: torch.Tensor
+    target_correction: torch.Tensor
     duals: Dict[str, torch.Tensor]
     node_batch: torch.LongTensor
     edge_batch: torch.LongTensor
@@ -60,6 +64,8 @@ class GraphBatch:
             edge_attr=self.edge_attr.to(device),
             edge_type=self.edge_type.to(device),
             target=self.target.to(device),
+            target_pre=self.target_pre.to(device),
+            target_correction=self.target_correction.to(device),
             duals=duals,
             node_batch=self.node_batch.to(device),
             edge_batch=self.edge_batch.to(device),
@@ -78,7 +84,7 @@ def _read_npz(path: Path) -> Dict[str, np.ndarray]:
 
 def _derive_node_types(node_static: torch.Tensor) -> torch.LongTensor:
     thermal_like = node_static[:, 0] + node_static[:, 5]
-    renewable_like = node_static[:, 1] + node_static[:, 2] + node_static[:, 7]
+    renewable_like = node_static[:, 1] + node_static[:, 2] + node_static[:, 6] + node_static[:, 7]
     storage_like = node_static[:, 3] + node_static[:, 8]
     demand_response = node_static[:, 4]
     type_scores = torch.stack([thermal_like, renewable_like, storage_like, demand_response], dim=1)
@@ -147,6 +153,15 @@ class GraphTemporalDataset(Dataset[GraphSample]):
         node_static = torch.from_numpy(arrays["node_static"]).float()
         node_time = torch.from_numpy(arrays["node_time"]).float()
         node_labels = torch.from_numpy(arrays["node_labels"]).float()
+        node_labels_pre = torch.from_numpy(
+            arrays.get("node_labels_pre", arrays["node_labels"])
+        ).float()
+        node_labels_correction = torch.from_numpy(
+            arrays.get(
+                "node_labels_correction",
+                np.zeros_like(arrays["node_labels"], dtype=np.float32),
+            )
+        ).float()
         zone_region = torch.from_numpy(arrays.get("zone_region_index", np.zeros(node_static.shape[0], dtype=np.int64))).long()
         edge_index = torch.from_numpy(arrays["edge_index"].astype(np.int64).T).long()
         edge_capacity = torch.from_numpy(arrays["edge_capacity"]).float()
@@ -164,6 +179,8 @@ class GraphTemporalDataset(Dataset[GraphSample]):
             "node_static": node_static,
             "node_time": node_time,
             "node_labels": node_labels,
+            "node_labels_pre": node_labels_pre,
+            "node_labels_correction": node_labels_correction,
             "zone_region": zone_region,
             "edge_index": edge_index,
             "edge_capacity": edge_capacity,
@@ -195,6 +212,8 @@ class GraphTemporalDataset(Dataset[GraphSample]):
         node_time = node_time_series[time_idx]
         node_input = torch.cat([node_static, node_time], dim=1)
         target = record["node_labels"][time_idx]
+        target_pre = record["node_labels_pre"][time_idx] if "node_labels_pre" in record else target
+        target_corr = record["node_labels_correction"][time_idx] if "node_labels_correction" in record else torch.zeros_like(target)
         edge_capacity = record["edge_capacity"]
         edge_flow_t = record["edge_flows"][:, time_idx]
         edge_attr = torch.stack([edge_capacity, edge_flow_t], dim=1)
@@ -219,6 +238,8 @@ class GraphTemporalDataset(Dataset[GraphSample]):
             edge_attr=edge_attr,
             edge_type=record["edge_type"],
             target=target,
+            target_pre=target_pre,
+            target_correction=target_corr,
             duals=duals,
             metadata=metadata,
         )
@@ -258,6 +279,8 @@ def collate_graph_samples(samples: Sequence[GraphSample]) -> GraphBatch:
     node_region_list: List[torch.LongTensor] = []
     node_type_list: List[torch.LongTensor] = []
     target_list: List[torch.Tensor] = []
+    target_pre_list: List[torch.Tensor] = []
+    target_corr_list: List[torch.Tensor] = []
     node_batch_list: List[torch.LongTensor] = []
     edge_index_list: List[torch.LongTensor] = []
     edge_attr_list: List[torch.Tensor] = []
@@ -277,6 +300,8 @@ def collate_graph_samples(samples: Sequence[GraphSample]) -> GraphBatch:
         node_region_list.append(sample.node_region)
         node_type_list.append(sample.node_type)
         target_list.append(sample.target)
+        target_pre_list.append(sample.target_pre)
+        target_corr_list.append(sample.target_correction)
         node_batch_list.append(torch.full((num_nodes,), batch_idx, dtype=torch.long))
         edge_index_list.append(sample.edge_index + node_offset)
         edge_attr_list.append(sample.edge_attr)
@@ -296,6 +321,8 @@ def collate_graph_samples(samples: Sequence[GraphSample]) -> GraphBatch:
     node_region = torch.cat(node_region_list, dim=0)
     node_type = torch.cat(node_type_list, dim=0)
     target = torch.cat(target_list, dim=0)
+    target_pre = torch.cat(target_pre_list, dim=0)
+    target_correction = torch.cat(target_corr_list, dim=0)
     node_batch = torch.cat(node_batch_list, dim=0)
     edge_index = torch.cat(edge_index_list, dim=1)
     edge_attr = torch.cat(edge_attr_list, dim=0)
@@ -313,6 +340,8 @@ def collate_graph_samples(samples: Sequence[GraphSample]) -> GraphBatch:
         edge_attr=edge_attr,
         edge_type=edge_type,
         target=target,
+        target_pre=target_pre,
+        target_correction=target_correction,
         duals=duals,
         node_batch=node_batch,
         edge_batch=edge_batch,

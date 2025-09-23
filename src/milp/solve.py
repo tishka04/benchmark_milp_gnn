@@ -86,12 +86,35 @@ def _compute_cost_components(model) -> Dict[str, float]:
     wind_spill = scalar_res_spill * _sum_var(model, model.spill_wind)
     components["solar_spill"] = solar_spill
     components["wind_spill"] = wind_spill
-    components["renewable_spill"] = solar_spill + wind_spill
 
     components["hydro_spill"] = scalar_hydro_spill * _sum_var(model, model.h_spill)
     components["overgen_spill"] = scalar_overgen * _sum_var(model, model.overgen_spill)
     components["imports"] = scalar_import * _sum_time_var(model, model.net_import)
     components["exports"] = scalar_export * _sum_time_var(model, model.net_export)
+
+    battery_cycle_total = 0.0
+    for z in model.Z:
+        cycle_cost = float(value(model.battery_cycle_cost[z]))
+        if cycle_cost <= 0.0:
+            continue
+        total_throughput = 0.0
+        for t in model.T:
+            total_throughput += float(value(model.b_charge[z, t] + model.b_discharge[z, t]))
+        battery_cycle_total += cycle_cost * total_throughput
+    if battery_cycle_total:
+        components["battery_cycle"] = battery_cycle_total
+
+    pumped_cycle_total = 0.0
+    for z in model.Z:
+        cycle_cost = float(value(model.pumped_cycle_cost[z]))
+        if cycle_cost <= 0.0:
+            continue
+        total_throughput = 0.0
+        for t in model.T:
+            total_throughput += float(value(model.pumped_charge[z, t] + model.pumped_discharge[z, t]))
+        pumped_cycle_total += cycle_cost * total_throughput
+    if pumped_cycle_total:
+        components["pumped_cycle"] = pumped_cycle_total
     return components
 
 
@@ -126,10 +149,8 @@ def _build_zone_dispatch_df(detail: Dict[str, Any]):
         "nuclear",
         "solar",
         "wind",
-        "renewable",
         "solar_spill",
         "wind_spill",
-        "renewable_spill",
         "hydro_release",
         "hydro_ror",
         "hydro_spill",
@@ -170,7 +191,6 @@ def _build_system_dispatch_df(detail: Dict[str, Any]):
         "nuclear_total": _aggregate_zone_series(detail, "nuclear"),
         "solar_total": _aggregate_zone_series(detail, "solar"),
         "wind_total": _aggregate_zone_series(detail, "wind"),
-        "renewable_total": _aggregate_zone_series(detail, "renewable"),
         "hydro_release_total": _aggregate_zone_series(detail, "hydro_release"),
         "hydro_ror_total": _aggregate_zone_series(detail, "hydro_ror"),
         "battery_discharge_total": _aggregate_zone_series(detail, "battery_discharge"),
@@ -180,10 +200,10 @@ def _build_system_dispatch_df(detail: Dict[str, Any]):
         "unserved_total": _aggregate_zone_series(detail, "unserved"),
         "solar_spill_total": _aggregate_zone_series(detail, "solar_spill"),
         "wind_spill_total": _aggregate_zone_series(detail, "wind_spill"),
-        "renewable_spill_total": _aggregate_zone_series(detail, "renewable_spill"),
         "overgen_spill_total": _aggregate_zone_series(detail, "overgen_spill"),
         "battery_soc_total": _aggregate_zone_series(detail, "battery_soc"),
         "pumped_level_total": _aggregate_zone_series(detail, "pumped_level"),
+        "hydro_spill_total": _aggregate_zone_series(detail, "hydro_spill"),
     }
 
     net_import = detail["net_import"]["values"]
@@ -267,14 +287,6 @@ def solve_scenario(
         wind_dispatch = {zone: [float(value(mip_model.p_wind[zone, t])) for t in periods] for zone in zones}
         solar_spill = {zone: [float(value(mip_model.spill_solar[zone, t])) for t in periods] for zone in zones}
         wind_spill = {zone: [float(value(mip_model.spill_wind[zone, t])) for t in periods] for zone in zones}
-        renewable_dispatch = {
-            zone: [solar_dispatch[zone][idx] + wind_dispatch[zone][idx] for idx in range(horizon)]
-            for zone in zones
-        }
-        renewable_spill = {
-            zone: [solar_spill[zone][idx] + wind_spill[zone][idx] for idx in range(horizon)]
-            for zone in zones
-        }
         detail_payload = {
             "time_steps": [int(t) for t in periods],
             "time_hours": [float(t * data.dt_hours) for t in periods],
@@ -289,10 +301,8 @@ def solve_scenario(
             "nuclear": {zone: [float(value(mip_model.p_nuclear[zone, t])) for t in periods] for zone in zones},
             "solar": solar_dispatch,
             "wind": wind_dispatch,
-            "renewable": renewable_dispatch,
             "solar_spill": solar_spill,
             "wind_spill": wind_spill,
-            "renewable_spill": renewable_spill,
             "hydro_release": {zone: [float(value(mip_model.h_release[zone, t])) for t in periods] for zone in zones},
             "hydro_ror": {zone: [float(value(mip_model.hydro_ror[zone, t])) for t in periods] for zone in zones},
             "hydro_spill": {zone: [float(value(mip_model.h_spill[zone, t])) for t in periods] for zone in zones},
@@ -312,6 +322,36 @@ def solve_scenario(
                 for line in mip_model.L
             },
         }
+
+        anchor_zone = data.import_anchor_zone
+        net_import_series = detail_payload.get("net_import", {}).get("values")
+        if net_import_series is not None:
+            net_import_list = [float(val) for val in net_import_series]
+        else:
+            net_import_list = [0.0 for _ in periods]
+
+        zero_template = [0.0 for _ in periods]
+
+        pre_dispatch = {
+            "thermal": {zone: list(values) for zone, values in detail_payload["thermal"].items()},
+            "nuclear": {zone: list(values) for zone, values in detail_payload["nuclear"].items()},
+            "solar": {zone: list(values) for zone, values in detail_payload["solar"].items()},
+            "wind": {zone: list(values) for zone, values in detail_payload["wind"].items()},
+            "hydro_release": {zone: list(values) for zone, values in detail_payload["hydro_release"].items()},
+            "hydro_ror": {zone: [float(value(mip_model.hydro_ror[zone, t])) for t in periods] for zone in zones},
+            "demand_response": {zone: list(values) for zone, values in detail_payload["demand_response"].items()},
+            "battery_charge": {zone: list(values) for zone, values in detail_payload["battery_charge"].items()},
+            "battery_discharge": {zone: list(values) for zone, values in detail_payload["battery_discharge"].items()},
+            "pumped_charge": {zone: list(values) for zone, values in detail_payload["pumped_charge"].items()},
+            "pumped_discharge": {zone: list(values) for zone, values in detail_payload["pumped_discharge"].items()},
+            "net_import": {
+                zone: (list(net_import_list) if zone == anchor_zone else list(zero_template))
+                for zone in zones
+            },
+            "unserved": {zone: list(zero_template) for zone in zones},
+        }
+
+        detail_payload["pre_dispatch"] = pre_dispatch
 
     lp_model = build_uc_model(data, enable_duals=True)
     _relax_integrality(lp_model)
