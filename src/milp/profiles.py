@@ -159,21 +159,6 @@ def build_wind_profile(
         base *= np.clip(1.0 - lull, 0.2, 1.0)
 
     return _normalize_profile(base)
-
-
-def build_renewable_profile(
-    name: str,
-    num_periods: int,
-    dt_hours: float,
-    intensity: float,
-    rng: np.random.Generator,
-) -> np.ndarray:
-    solar = build_solar_profile(name, num_periods, dt_hours, rng, intensity)
-    wind = build_wind_profile(name, num_periods, dt_hours, rng, intensity)
-    mix = 0.5 * solar + 0.5 * wind
-    return _normalize_profile(mix)
-
-
 def build_runofriver_profile(num_periods: int, dt_hours: float, intensity: float,
                              rng: np.random.Generator) -> np.ndarray:
     hours = _hours_vector(num_periods, dt_hours) % 24.0

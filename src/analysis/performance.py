@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import math
@@ -20,9 +20,14 @@ COMPONENT_ORDER = [
     'nuclear',
     'solar',
     'wind',
-    'renewable',
     'hydro_release',
+    'hydro_ror',
     'demand_response',
+    'battery_charge',
+    'battery_discharge',
+    'pumped_charge',
+    'pumped_discharge',
+    'net_import',
     'unserved',
 ]
 
@@ -90,7 +95,10 @@ def build_milp_summary(index_path: Path | str, split: str = 'test') -> pd.DataFr
         meta = scenario.get('meta', {}) or {}
         graph = scenario.get('graph', {}) or {}
 
-        scenario_id = scenario.get('id') or entry.get('scenario_id') or Path(entry['graph_file']).stem
+        # Prefer the dataset index 'scenario_id' to align with GraphTemporalDataset metadata
+        # Fallback to scenario JSON 'id' or graph filename stem if missing
+        scenario_id = entry.get('scenario_id') or scenario.get('id') or Path(entry['graph_file']).stem
+
         est_cpu_hours = estimates.get('est_cpu_hours')
         horizon_hours = scenario.get('horizon_hours')
         dt_minutes = scenario.get('dt_minutes')
@@ -253,36 +261,35 @@ def evaluate_gnn_performance(
                 stats['cost_pred'] += float(node_cost_pred.sum().item())
                 stats['cost_true'] += float(node_cost_true.sum().item())
 
-                node_time_graph = batch_cpu.node_time[mask]
-                battery_charge = node_time_graph[:, 7]
-                battery_discharge = node_time_graph[:, 8]
-                pumped_charge = node_time_graph[:, 9]
-                pumped_discharge = node_time_graph[:, 10]
-                net_import = node_time_graph[:, 15] if node_time_graph.size(1) > 15 else torch.zeros_like(demand_graph)
-                net_export = node_time_graph[:, 16] if node_time_graph.size(1) > 16 else torch.zeros_like(demand_graph)
-
-                net_exchange = net_import - net_export
-
-                flows = batch_cpu.edge_attr[:, 1]
-                net_flow = torch.zeros_like(batch_cpu.node_time[:, 0])
-                if flows.numel():
-                    net_flow.index_add_(0, batch_cpu.edge_index[1], flows)
-                    net_flow.index_add_(0, batch_cpu.edge_index[0], -flows)
-                net_flow_graph = net_flow[mask]
+                idx_map = {name: idx for idx, name in enumerate(COMPONENT_ORDER)}
+                thermal = pred_graph[:, idx_map["thermal"]]
+                nuclear = pred_graph[:, idx_map["nuclear"]]
+                solar = pred_graph[:, idx_map["solar"]]
+                wind = pred_graph[:, idx_map["wind"]]
+                hydro_release = pred_graph[:, idx_map["hydro_release"]]
+                hydro_ror = pred_graph[:, idx_map["hydro_ror"]]
+                demand_response = pred_graph[:, idx_map["demand_response"]]
+                battery_charge = pred_graph[:, idx_map["battery_charge"]]
+                battery_discharge = pred_graph[:, idx_map["battery_discharge"]]
+                pumped_charge = pred_graph[:, idx_map["pumped_charge"]]
+                pumped_discharge = pred_graph[:, idx_map["pumped_discharge"]]
+                net_import = pred_graph[:, idx_map["net_import"]]
+                unserved = pred_graph[:, idx_map["unserved"]]
 
                 supply = (
-                    pred_graph[:, 0]
-                    + pred_graph[:, 1]
-                    + pred_graph[:, 4]
-                    + pred_graph[:, 5]
-                    + pred_graph[:, 6]
+                    thermal
+                    + nuclear
+                    + solar
+                    + wind
+                    + hydro_release
+                    + hydro_ror
+                    + demand_response
                     + battery_discharge
                     + pumped_discharge
-                    + net_exchange
-                    + net_flow_graph
+                    + net_import
                 )
                 demand_side = demand_graph + battery_charge + pumped_charge
-                served = supply + pred_graph[:, 7]
+                served = supply + unserved
                 shortage = demand_side - served
                 violation_mask = (shortage.abs() > tolerance)
                 stats['violation_count'] += int(violation_mask.sum().item())

@@ -130,6 +130,12 @@ class TechScalers:
     dr_max_shed_share: float
     dr_duration_hours: float
     hydro_reservoir_head_eff: float
+    battery_initial_soc_fraction: float
+    battery_final_soc_tolerance: float
+    battery_self_discharge_per_hour: float
+    pumped_initial_level_fraction: float
+    pumped_final_level_tolerance: float
+    pumped_self_discharge_per_hour: float
 
 
 @dataclass
@@ -141,6 +147,8 @@ class OperationCosts:
     renewable_spill_cost_eur_per_mwh: float
     hydro_spill_cost_eur_per_mwh: float
     overgen_spill_cost_eur_per_mwh: float
+    battery_cycle_cost_eur_per_mwh: float
+    pumped_cycle_cost_eur_per_mwh: float
 
 
 @dataclass
@@ -237,6 +245,12 @@ def sample_tech(space: Dict[str, Any]) -> TechScalers:
         dr_max_shed_share=rand_float(*tech_cfg["dr_max_shed_share"]),
         dr_duration_hours=rand_float(*tech_cfg["dr_duration_hours"]),
         hydro_reservoir_head_eff=rand_float(*tech_cfg["hydro_reservoir_head_eff"]),
+        battery_initial_soc_fraction=rand_float(*tech_cfg["battery_initial_soc_fraction"]),
+        battery_final_soc_tolerance=rand_float(*tech_cfg["battery_final_soc_tolerance"]),
+        battery_self_discharge_per_hour=rand_float(*tech_cfg["battery_self_discharge_per_hour"]),
+        pumped_initial_level_fraction=rand_float(*tech_cfg["pumped_initial_level_fraction"]),
+        pumped_final_level_tolerance=rand_float(*tech_cfg["pumped_final_level_tolerance"]),
+        pumped_self_discharge_per_hour=rand_float(*tech_cfg["pumped_self_discharge_per_hour"]),
     )
 
 
@@ -250,6 +264,8 @@ def sample_operation_costs(space: Dict[str, Any]) -> OperationCosts:
         renewable_spill_cost_eur_per_mwh=rand_float(*cost_cfg["renewable_spill_cost_eur_per_mwh"]),
         hydro_spill_cost_eur_per_mwh=rand_float(*cost_cfg["hydro_spill_cost_eur_per_mwh"]),
         overgen_spill_cost_eur_per_mwh=rand_float(*cost_cfg["overgen_spill_cost_eur_per_mwh"]),
+        battery_cycle_cost_eur_per_mwh=rand_float(*cost_cfg["battery_cycle_cost_eur_per_mwh"]),
+        pumped_cycle_cost_eur_per_mwh=rand_float(*cost_cfg["pumped_cycle_cost_eur_per_mwh"]),
     )
 
 

@@ -51,6 +51,10 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.battery_power = Param(m.Z, initialize=lambda _, z: data.battery_power.get(z, 0.0), mutable=False)
     m.battery_energy = Param(m.Z, initialize=lambda _, z: data.battery_energy.get(z, 0.0), mutable=False)
     m.battery_initial = Param(m.Z, initialize=lambda _, z: data.battery_initial.get(z, 0.0), mutable=False)
+    m.battery_cycle_cost = Param(m.Z, initialize=lambda _, z: data.battery_cycle_cost.get(z, 0.0), mutable=False)
+    m.battery_retention = Param(m.Z, initialize=lambda _, z: data.battery_retention.get(z, 1.0), mutable=False)
+    m.battery_final_min = Param(m.Z, initialize=lambda _, z: data.battery_final_min.get(z, 0.0), mutable=False)
+    m.battery_final_max = Param(m.Z, initialize=lambda _, z: data.battery_final_max.get(z, 0.0), mutable=False)
 
     m.hydro_capacity = Param(m.Z, initialize=lambda _, z: data.hydro_res_capacity.get(z, 0.0), mutable=False)
     m.hydro_energy = Param(m.Z, initialize=lambda _, z: data.hydro_res_energy.get(z, 0.0), mutable=False)
@@ -59,6 +63,10 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.pumped_power = Param(m.Z, initialize=lambda _, z: data.pumped_power.get(z, 0.0), mutable=False)
     m.pumped_energy = Param(m.Z, initialize=lambda _, z: data.pumped_energy.get(z, 0.0), mutable=False)
     m.pumped_initial = Param(m.Z, initialize=lambda _, z: data.pumped_initial.get(z, 0.0), mutable=False)
+    m.pumped_cycle_cost = Param(m.Z, initialize=lambda _, z: data.pumped_cycle_cost.get(z, 0.0), mutable=False)
+    m.pumped_retention = Param(m.Z, initialize=lambda _, z: data.pumped_retention.get(z, 1.0), mutable=False)
+    m.pumped_final_min = Param(m.Z, initialize=lambda _, z: data.pumped_final_min.get(z, 0.0), mutable=False)
+    m.pumped_final_max = Param(m.Z, initialize=lambda _, z: data.pumped_final_max.get(z, 0.0), mutable=False)
 
     m.import_capacity = Param(initialize=data.import_capacity, mutable=False)
     m.import_cost = Param(initialize=data.import_cost, mutable=False)
@@ -66,7 +74,7 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.overgen_spill_cost = Param(initialize=data.overgen_spill_penalty, mutable=False)
     m.voll = Param(initialize=data.voll, mutable=False)
     m.dr_cost = Param(initialize=data.dr_cost_per_mwh, mutable=False)
-    m.res_spill_cost = Param(initialize=data.renewable_spill_cost, mutable=False)
+    m.res_spill_cost = Param(initialize=data.variable_spill_cost, mutable=False)
     m.hydro_spill_cost = Param(initialize=data.hydro_spill_cost, mutable=False)
 
     # Indexed lookup helpers
@@ -177,7 +185,8 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
             prev = model.battery_initial[z]
         else:
             prev = model.b_soc[z, t - 1]
-        return model.b_soc[z, t] == prev + model.dt_hours * (
+        retention = model.battery_retention[z]
+        return model.b_soc[z, t] == retention * prev + model.dt_hours * (
             eta_c * model.b_charge[z, t] - model.b_discharge[z, t] / max(eta_d, 1e-4)
         )
 
@@ -187,6 +196,23 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
         return model.b_soc[z, t] <= model.battery_energy[z]
 
     m.battery_soc_limit = Constraint(m.Z, m.T, rule=_battery_soc_bounds_rule)
+
+    def _battery_final_min_rule(model, z):
+        if value(model.battery_energy[z]) <= 1e-6:
+            return Constraint.Skip
+        if value(model.battery_final_min[z]) <= 1e-6:
+            return Constraint.Skip
+        return model.b_soc[z, model.T.last()] >= model.battery_final_min[z]
+
+    def _battery_final_max_rule(model, z):
+        if value(model.battery_energy[z]) <= 1e-6:
+            return Constraint.Skip
+        if value(model.battery_final_max[z]) <= 1e-6:
+            return Constraint.Skip
+        return model.b_soc[z, model.T.last()] <= model.battery_final_max[z]
+
+    m.battery_final_min_con = Constraint(m.Z, rule=_battery_final_min_rule)
+    m.battery_final_max_con = Constraint(m.Z, rule=_battery_final_max_rule)
 
     # Hydro reservoir
     def _hydro_release_cap_rule(model, z, t):
@@ -232,7 +258,8 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
             prev = model.pumped_initial[z]
         else:
             prev = model.pumped_level[z, t - 1]
-        return model.pumped_level[z, t] == prev + model.dt_hours * (
+        retention = model.pumped_retention[z]
+        return model.pumped_level[z, t] == retention * prev + model.dt_hours * (
             eta_c * model.pumped_charge[z, t] - model.pumped_discharge[z, t] / max(eta_d, 1e-4)
         )
 
@@ -242,6 +269,23 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
         return model.pumped_level[z, t] <= model.pumped_energy[z]
 
     m.pumped_level_cap = Constraint(m.Z, m.T, rule=_pumped_level_cap_rule)
+
+    def _pumped_final_min_rule(model, z):
+        if value(model.pumped_energy[z]) <= 1e-6:
+            return Constraint.Skip
+        if value(model.pumped_final_min[z]) <= 1e-6:
+            return Constraint.Skip
+        return model.pumped_level[z, model.T.last()] >= model.pumped_final_min[z]
+
+    def _pumped_final_max_rule(model, z):
+        if value(model.pumped_energy[z]) <= 1e-6:
+            return Constraint.Skip
+        if value(model.pumped_final_max[z]) <= 1e-6:
+            return Constraint.Skip
+        return model.pumped_level[z, model.T.last()] <= model.pumped_final_max[z]
+
+    m.pumped_final_min_con = Constraint(m.Z, rule=_pumped_final_min_rule)
+    m.pumped_final_max_con = Constraint(m.Z, rule=_pumped_final_max_rule)
 
     # Transmission bounds
     def _flow_upper_rule(model, l, t):
@@ -290,7 +334,11 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
             model.res_spill_cost * (model.spill_solar[z, t] + model.spill_wind[z, t]) + model.hydro_spill_cost * model.h_spill[z, t]
             for z in model.Z for t in model.T
         )
-        storage_cost = 0.0  # placeholder for future cycling costs
+        storage_cost = sum(
+            model.battery_cycle_cost[z] * (model.b_charge[z, t] + model.b_discharge[z, t])
+            + model.pumped_cycle_cost[z] * (model.pumped_charge[z, t] + model.pumped_discharge[z, t])
+            for z in model.Z for t in model.T
+        )
         import_cost = sum(model.import_cost * model.net_import[t] for t in model.T)
         export_cost = sum(model.export_cost * model.net_export[t] for t in model.T)
         overgen_cost = sum(model.overgen_spill_cost * model.overgen_spill[z, t] for z in model.Z for t in model.T)

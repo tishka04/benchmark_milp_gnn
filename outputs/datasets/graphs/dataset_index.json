@@ -4,126 +4,126 @@
       "scenario_file": "outputs\\scenarios_v1\\scenario_00001.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00001.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00001.npz",
-      "scenario_id": "29edaf7f-c215-4828-8d66-48ec1fcaae8b",
+      "scenario_id": "d940e0a0-39a3-481b-932d-857c53a059db",
       "family": "R2_stormy_winter",
       "regions": 2,
       "weather_profile": "stormy_winter",
       "zones": 11,
-      "objective": 25428532.786684107
+      "objective": 8466666.709814528
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00002.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00002.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00002.npz",
-      "scenario_id": "a60e4875-9bc0-4b30-ab13-4249f050a260",
-      "family": "R5_sunny_summer",
-      "regions": 5,
+      "scenario_id": "47d8d081-80f5-41c3-a620-4394e6e68891",
+      "family": "R3_sunny_summer",
+      "regions": 3,
       "weather_profile": "sunny_summer",
-      "zones": 26,
-      "objective": 14611793.74387893
+      "zones": 23,
+      "objective": 140661327.42506418
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00003.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00003.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00003.npz",
-      "scenario_id": "30749bbc-9748-49a4-8bee-eca5a6b29e67",
-      "family": "R2_stormy_winter",
+      "scenario_id": "ad0d2ec5-411e-42cb-ba98-540bdc8713dc",
+      "family": "R2_sunny_summer",
       "regions": 2,
-      "weather_profile": "stormy_winter",
-      "zones": 9,
-      "objective": 598592.5283119302
+      "weather_profile": "sunny_summer",
+      "zones": 10,
+      "objective": 2027869.2153830323
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00004.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00004.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00004.npz",
-      "scenario_id": "03f46e73-8364-463c-ba6b-b155f8212acf",
-      "family": "R2_mixed",
-      "regions": 2,
-      "weather_profile": "mixed",
-      "zones": 11,
-      "objective": 9181686.41404787
+      "scenario_id": "f44d47ac-00d7-4948-b920-394464a15453",
+      "family": "R4_stormy_winter",
+      "regions": 4,
+      "weather_profile": "stormy_winter",
+      "zones": 15,
+      "objective": 23038773.79049742
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00005.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00005.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00005.npz",
-      "scenario_id": "441fd477-e4a0-45ba-86b2-05d232f8fd5d",
-      "family": "R2_overcast_summer",
-      "regions": 2,
-      "weather_profile": "overcast_summer",
-      "zones": 17,
-      "objective": 39750741.7773608
+      "scenario_id": "1fbf8a35-da00-4f75-9f29-5205ac236839",
+      "family": "R3_sunny_summer",
+      "regions": 3,
+      "weather_profile": "sunny_summer",
+      "zones": 22,
+      "objective": 25605148.611668985
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00006.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00006.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00006.npz",
-      "scenario_id": "5e76ee96-3954-46ee-89dd-ef66bbbb4c31",
-      "family": "R5_sunny_summer",
-      "regions": 5,
-      "weather_profile": "sunny_summer",
-      "zones": 22,
-      "objective": 75618740.47962001
+      "scenario_id": "c59ba8b3-3282-4b43-81c0-f71df480b5b7",
+      "family": "R2_stormy_winter",
+      "regions": 2,
+      "weather_profile": "stormy_winter",
+      "zones": 9,
+      "objective": 20977096.470925674
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00007.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00007.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00007.npz",
-      "scenario_id": "f1a16f0f-4862-4a9b-bad3-35f17f5f7612",
-      "family": "R3_mixed",
-      "regions": 3,
-      "weather_profile": "mixed",
-      "zones": 16,
-      "objective": 21229661.322434396
+      "scenario_id": "cff189d8-ef01-401f-93d7-153bd139b833",
+      "family": "R2_sunny_summer",
+      "regions": 2,
+      "weather_profile": "sunny_summer",
+      "zones": 7,
+      "objective": 39735484.80142997
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00008.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00008.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00008.npz",
-      "scenario_id": "1e95fc87-17ff-4335-867c-925f0bf7abe8",
-      "family": "R3_sunny_summer",
+      "scenario_id": "441cf95b-9d58-4e81-af24-4c84b510fa88",
+      "family": "R3_stormy_winter",
       "regions": 3,
-      "weather_profile": "sunny_summer",
-      "zones": 22,
-      "objective": 35306092.0712311
+      "weather_profile": "stormy_winter",
+      "zones": 26,
+      "objective": 25306841.83393757
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00009.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00009.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00009.npz",
-      "scenario_id": "efcfcd14-aadc-4f37-b93f-02aa93bd3942",
-      "family": "R5_sunny_summer",
-      "regions": 5,
-      "weather_profile": "sunny_summer",
-      "zones": 24,
-      "objective": 265626120.94264728
+      "scenario_id": "636ca21f-a5ab-4d7a-8f57-56a2e55313f8",
+      "family": "R4_calm_winter",
+      "regions": 4,
+      "weather_profile": "calm_winter",
+      "zones": 15,
+      "objective": 65424033.580918506
     },
     {
       "scenario_file": "outputs\\scenarios_v1\\scenario_00010.json",
       "report_file": "outputs\\scenarios_v1\\reports\\scenario_00010.json",
       "graph_file": "outputs\\datasets\\graphs\\scenario_00010.npz",
-      "scenario_id": "51c32a25-b1e5-4d6d-b36a-c696930750ce",
-      "family": "R2_sunny_summer",
+      "scenario_id": "5cea2d24-b72e-4554-9bd3-3fbfa9a4fcc3",
+      "family": "R2_mixed",
       "regions": 2,
-      "weather_profile": "sunny_summer",
-      "zones": 7,
-      "objective": 222305.43110255318
+      "weather_profile": "mixed",
+      "zones": 11,
+      "objective": 13545431.349959832
     }
   ],
   "split_families": {
     "train": [
-      "R2_overcast_summer",
       "R2_stormy_winter",
-      "R3_sunny_summer",
-      "R3_mixed"
+      "R2_sunny_summer",
+      "R4_calm_winter",
+      "R3_sunny_summer"
     ],
     "val": [
       "R2_mixed"
     ],
     "test": [
-      "R2_sunny_summer",
-      "R5_sunny_summer"
+      "R3_stormy_winter",
+      "R4_stormy_winter"
     ]
   },
   "splits": {
@@ -132,115 +132,115 @@
         "scenario_file": "outputs\\scenarios_v1\\scenario_00001.json",
         "report_file": "outputs\\scenarios_v1\\reports\\scenario_00001.json",
         "graph_file": "outputs\\datasets\\graphs\\scenario_00001.npz",
-        "scenario_id": "29edaf7f-c215-4828-8d66-48ec1fcaae8b",
+        "scenario_id": "d940e0a0-39a3-481b-932d-857c53a059db",
         "family": "R2_stormy_winter",
         "regions": 2,
         "weather_profile": "stormy_winter",
         "zones": 11,
-        "objective": 25428532.786684107
+        "objective": 8466666.709814528
+      },
+      {
+        "scenario_file": "outputs\\scenarios_v1\\scenario_00002.json",
+        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00002.json",
+        "graph_file": "outputs\\datasets\\graphs\\scenario_00002.npz",
+        "scenario_id": "47d8d081-80f5-41c3-a620-4394e6e68891",
+        "family": "R3_sunny_summer",
+        "regions": 3,
+        "weather_profile": "sunny_summer",
+        "zones": 23,
+        "objective": 140661327.42506418
       },
       {
         "scenario_file": "outputs\\scenarios_v1\\scenario_00003.json",
         "report_file": "outputs\\scenarios_v1\\reports\\scenario_00003.json",
         "graph_file": "outputs\\datasets\\graphs\\scenario_00003.npz",
-        "scenario_id": "30749bbc-9748-49a4-8bee-eca5a6b29e67",
-        "family": "R2_stormy_winter",
+        "scenario_id": "ad0d2ec5-411e-42cb-ba98-540bdc8713dc",
+        "family": "R2_sunny_summer",
         "regions": 2,
-        "weather_profile": "stormy_winter",
-        "zones": 9,
-        "objective": 598592.5283119302
+        "weather_profile": "sunny_summer",
+        "zones": 10,
+        "objective": 2027869.2153830323
       },
       {
         "scenario_file": "outputs\\scenarios_v1\\scenario_00005.json",
         "report_file": "outputs\\scenarios_v1\\reports\\scenario_00005.json",
         "graph_file": "outputs\\datasets\\graphs\\scenario_00005.npz",
-        "scenario_id": "441fd477-e4a0-45ba-86b2-05d232f8fd5d",
-        "family": "R2_overcast_summer",
-        "regions": 2,
-        "weather_profile": "overcast_summer",
-        "zones": 17,
-        "objective": 39750741.7773608
-      },
-      {
-        "scenario_file": "outputs\\scenarios_v1\\scenario_00007.json",
-        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00007.json",
-        "graph_file": "outputs\\datasets\\graphs\\scenario_00007.npz",
-        "scenario_id": "f1a16f0f-4862-4a9b-bad3-35f17f5f7612",
-        "family": "R3_mixed",
-        "regions": 3,
-        "weather_profile": "mixed",
-        "zones": 16,
-        "objective": 21229661.322434396
-      },
-      {
-        "scenario_file": "outputs\\scenarios_v1\\scenario_00008.json",
-        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00008.json",
-        "graph_file": "outputs\\datasets\\graphs\\scenario_00008.npz",
-        "scenario_id": "1e95fc87-17ff-4335-867c-925f0bf7abe8",
+        "scenario_id": "1fbf8a35-da00-4f75-9f29-5205ac236839",
         "family": "R3_sunny_summer",
         "regions": 3,
         "weather_profile": "sunny_summer",
         "zones": 22,
-        "objective": 35306092.0712311
-      }
-    ],
-    "val": [
-      {
-        "scenario_file": "outputs\\scenarios_v1\\scenario_00004.json",
-        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00004.json",
-        "graph_file": "outputs\\datasets\\graphs\\scenario_00004.npz",
-        "scenario_id": "03f46e73-8364-463c-ba6b-b155f8212acf",
-        "family": "R2_mixed",
-        "regions": 2,
-        "weather_profile": "mixed",
-        "zones": 11,
-        "objective": 9181686.41404787
-      }
-    ],
-    "test": [
-      {
-        "scenario_file": "outputs\\scenarios_v1\\scenario_00002.json",
-        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00002.json",
-        "graph_file": "outputs\\datasets\\graphs\\scenario_00002.npz",
-        "scenario_id": "a60e4875-9bc0-4b30-ab13-4249f050a260",
-        "family": "R5_sunny_summer",
-        "regions": 5,
-        "weather_profile": "sunny_summer",
-        "zones": 26,
-        "objective": 14611793.74387893
+        "objective": 25605148.611668985
       },
       {
         "scenario_file": "outputs\\scenarios_v1\\scenario_00006.json",
         "report_file": "outputs\\scenarios_v1\\reports\\scenario_00006.json",
         "graph_file": "outputs\\datasets\\graphs\\scenario_00006.npz",
-        "scenario_id": "5e76ee96-3954-46ee-89dd-ef66bbbb4c31",
-        "family": "R5_sunny_summer",
-        "regions": 5,
+        "scenario_id": "c59ba8b3-3282-4b43-81c0-f71df480b5b7",
+        "family": "R2_stormy_winter",
+        "regions": 2,
+        "weather_profile": "stormy_winter",
+        "zones": 9,
+        "objective": 20977096.470925674
+      },
+      {
+        "scenario_file": "outputs\\scenarios_v1\\scenario_00007.json",
+        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00007.json",
+        "graph_file": "outputs\\datasets\\graphs\\scenario_00007.npz",
+        "scenario_id": "cff189d8-ef01-401f-93d7-153bd139b833",
+        "family": "R2_sunny_summer",
+        "regions": 2,
         "weather_profile": "sunny_summer",
-        "zones": 22,
-        "objective": 75618740.47962001
+        "zones": 7,
+        "objective": 39735484.80142997
       },
       {
         "scenario_file": "outputs\\scenarios_v1\\scenario_00009.json",
         "report_file": "outputs\\scenarios_v1\\reports\\scenario_00009.json",
         "graph_file": "outputs\\datasets\\graphs\\scenario_00009.npz",
-        "scenario_id": "efcfcd14-aadc-4f37-b93f-02aa93bd3942",
-        "family": "R5_sunny_summer",
-        "regions": 5,
-        "weather_profile": "sunny_summer",
-        "zones": 24,
-        "objective": 265626120.94264728
-      },
+        "scenario_id": "636ca21f-a5ab-4d7a-8f57-56a2e55313f8",
+        "family": "R4_calm_winter",
+        "regions": 4,
+        "weather_profile": "calm_winter",
+        "zones": 15,
+        "objective": 65424033.580918506
+      }
+    ],
+    "val": [
       {
         "scenario_file": "outputs\\scenarios_v1\\scenario_00010.json",
         "report_file": "outputs\\scenarios_v1\\reports\\scenario_00010.json",
         "graph_file": "outputs\\datasets\\graphs\\scenario_00010.npz",
-        "scenario_id": "51c32a25-b1e5-4d6d-b36a-c696930750ce",
-        "family": "R2_sunny_summer",
+        "scenario_id": "5cea2d24-b72e-4554-9bd3-3fbfa9a4fcc3",
+        "family": "R2_mixed",
         "regions": 2,
-        "weather_profile": "sunny_summer",
-        "zones": 7,
-        "objective": 222305.43110255318
+        "weather_profile": "mixed",
+        "zones": 11,
+        "objective": 13545431.349959832
+      }
+    ],
+    "test": [
+      {
+        "scenario_file": "outputs\\scenarios_v1\\scenario_00004.json",
+        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00004.json",
+        "graph_file": "outputs\\datasets\\graphs\\scenario_00004.npz",
+        "scenario_id": "f44d47ac-00d7-4948-b920-394464a15453",
+        "family": "R4_stormy_winter",
+        "regions": 4,
+        "weather_profile": "stormy_winter",
+        "zones": 15,
+        "objective": 23038773.79049742
+      },
+      {
+        "scenario_file": "outputs\\scenarios_v1\\scenario_00008.json",
+        "report_file": "outputs\\scenarios_v1\\reports\\scenario_00008.json",
+        "graph_file": "outputs\\datasets\\graphs\\scenario_00008.npz",
+        "scenario_id": "441cf95b-9d58-4e81-af24-4c84b510fa88",
+        "family": "R3_stormy_winter",
+        "regions": 3,
+        "weather_profile": "stormy_winter",
+        "zones": 26,
+        "objective": 25306841.83393757
       }
     ]
   },
