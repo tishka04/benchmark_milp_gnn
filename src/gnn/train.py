@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import csv
@@ -337,21 +337,33 @@ def train(config: TrainingConfig) -> None:
 
     _set_seed(config.loop.seed)
 
+    # Determine split fractions for automatic splitting
+    train_frac = config.data.train_split if isinstance(config.data.train_split, float) else 0.7
+    val_frac = config.data.val_split if isinstance(config.data.val_split, float) else 0.15
+    
+    # Use split names for dataset loader
+    train_split_name = "train" if isinstance(config.data.train_split, float) else config.data.train_split
+    val_split_name = "val" if isinstance(config.data.val_split, float) else config.data.val_split
+    
     train_dataset = GraphTemporalDataset(
         config.data.index_path,
-        split=config.data.train_split,
+        split=train_split_name,
         include_duals=config.data.include_duals,
         preload=config.data.preload,
+        train_fraction=train_frac,
+        val_fraction=val_frac,
     )
     val_dataset = GraphTemporalDataset(
         config.data.index_path,
-        split=config.data.val_split,
+        split=val_split_name,
         include_duals=config.data.include_duals,
         preload=config.data.preload,
+        train_fraction=train_frac,
+        val_fraction=val_frac,
     ) if config.data.val_split else None
 
-    train_loader = _build_dataloader(train_dataset, config, config.data.train_split)
-    val_loader = _build_dataloader(val_dataset, config, config.data.val_split) if val_dataset else None
+    train_loader = _build_dataloader(train_dataset, config, train_split_name)
+    val_loader = _build_dataloader(val_dataset, config, val_split_name) if val_dataset else None
 
     model = build_model(config.model, train_dataset)
     device = torch.device(config.loop.device)
@@ -485,13 +497,16 @@ def train(config: TrainingConfig) -> None:
         print(f'Training complete. Final weights saved to {final_path}')
 
     if config.data.test_split:
+        test_split_name = "test" if isinstance(config.data.test_split, float) else config.data.test_split
         test_dataset = GraphTemporalDataset(
             config.data.index_path,
-            split=config.data.test_split,
+            split=test_split_name,
             include_duals=config.data.include_duals,
             preload=config.data.preload,
+            train_fraction=train_frac,
+            val_fraction=val_frac,
         )
-        test_loader = _build_dataloader(test_dataset, config, config.data.test_split)
+        test_loader = _build_dataloader(test_dataset, config, test_split_name)
         test_metrics = _evaluate(model, test_loader, decoder, metrics, device)
         test_display = {key: values['value'] for key, values in test_metrics.items()}
         (output_dir / 'test_metrics.json').write_text(json.dumps(test_metrics, indent=2), encoding='utf-8')

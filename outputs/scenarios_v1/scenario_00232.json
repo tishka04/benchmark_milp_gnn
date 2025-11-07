@@ -1,0 +1,297 @@
+{
+  "id": "bcda7884-a828-4c46-a467-28289c74e2b7",
+  "horizon_hours": 24,
+  "dt_minutes": 15,
+  "graph": {
+    "regions": 4,
+    "zones_per_region": [
+      4,
+      3,
+      4,
+      3
+    ],
+    "sites_per_zone": [
+      3,
+      4,
+      8,
+      2,
+      3,
+      2,
+      2,
+      2,
+      2,
+      3,
+      2,
+      4,
+      5,
+      4
+    ],
+    "intertie_density": 0.5331352213246539,
+    "neighbor_nations": 1
+  },
+  "assets": {
+    "thermal_per_site": [
+      0,
+      2,
+      1,
+      3,
+      3,
+      0,
+      2,
+      2,
+      1,
+      1,
+      3,
+      3,
+      0,
+      1
+    ],
+    "solar_per_site": [
+      2,
+      1,
+      3,
+      2,
+      3,
+      2,
+      2,
+      3,
+      3,
+      2,
+      3,
+      3,
+      3,
+      3
+    ],
+    "wind_per_site": [
+      2,
+      3,
+      1,
+      2,
+      2,
+      3,
+      3,
+      2,
+      3,
+      2,
+      1,
+      1,
+      1,
+      2
+    ],
+    "battery_per_site": [
+      0,
+      1,
+      2,
+      1,
+      1,
+      2,
+      2,
+      1,
+      1,
+      0,
+      2,
+      1,
+      2,
+      1
+    ],
+    "dr_per_site": [
+      0,
+      0,
+      2,
+      1,
+      2,
+      0,
+      0,
+      1,
+      0,
+      0,
+      2,
+      1,
+      1,
+      1
+    ],
+    "nuclear_per_region": [
+      0,
+      2,
+      1,
+      2
+    ],
+    "hydro_reservoir_per_region": [
+      1,
+      1,
+      0,
+      0
+    ],
+    "hydro_ror_per_zone": [
+      0,
+      0,
+      1,
+      0,
+      2,
+      1,
+      0,
+      0,
+      2,
+      1,
+      2,
+      2,
+      0,
+      0
+    ],
+    "hydro_pumped_per_region": [
+      2,
+      2,
+      0,
+      0
+    ]
+  },
+  "econ_policy": {
+    "co2_price": 199.25095478937132,
+    "price_cap": 550.2802143350924,
+    "cross_border_policy": "cap",
+    "import_export_caps_factor": 0.6787590880292258
+  },
+  "tech": {
+    "thermal_marg_cost": 1.6756198264228144,
+    "thermal_ramp_pct": 0.40799590640336997,
+    "battery_roundtrip_eff": 0.9319990337781672,
+    "battery_e_to_p_hours": 3.1569035569146067,
+    "dr_max_shed_share": 0.17183524460788457,
+    "dr_duration_hours": 5.31291131755168,
+    "hydro_reservoir_head_eff": 1.0139108635436096,
+    "battery_initial_soc_fraction": 0.49150081122086,
+    "battery_final_soc_tolerance": 0.1381671101597062,
+    "battery_self_discharge_per_hour": 0.009200945048770635,
+    "pumped_initial_level_fraction": 0.5239952964683209,
+    "pumped_final_level_tolerance": 0.11325326908496681,
+    "pumped_self_discharge_per_hour": 0.002207082997267418
+  },
+  "operation_costs": {
+    "thermal_fuel_eur_per_mwh": 49.480215490945824,
+    "nuclear_fuel_eur_per_mwh": 15.968098075810229,
+    "demand_response_cost_eur_per_mwh": 1036.027219593118,
+    "value_of_lost_load_eur_per_mwh": 9480.243727438246,
+    "renewable_spill_cost_eur_per_mwh": 1846.2778076672078,
+    "hydro_spill_cost_eur_per_mwh": 1002.2166185412224,
+    "overgen_spill_cost_eur_per_mwh": 2706.2239067288906,
+    "battery_cycle_cost_eur_per_mwh": 89.64527586630851,
+    "pumped_cycle_cost_eur_per_mwh": 76.59160894064496
+  },
+  "exogenous": {
+    "weather_profile": "sunny_summer",
+    "weather_spread_intensity": 1.0516487509467913,
+    "demand_profile": "shoulder",
+    "demand_scale_factor": 0.9304550588676641,
+    "inflow_factor": 0.6362982684600841,
+    "zone_profile_variants": {
+      "evening_peak": 0.28,
+      "double_peak": 0.16,
+      "office_peak": 0.2,
+      "industrial": 0.14,
+      "night_shift": 0.1,
+      "residential_morning": 0.12
+    },
+    "zone_profile_mix_weight": [
+      0.4,
+      0.8
+    ],
+    "zone_profile_phase_shift_hours": [
+      -2.5,
+      2.5
+    ],
+    "zone_profile_noise_std": [
+      0.02,
+      0.06
+    ],
+    "zone_profile_curvature_exp": [
+      0.9,
+      1.18
+    ],
+    "region_weather": {
+      "R1": {
+        "weather_profile": "stormy_winter",
+        "weather_spread_intensity": 0.7398766620673052
+      },
+      "R2": {
+        "weather_profile": "calm_winter",
+        "weather_spread_intensity": 1.413504318872497
+      },
+      "R3": {
+        "weather_profile": "overcast_summer",
+        "weather_spread_intensity": 0.6174327680615055
+      },
+      "R4": {
+        "weather_profile": "sunny_summer",
+        "weather_spread_intensity": 1.4357812547858575
+      }
+    }
+  },
+  "mip_gap_target_pct": 0.7315671350304062,
+  "estimates": {
+    "vars_total": 72000,
+    "cons_total": 93600,
+    "est_cpu_hours": 1.3581333333333332
+  },
+  "meta": {
+    "regions": 4,
+    "zones": 14,
+    "sites": 14,
+    "intertie_density": 0.5331352213246539,
+    "neighbor_nations": 1,
+    "assets": {
+      "thermal": 22,
+      "solar": 35,
+      "wind": 28,
+      "battery": 17,
+      "dr": 11,
+      "nuclear": 5,
+      "hydro_reservoir": 2,
+      "hydro_ror": 11,
+      "hydro_pumped": 4
+    },
+    "demand_scale_factor": 0.9304550588676641,
+    "zone_profile_variants": {
+      "evening_peak": 0.28,
+      "double_peak": 0.16,
+      "office_peak": 0.2,
+      "industrial": 0.14,
+      "night_shift": 0.1,
+      "residential_morning": 0.12
+    },
+    "zone_profile_mix_weight": [
+      0.4,
+      0.8
+    ],
+    "weather_profile": "sunny_summer",
+    "cross_border_policy": "cap",
+    "price_cap": 550.2802143350924,
+    "co2_price": 199.25095478937132,
+    "import_export_caps_factor": 0.6787590880292258,
+    "operation_costs": {
+      "thermal_fuel_eur_per_mwh": 49.480215490945824,
+      "nuclear_fuel_eur_per_mwh": 15.968098075810229,
+      "demand_response_cost_eur_per_mwh": 1036.027219593118,
+      "value_of_lost_load_eur_per_mwh": 9480.243727438246,
+      "renewable_spill_cost_eur_per_mwh": 1846.2778076672078,
+      "hydro_spill_cost_eur_per_mwh": 1002.2166185412224,
+      "overgen_spill_cost_eur_per_mwh": 2706.2239067288906,
+      "battery_cycle_cost_eur_per_mwh": 89.64527586630851,
+      "pumped_cycle_cost_eur_per_mwh": 76.59160894064496
+    },
+    "tech_scalers": {
+      "thermal_marg_cost": 1.6756198264228144,
+      "thermal_ramp_pct": 0.40799590640336997,
+      "battery_roundtrip_eff": 0.9319990337781672,
+      "battery_e_to_p_hours": 3.1569035569146067,
+      "dr_max_shed_share": 0.17183524460788457,
+      "dr_duration_hours": 5.31291131755168,
+      "hydro_reservoir_head_eff": 1.0139108635436096,
+      "battery_initial_soc_fraction": 0.49150081122086,
+      "battery_final_soc_tolerance": 0.1381671101597062,
+      "battery_self_discharge_per_hour": 0.009200945048770635,
+      "pumped_initial_level_fraction": 0.5239952964683209,
+      "pumped_final_level_tolerance": 0.11325326908496681,
+      "pumped_self_discharge_per_hour": 0.002207082997267418
+    }
+  }
+}
