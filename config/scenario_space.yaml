@@ -3,7 +3,7 @@ global:
   seed: 42
   horizon_hours: 24
   dt_minutes: 15
-  target_scenarios: 1000
+  target_scenarios: 500
   max_scenarios_per_hour_per_core: 0.5   # calibration locale
   cpu_cores: 32
   max_compute_hours: 168

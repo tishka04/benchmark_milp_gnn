@@ -99,10 +99,14 @@ class GraphTemporalDataset(Dataset[GraphSample]):
         *,
         include_duals: bool = True,
         preload: bool = False,
+        train_fraction: float = 0.7,
+        val_fraction: float = 0.15,
     ) -> None:
         self.split = split
         self.include_duals = include_duals
         self._preload = preload
+        self._train_fraction = train_fraction
+        self._val_fraction = val_fraction
         self._index_path = Path(index_path).resolve()
         if not self._index_path.exists():
             raise FileNotFoundError(
@@ -110,7 +114,7 @@ class GraphTemporalDataset(Dataset[GraphSample]):
                 "Run the graph dataset builder or update the config path."
             )
         self._index = load_index(self._index_path)
-        self._entries = list(iter_split(self._index, split))
+        self._entries = list(iter_split(self._index, split, train_split=train_fraction, val_split=val_fraction))
         if not self._entries:
             raise RuntimeError(f"Split '{split}' is empty in {index_path}")
         self._scenario_cache: Dict[int, Dict[str, torch.Tensor]] = {}

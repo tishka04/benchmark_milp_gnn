@@ -12,6 +12,7 @@ import yaml
 from torch.utils.data import DataLoader
 
 from src.gnn.data import GraphTemporalDataset, collate_graph_samples
+from src.gnn.dataset_loader import iter_split
 from src.gnn.models import build_model
 from src.gnn.training import TrainingConfig, build_decoder
 
@@ -77,12 +78,15 @@ def _load_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding='utf-8'))
 
 
-def build_milp_summary(index_path: Path | str, split: str = 'test') -> pd.DataFrame:
+def build_milp_summary(index_path: Path | str, split: str = 'test', train_fraction: float = 0.7, val_fraction: float = 0.15) -> pd.DataFrame:
     index_path = _ensure_path(index_path)
     index = _load_json(index_path)
-    entries = index.get('splits', {}).get(split)
-    if not entries:
-        raise KeyError(f"Split '{split}' not found in dataset index {index_path}")
+    
+    # Use iter_split to handle both predefined splits and automatic splitting
+    try:
+        entries = list(iter_split(index, split, train_split=train_fraction, val_split=val_fraction))
+    except (KeyError, RuntimeError) as e:
+        raise KeyError(f"Split '{split}' not found or empty in dataset index {index_path}: {e}")
 
     records: List[Dict[str, Any]] = []
     for entry in entries:
@@ -351,7 +355,12 @@ def build_combined_performance(
     run_path = Path(run_dir)
     resolved_cfg_path = run_path / 'training_config_resolved.yaml'
     cfg = _load_training_config(resolved_cfg_path)
-    milp_df = build_milp_summary(cfg.data.index_path, split=split)
+    
+    # Extract split fractions from config if they're floats (for automatic splitting)
+    train_frac = cfg.data.train_split if isinstance(cfg.data.train_split, float) else 0.7
+    val_frac = cfg.data.val_split if isinstance(cfg.data.val_split, float) else 0.15
+    
+    milp_df = build_milp_summary(cfg.data.index_path, split=split, train_fraction=train_frac, val_fraction=val_frac)
     gnn_df, summary = evaluate_gnn_performance(run_dir, split=split, checkpoint=checkpoint, device=device)
 
     combined = milp_df.merge(gnn_df, on='scenario_id', how='inner', suffixes=('_milp', '_gnn'))

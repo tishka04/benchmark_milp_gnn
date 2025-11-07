@@ -1,8 +1,9 @@
 data:
-  index_path: outputs/datasets/graphs/dataset_index.json
-  train_split: train
-  val_split: val
-  test_split: test
+  index_path: outputs/hetero_graphs/dataset_index.json
+  graph_type: heterogeneous  # NEW
+  train_split: 0.7
+  val_split: 0.15
+  test_split: 0.15
   batch_size: 8
   num_workers: 0
   shuffle: true
@@ -11,14 +12,16 @@ data:
   preload: false
 model:
   name: gcn
-  hidden_dims: [128, 128]
-  dropout: 0.15
+  hidden_dims: [128, 128, 64]
+  dropout: 0.2
+  num_edge_types: 7  # NEW: 7 edge types (was 2)
+  node_type_cardinality: 5  # NEW: 5 node types (was 4)
   activation: relu
   heads: 4
   aggregator: mean
   typed_message_passing: true
   output_dim: null
-  type_embedding_dim: 16
+  type_embedding_dim: 32
   attn_dropout: 0.1
 optimizer:
   name: adamw
@@ -69,4 +72,4 @@ metrics:
       unserved: 500.0
   constraint_violation_rate:
     tolerance: 0.1
-output_dir: outputs/gnn_runs/baseline
+output_dir: outputs/gnn_runs/heterogeneous

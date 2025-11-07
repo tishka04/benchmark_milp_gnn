@@ -1,0 +1,200 @@
+\section{Methodology}
+\subsection{Hybrid Multilayer Workflow}
+Our hybrid framework orchestrates four tightly coupled layers: synthetic scenario generation, a unit-commitment mixed-integer linear program (MILP), graph-based dataset construction, and a graph neural network (GNN) surrogate equipped with a feasibility-aware decoder. Scenario batches sampled from \texttt{config/scenario\_space.yaml} drive the downstream solve layer; each solved instance yields dispatch trajectories, dual information, and topology that are distilled into graph tensors consumed by the learning layer. During inference, the trained GNN provides millisecond-scale predictions that are post-processed by the decoder to preserve the physics and economics enforced by the MILP, yielding a hybrid predictor that trades a single expensive solve for lightweight neural inference with principled corrections.
+
+\subsection{Synthetic Scenario Generation}
+The scenario sampler first fixes common temporal settings such as a 24-hour horizon with 15-minute granularity and a global random seed so that draws remain reproducible across runs. Each candidate scenario is then built by sampling a parameter vector \(\boldsymbol{\theta}\) whose components span four domains: (i) system structure, covering the number of regions (2--5), zones per region (3--9), site densities, and intertie connectivity; (ii) asset endowments, including per-zone counts for thermal, solar, wind, storage, demand-response, hydro, and nuclear technologies; (iii) policy and economic levers such as carbon pricing, market caps, and cross-border trade regimes; and (iv) exogenous profiles, where weather archetypes, demand templates, scaling factors, phase shifts, and stochastic noise amplitudes are drawn from curated libraries. Given \(\boldsymbol{\theta}\), the generator assembles hourly (and sub-hourly) trajectories for demand, renewable availability, inflows, and flexibility limits by blending the chosen templates with scaling and perturbation factors drawn from the same vector.
+
+Because many admissible draws are near-duplicates, a greedy diversity search maintains a working corpus of scenarios with complementary attributes. Each new candidate contributes a feature embedding (regions, policy class, demand scale, weather label, cross-border rule, etc.); the sampler accepts it only if it increases a coverage score or exceeds a minimum distance threshold relative to the retained set. Otherwise the candidate is discarded and a fresh \(\boldsymbol{\theta}\) is sampled. This procedure yields a balanced collection that spans the combinatorial design space while avoiding redundant cases. Finally, a lightweight runtime estimator (Eq.~\eqref{eq:cpu-estimate}) screens out oversized instances before they proceed to the MILP solve.
+\begin{equation}
+    \boldsymbol{\theta} \sim \prod_{k \in \mathcal{K}} \mathcal{U}(a_k, b_k), \qquad x_{z,t} = g(\boldsymbol{\theta}, \omega_t, d_t),
+    \label{eq:theta-sampling}
+\end{equation}
+\begin{equation}
+    \hat{T}_{\text{cpu}} = \beta_0 + \beta_v \frac{n_{\text{vars}}}{10^3} + \beta_c \frac{n_{\text{cons}}}{10^3} + \beta_b \, \text{branching}.
+    \label{eq:cpu-estimate}
+\end{equation}
+
+\subsection{Unit Commitment MILP Layer}
+The unit-commitment optimisation ingests the structural and temporal ingredients produced by the scenario sampler: the set of zones $\mathcal{Z}$, transmission interfaces $\mathcal{L}$, time periods $\mathcal{T}$, technology capacities and efficiencies, fuel and operating costs, network limits, and exogenous trajectories for demand, renewable availability, inflows, and demand-response ceilings. From these data the model introduces binary commitment variables $u^{\text{th}}_{z,t}$ for thermal fleets, continuous dispatch variables for each technology, storage-state trajectories, transmission flows, and slack terms for spill or unmet demand. The resulting MILP jointly decides which generators are online and how power, storage, and exchanges evolve over time.
+
+Equation~\eqref{eq:uc-objective} captures the total operating cost minimised by the optimisation, comprising generation expenditures, demand-response penalties, value-of-lost-load, renewable and hydro spill costs, storage throughput charges, and cross-border exchanges.
+\begin{equation}\label{eq:uc-objective}
+\begin{aligned}
+    \min_{\mathbf{u}, \mathbf{p}} \; & \sum_{t \in \mathcal{T}} \sum_{z \in \mathcal{Z}} \Big( c^{\text{th}}_z p^{\text{th}}_{z,t} + c^{\text{nu}}_z p^{\text{nu}}_{z,t} + c^{\text{dr}} dr_{z,t} + c^{\text{voll}} unserved_{z,t} \Big) \\
+    &+ \sum_{t \in \mathcal{T}} \sum_{z \in \mathcal{Z}} \Big( c^{\text{spill}} (spill^{\text{res}}_{z,t} + spill^{\text{hyd}}_{z,t}) + c^{\text{stor}} (charge_{z,t} + discharge_{z,t}) \Big) \\
+    &+ \sum_{t \in \mathcal{T}} \Big( c^{\text{import}} net\_import_t + c^{\text{export}} net\_export_t \Big).
+\end{aligned}
+\end{equation}
+Operational feasibility is enforced through technology and network constraints. Thermal commitment couples output to on/off decisions
+\begin{equation}
+    p^{\text{th}}_{z,t} \leq \bar{p}^{\text{th}}_z \, u^{\text{th}}_{z,t}, \qquad p^{\text{th}}_{z,t} \geq \underline{p}^{\text{th}}_z \, u^{\text{th}}_{z,t},
+    \label{eq:thermal-capacity}
+\end{equation}
+while ramp-rate limits restrict step-to-step changes
+\begin{equation}
+    -R^{\downarrow}_z \leq p^{\text{th}}_{z,t} - p^{\text{th}}_{z,t-1} \leq R^{\uparrow}_z, \qquad t > t_0.
+    \label{eq:thermal-ramp}
+\end{equation}
+Storage dynamics conserve energy with efficiency and retention parameters
+\begin{equation}
+    soc_{z,t} = \eta^{\text{ret}}_z soc_{z,t-1} + \Delta t \big( \eta^{\text{ch}}_z charge_{z,t} - discharge_{z,t} / \eta^{\text{dis}}_z \big),
+    \label{eq:battery-soc}
+\end{equation}
+and transmission flows remain within thermal limits on each interface $l \in \mathcal{L}$
+\begin{equation}
+    -\bar{f}_l \leq flow_{l,t} \leq \bar{f}_l.
+    \label{eq:line-capacity}
+\end{equation}
+Finally, nodal power balance holds at every zone and timestep,
+\begin{equation}
+    p^{\text{th}}_{z,t} + p^{\text{nu}}_{z,t} + p^{\text{re}}_{z,t} + dr_{z,t} + discharge_{z,t} + net\_inj_{z,t} = d_{z,t} + charge_{z,t} + spill_{z,t}, \quad \forall (z,t) \in \mathcal{Z} \times \mathcal{T},
+    \label{eq:power-balance}
+\end{equation}
+where $net\_inj_{z,t}$ aggregates inflows from adjacent lines plus any cross-border exchange assigned to the anchor zone.
+
+The MILP is solved with a modern branch-and-bound engine (e.g., HiGHS or an equivalent commercial solver) that exploits parallel processing when available. Solver tolerances are tightened until both primal feasibility and integrality criteria fall below configured thresholds; if a candidate scenario violates runtime or memory budgets the solve is aborted and the scenario is discarded.
+
+The optimisation outputs include time-indexed commitment schedules $u^{\text{th}}_{z,t}$, dispatch levels for every technology, storage state-of-charge and pumping trajectories, line flows and net imports/exports, and the optimal cost $C^{\star}$. Dual multipliers associated with Eq.~\eqref{eq:power-balance} and other linear constraints are also recorded when exposed by the solver, providing price-like signals that feed subsequent learning and decoding stages.
+
+\\\subsection{Graph Abstraction and Dataset Construction}
+Once a MILP instance is solved, the dispatch chronicle is transformed into a sequence of graphs that capture both static infrastructure and time-varying operations. For every timestep $t \\in \\mathcal{T}$ we construct $G_t = (\\mathcal{Z}, \\mathcal{E}_t)$: nodes correspond to balancing zones, while directed edges inherit the orientation of transmission corridors and the anchor-zone interface used for imports and exports.
+
+\\paragraph{Node representation.} Each zone $z$ is described by a static vector $x^{\\text{static}}_z$ containing thermal, renewable, storage, hydro, and demand-response capacities; storage energy budgets and retention factors; import limits; and technology-specific cost scalars. Temporal features $x^{\\text{time}}_{z,t}$ stack demand, renewable availability, hydro inflows, storage state of charge, pumping levels, spill traces, demand-response activation, unserved energy, and observed net exchange. These features reflect the solved MILP trajectories and retain the original physical units to preserve interpretability, while a companion metadata block stores the scaling factors applied during normalisation for learning.
+
+\\paragraph{Edge representation.} For each interface $l = (i,j)$ we record the thermal rating $\\bar{f}_l$, impedance-derived type (intra-region versus inter-region), geographic span, and the resolved power flow $flow_{l,t}$. Edge attributes and discrete type identifiers are stored alongside a compact edge index that lists the ordered node pairs used by downstream message-passing layers.
+
+\\paragraph{Targets and auxiliary signals.} The per-node dispatch vector $y_{z,t}$ contains the MILP-feasible output of thermal, nuclear, renewable, hydro, flexibility, storage, import/export, and slack components. We also retain the slack-free pre-decoder target $y^{\\text{pre}}_{z,t}$ and the residual correction $y^{\\Delta}_{z,t} = y_{z,t} - y^{\\text{pre}}_{z,t}$ so that the learning stage can supervise both raw predictions and decoder adjustments. Dual multipliers associated with Eq.~\\eqref{eq:power-balance} and other balance constraints are re-indexed into per-node tensors $dual_{z,t}$ to provide price-like guidance.
+
+\\paragraph{Graph assembly and packaging.} The tensors above are stacked into dense arrays
+\\begin{align}
+    X^{\\text{static}} &= [x^{\\text{static}}_z]_{z \\in \\mathcal{Z}}, \\\\
+    X^{\\text{time}} &= [x^{\\text{time}}_{z,t}]_{(z,t) \\in \\mathcal{Z} \\times \\mathcal{T}}, \\\\
+    Y &= [y_{z,t}]_{(z,t)}, \\\\
+    Y^{\\text{pre}} &= [y^{\\text{pre}}_{z,t}]_{(z,t)}, \\\\
+    Y^{\\Delta} &= [y^{\\Delta}_{z,t}]_{(z,t)}, \\\\
+    E &= [flow_{l,t}, \\bar{f}_l, type_l]_{(l,t)},
+\\end{align}
+accompanied by edge indices, node-type and region identifiers, time stamps, solver diagnostics, and the MILP objective $C^{\\star}$. The complete payload is serialized into compressed archives (e.g., NPZ) and catalogued in a dataset index that records scenario identifiers and canonical train/validation/test splits. These graph records feed the temporal GNN surrogate described next.
+
+\\\subsection{Graph Neural Surrogate and Training}
+The graph sequence $\\{G_t\\}_{t \\in \\mathcal{T}}$ is processed by a temporal mini-batching pipeline that concatenates static and dynamic node descriptors into $x_{v,t} = [x^{\\text{static}}_v, x^{\\text{time}}_{v,t}]$, carries edge attributes and types, and tracks scenario metadata for loss re-weighting. For each batch the model performs $L$ message-passing layers of the generic form
+\\begin{equation}\label{eq:gnn-forward}
+\\begin{aligned}
+    h^{(0)}_{v,t} &= \\phi(x_{v,t}), \\\\
+    m^{(l)}_{v,t} &= \\textstyle\\bigoplus_{u \\in \\mathcal{N}(v)} \\psi^{(l)}(h^{(l)}_{u,t}, e_{uv}), \\\\
+    h^{(l+1)}_{v,t} &= \\sigma\\big(W^{(l)} h^{(l)}_{v,t} + U^{(l)} m^{(l)}_{v,t}\\big), \\\\
+    \\hat{y}_{v,t} &= W^{(L)} h^{(L)}_{v,t},
+\\end{aligned}
+\\end{equation}
+where $\\mathcal{N}(v)$ denotes the neighbours of node $v$, $\\oplus$ is an aggregation operator, $\\psi^{(l)}$ is an edge-type-aware message kernel, and $\\sigma$ is a nonlinear activation.
+
+We evaluate three backbone choices that instantiate Eq.~\\eqref{eq:gnn-forward} with different aggregators:
+\\begin{enumerate}
+    \\item \\textbf{Graph Convolutional Network (GCN).} The GCN variant uses the renormalised Laplacian to diffuse signals,
+    \\begin{equation}
+        m^{(l)}_{v,t} = \\sum_{u \\in \\mathcal{N}(v) \\cup \\{v\\}} \\tilde{A}_{vu} h^{(l)}_{u,t}, \\qquad \\tilde{A} = D^{-1/2} (A + I) D^{-1/2},
+        \\label{eq:gcn-agg}
+    \\end{equation}
+    which excels at smoothing noisy signals and sharing information across dense meshes, but can over-smooth on long horizons or sparse graphs.
+    \\item \\textbf{GraphSAGE.} This architecture employs learned neighbourhood pooling such as mean or max aggregators,
+    \\begin{equation}
+        m^{(l)}_{v,t} = \\text{Mean}\\big(\\{h^{(l)}_{u,t} : u \\in \\mathcal{N}(v)\\}\\big),
+        \\label{eq:sage-agg}
+    \\end{equation}
+    followed by concatenation $[h^{(l)}_{v,t} ; m^{(l)}_{v,t}]$ inside Eq.~\\eqref{eq:gnn-forward}. GraphSAGE handles heterogeneous degree distributions and scales well to large batches, though it may require deeper stacks to match the expressiveness of attention-based models.
+    \\item \\textbf{Graph Attention Network (GAT).} The attention variant assigns learnable edge weights,
+    \\begin{equation}
+        \\alpha^{(l)}_{uv} = \\frac{\\exp\\big( \\text{LeakyReLU}(a^{(l)\\top} [W^{(l)} h^{(l)}_{u,t} \\Vert W^{(l)} h^{(l)}_{v,t}] ) \\big)}{\\sum_{w \\in \\mathcal{N}(v)} \\exp\\big( \\text{LeakyReLU}(a^{(l)\\top} [W^{(l)} h^{(l)}_{w,t} \\Vert W^{(l)} h^{(l)}_{v,t}] ) \\big)},
+        \\label{eq:gat-coeff}
+    \\end{equation}
+    and aggregates $m^{(l)}_{v,t} = \\sum_{u \\in \\mathcal{N}(v)} \\alpha^{(l)}_{uv} W^{(l)} h^{(l)}_{u,t}$. Multi-head attention improves robustness and captures directional flow patterns but introduces higher computational cost.
+\\end{enumerate}
+
+Temporal batching preserves the chronological order of $t$ within each scenario, enabling the network to learn implicit dynamics without recurrent modules. Training minimises a composite loss combining point-wise reconstruction, optional dual-weighted penalties, and balance regularisation. Mini-batch optimisation uses adaptive optimisers (e.g., AdamW) with gradient clipping, cosine or polynomial learning-rate schedules, and early stopping based on the weighted metric blend described in the evaluation subsection. Model selection across architectures balances accuracy, feasibility, inference latency, and interpretability: GCN offers the fastest inference on dense grids, GraphSAGE provides resilience to sparse or irregular topologies, and GAT yields the sharpest localisation of congestion effects when the extra compute budget is acceptable.
+
+\\\subsection{Feasibility-Constrained Decoding and Hybrid Inference}
+The feasibility decoder consumes three ingredients for each node-time pair $(v,t)$: the raw GNN prediction $\hat{y}_{v,t}$, the concatenated feature vector $(x^{\text{static}}_v, x^{\text{time}}_{v,t})$, and optional dual multipliers $dual_{v,t}$ inherited from the MILP solution. Its task is to project the neural estimate back onto the feasible manifold defined by capacity limits and nodal balance without re-solving the full optimisation.
+
+The initial state blends the network prediction with the slack-free reference $\tilde{y}_{v,t}$ when available,
+\begin{equation}
+    y^{(0)}_{v,t} = (1 - \lambda) \hat{y}_{v,t} + \lambda \tilde{y}_{v,t},
+    \label{eq:decoder-init}
+\end{equation}
+where $0 \leq \lambda \leq 1$ governs the degree of teacher forcing. Dual multipliers scale the residual imbalance,
+\begin{equation}
+    \Lambda_{v,t} = \rho \, dual_{v,t},
+    \label{eq:decoder-dual}
+\end{equation}
+so positive values inject slack while negative values curtail supply channels in order of economic priority.
+
+Each iteration $k$ applies three operators:
+\begin{align}
+    y^{(k+1/2)}_{v,t} &= \Pi_{\mathcal{C}_v}\Big( y^{(k)}_{v,t} - \alpha \Lambda_{v,t} \Big), \\
+    s^{(k+1)}_{v,t} &= \text{Supply}(y^{(k+1/2)}_{v,t}), \\
+    y^{(k+1)}_{v,t} &= y^{(k+1/2)}_{v,t} + \gamma \frac{d_{v,t} + charge_{v,t} - s^{(k+1)}_{v,t}}{|\mathcal{N}(v)|},
+    \label{eq:decoder-iter}
+\end{align}
+where $\Pi_{\mathcal{C}_v}$ projects onto non-negativity and capacity bounds, $\text{Supply}(\cdot)$ aggregates delivered power, and the final correction redistributes residual deficits across neighbouring exchanges or slack channels. Hyperparameters $\alpha$ and $\gamma$ tune the strength of dual and balance adjustments, while the iteration count $K$ sets the convergence tightness.
+
+After $K$ sweeps the decoder checks the nodal residual against the tolerance $\epsilon$ inherited from Eq.~\eqref{eq:violation-rate}, clamping any remaining imbalance to slack components. The resulting $y^{\star}_{v,t} = y^{(K)}_{v,t}$ respects operational limits, satisfies balance within tolerance, and remains close to the surrogate prediction, delivering a hybrid output that preserves both speed and fidelity.
+
+\subsection{Evaluation Protocol}
+The evaluation suite reports dispatch mean absolute error (Eq.~\eqref{eq:dispatch-mae}), a surrogate cost gap (Eq.~\eqref{eq:cost-gap}), and a constraint-violation rate (Eq.~\eqref{eq:violation-rate}). Validation checkpoints are selected via a weighted composite of these metrics, ensuring the retained model balances accuracy, feasibility, and economic fidelity.
+\begin{equation}
+    \text{MAE} = \frac{1}{|\mathcal{V}||\mathcal{T}|} \sum_{v \in \mathcal{V}} \sum_{t \in \mathcal{T}} \big| \hat{y}_{v,t} - y_{v,t} \big|,
+    \label{eq:dispatch-mae}
+\end{equation}
+\begin{equation}
+    \Delta c = \frac{\sum_{v \in \mathcal{V}} \sum_{t \in \mathcal{T}} w_v \hat{y}_{v,t} - C^{\star}}{|C^{\star}|},
+    \label{eq:cost-gap}
+\end{equation}
+\begin{equation}
+    r_{\text{viol}} = \frac{1}{|\mathcal{V}||\mathcal{T}|} \sum_{v \in \mathcal{V}} \sum_{t \in \mathcal{T}} \mathbb{1}\Big( \big| \hat{y}_{v,t} - d_{v,t} - charge_{v,t} + s_{v,t} \big| > \epsilon \Big),
+    \label{eq:violation-rate}
+\end{equation}
+where $C^{\star}$ is the MILP objective of Eq.~\eqref{eq:uc-objective}, $w_v$ are component weights, and $\epsilon$ matches the decoder tolerance.
+
+\subsection{Symbol Summary}
+Table~\ref{tab:symbols} summarizes the main symbols appearing in Eqs.~\eqref{eq:theta-sampling}--\eqref{eq:violation-rate} for quick reference.
+\begin{table}[t]
+    \centering
+    \small
+    \begin{tabular}{ll}
+        \hline
+        Symbol & Description \\
+        \hline
+        \(\mathcal{Z}, \mathcal{T}, \mathcal{V}\) & Sets of zones, timesteps, and dispatch components \\
+        \(\mathcal{L}, \mathcal{E}, \mathcal{N}(v)\) & Transmission interfaces, graph edges, and neighbours of node $v$ \\
+        \(\boldsymbol{\theta}\) & Scenario parameter vector sampled in Eq.~\eqref{eq:theta-sampling} \\
+        \(\omega_t, d_t\) & Weather and demand profiles at timestep $t$ \\
+        \(x_{z,t}\) & Generated exogenous drivers for zone $z$, time $t$ \\
+        \(x_{v,t}\) & Concatenated static/temporal node features provided to the GNN \\
+        \(X^{\text{static}}, X^{\text{time}}\) & Stacked static and temporal feature tensors \\
+        \(Y, Y^{\text{pre}}, Y^{\Delta}\) & Dispatch targets, pre-decoder signals, and residual corrections \\
+        \(E, type_l\) & Edge feature tensor and categorical edge-type indicator \\
+        \(n_{\text{vars}}, n_{\text{cons}}\) & Counts of MILP variables and constraints in Eq.~\eqref{eq:cpu-estimate} \\
+        \(c^{(\cdot)}\) & Cost coefficients in Eq.~\eqref{eq:uc-objective} \\
+        \(p^{(\cdot)}_{z,t}, dr_{z,t}, unserved_{z,t}\) & Dispatch decisions for zone $z$, time $t$ \\
+        \(u^{\text{th}}_{z,t}\) & Binary commitment state for thermal fleet in zone $z$ \\
+        \(charge_{z,t}, discharge_{z,t}, soc_{z,t}\) & Storage charge/discharge and state-of-charge trajectories \\
+        \(net	ext{import}_t, net	ext{export}_t, net	ext{inj}_{z,t}\) & Cross-border exchange and nodal net-injection variables \\
+        \(flow_{l,t}\) & Power flow on interface $l$ \\
+        \(R^{\uparrow}_z, R^{\downarrow}_z\) & Ramp-up and ramp-down limits for zone $z$ \\
+        \(\eta^{\text{ch}}_z, \eta^{\text{dis}}_z, \eta^{\text{ret}}_z\) & Charge, discharge, and retention efficiencies \\
+        \(h^{(l)}_{v,t}, m^{(l)}_{v,t}\) & Intermediate embeddings and aggregated messages \\
+        \(\phi, \psi^{(l)}, \sigma\) & Feature encoder, message kernel, and activation in Eq.~\eqref{eq:gnn-forward} \\
+        \(W^{(l)}, U^{(l)}\) & Trainable weight matrices for self and neighbour updates \\
+        \(\tilde{A}, A, D\) & Normalised adjacency, adjacency, and degree matrices in Eq.~\eqref{eq:gcn-agg} \\
+        \(\alpha^{(l)}_{uv}, a^{(l)}\) & Attention coefficients and projection vector in Eq.~\eqref{eq:gat-coeff} \\
+        \(y^{(0)}_{v,t}, y^{(k)}_{v,t}\) & Decoder iterates defined in Eqs.~\eqref{eq:decoder-init}--\eqref{eq:decoder-iter} \\
+        \(\Lambda_{v,t}\) & Dual-guided adjustment applied in Eq.~\eqref{eq:decoder-dual} \\
+        \(\Pi_{\mathcal{C}_v}\) & Projection onto resource bounds for node $v$ \\
+        \(w_v\) & Component cost weights in Eq.~\eqref{eq:cost-gap} \\
+        \(C^{\star}\) & Optimal MILP objective value \\
+        \(\epsilon\) & Feasibility tolerance in Eq.~\eqref{eq:violation-rate} \\
+        \hline
+    \end{tabular}
+    \caption{Key symbols used throughout the methodology section.}
+    \label{tab:symbols}
+\end{table}

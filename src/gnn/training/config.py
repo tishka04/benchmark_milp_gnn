@@ -10,15 +10,16 @@ import yaml
 @dataclass
 class DataConfig:
     index_path: Path
-    train_split: str = "train"
-    val_split: str = "val"
-    test_split: str = "test"
+    train_split: str | float = "train"  # Split name or fraction (e.g., "train" or 0.7)
+    val_split: str | float = "val"      # Split name or fraction (e.g., "val" or 0.15)
+    test_split: str | float = "test"    # Split name or fraction (e.g., "test" or 0.15)
     batch_size: int = 16
     num_workers: int = 0
     shuffle: bool = True
     pin_memory: bool = False
     include_duals: bool = True
     preload: bool = False
+    graph_type: str = "flat"  # "flat" or "heterogeneous"
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], base_dir: Path) -> "DataConfig":
@@ -39,6 +40,8 @@ class ModelConfig:
     output_dim: Optional[int] = None
     type_embedding_dim: int = 16
     attn_dropout: float = 0.1
+    num_edge_types: int = 2  # Number of edge types for typed message passing
+    node_type_cardinality: int = 4  # Number of node types for node embeddings
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ModelConfig":
