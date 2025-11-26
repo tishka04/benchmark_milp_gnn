@@ -1,0 +1,23 @@
+{
+  "scenario": "scenario_00286.json",
+  "n_thermal": 40,
+  "net_demand_mw": 2302.3281285342086,
+  "total_time_seconds": 14.980680704116821,
+  "sampling_time_seconds": 14.979783296585083,
+  "evaluation_time_seconds": 0.0008974075317382812,
+  "best_cost_eur": 278223.9889083494,
+  "units_committed": 8,
+  "units_on_ids": [
+    4,
+    19,
+    20,
+    21,
+    29,
+    30,
+    32,
+    38
+  ],
+  "total_dispatch_mw": 2302.328128534209,
+  "feasible_solutions_found": 5,
+  "total_candidates_evaluated": 23
+}

@@ -39,6 +39,7 @@ class NetworkLine:
     from_zone: str
     to_zone: str
     capacity_mw: float
+    distance_km: float
 
 
 @dataclass
@@ -202,16 +203,28 @@ def _distribute_per_region(values: Iterable[int], zones_per_region: Iterable[int
 def _build_lines(zones: List[str], zones_per_region: List[int], intertie_density: float) -> Dict[str, NetworkLine]:
     lines: Dict[str, NetworkLine] = {}
     base_capacity = TRANS.base_capacity_mw * (0.6 + 0.8 * intertie_density)
+    
+    # Distance parameters (typical power system)
+    # Lower intertie_density → more sparse → longer distances
+    intra_regional_base_km = 80.0 + 40.0 * (1.0 - intertie_density)  # 80-120 km
+    inter_regional_base_km = 200.0 + 100.0 * (1.0 - intertie_density)  # 200-300 km
+    
     zone_cursor = 0
     line_id = 0
 
+    # Intra-regional lines (connect zones within same region)
     for count in zones_per_region:
         region_zones = zones[zone_cursor: zone_cursor + count]
         for left, right in zip(region_zones[:-1], region_zones[1:]):
             line_id += 1
-            lines[f"L{line_id:03d}"] = NetworkLine(f"L{line_id:03d}", left, right, base_capacity)
+            # Add variance: ±20% around base distance
+            distance_km = intra_regional_base_km * (0.8 + 0.4 * np.random.random())
+            lines[f"L{line_id:03d}"] = NetworkLine(
+                f"L{line_id:03d}", left, right, base_capacity, distance_km
+            )
         zone_cursor += count
 
+    # Inter-regional lines (connect first zones of adjacent regions)
     region_starts: List[str] = []
     cursor = 0
     for count in zones_per_region:
@@ -219,7 +232,11 @@ def _build_lines(zones: List[str], zones_per_region: List[int], intertie_density
         cursor += count
     for left, right in zip(region_starts[:-1], region_starts[1:]):
         line_id += 1
-        lines[f"L{line_id:03d}"] = NetworkLine(f"L{line_id:03d}", left, right, base_capacity * 0.8)
+        # Inter-regional lines are longer with less variance
+        distance_km = inter_regional_base_km * (0.9 + 0.2 * np.random.random())
+        lines[f"L{line_id:03d}"] = NetworkLine(
+            f"L{line_id:03d}", left, right, base_capacity * 0.8, distance_km
+        )
 
     return lines
 

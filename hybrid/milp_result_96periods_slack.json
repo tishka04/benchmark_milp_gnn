@@ -1,0 +1,14 @@
+{
+  "scenario": "scenario_00286.json",
+  "method": "milp_monolithic_slack",
+  "success": true,
+  "solve_time_seconds": 36.84139275550842,
+  "generation_cost_eur": 36153801.86895807,
+  "slack_cost_eur": 180119618.7710643,
+  "total_cost_eur": 216273420.6400224,
+  "total_generation_mw": 256775.6673799008,
+  "slack_under_mw": 18011.96187710643,
+  "slack_over_mw": 0.0,
+  "periods_with_slack": 8,
+  "mip_gap": 2.755985668465472e-16
+}

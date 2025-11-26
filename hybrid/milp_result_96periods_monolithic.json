@@ -1,0 +1,7 @@
+{
+  "scenario": "scenario_00286.json",
+  "method": "milp_monolithic",
+  "success": false,
+  "solve_time_seconds": 1.7882874011993408,
+  "message": "The problem is infeasible. (HiGHS Status 8: model_status is Infeasible; primal_status is None)"
+}

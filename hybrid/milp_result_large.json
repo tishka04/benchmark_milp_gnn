@@ -1,0 +1,20 @@
+{
+  "scenario": "scenario_00286.json",
+  "success": true,
+  "n_thermal": 40,
+  "solve_time_seconds": 0.024631500244140625,
+  "total_cost_eur": 277583.402910389,
+  "units_committed": 8,
+  "units_on_ids": [
+    4,
+    11,
+    19,
+    20,
+    21,
+    30,
+    32,
+    38
+  ],
+  "total_dispatch_mw": 2302.328128534208,
+  "mip_gap": 0.0
+}

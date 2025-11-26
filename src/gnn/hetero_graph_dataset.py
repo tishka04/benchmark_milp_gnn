@@ -23,8 +23,9 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional, Union
 from collections import defaultdict
+from datetime import datetime, timedelta
 
 import numpy as np
 
@@ -46,6 +47,9 @@ EDGE_TYPE_WEATHER_TO_ZONE = 3
 EDGE_TYPE_WEATHER_TO_ASSET = 4
 EDGE_TYPE_TRANSMISSION = 5
 EDGE_TYPE_TEMPORAL_STORAGE = 6
+EDGE_TYPE_TEMPORAL_SOC = 7
+EDGE_TYPE_TEMPORAL_RAMP = 8
+EDGE_TYPE_TEMPORAL_DR = 9
 
 
 def _ensure_parent(path: Path) -> None:
@@ -359,14 +363,14 @@ class HeteroGraphBuilder:
                 from_idx = self.zone_to_idx[line.from_zone]
                 to_idx = self.zone_to_idx[line.to_zone]
                 
-                # Bidirectional edges
+                # Bidirectional edges with [capacity_mw, distance_km] features
                 self.edges.append([from_idx, to_idx])
                 self.edge_types.append(EDGE_TYPE_TRANSMISSION)
-                self.edge_features.append([line.capacity_mw])
+                self.edge_features.append([line.capacity_mw, line.distance_km])
                 
                 self.edges.append([to_idx, from_idx])
                 self.edge_types.append(EDGE_TYPE_TRANSMISSION)
-                self.edge_features.append([line.capacity_mw])
+                self.edge_features.append([line.capacity_mw, line.distance_km])
     
     def _build_weather_influence_edges(self):
         """Build weather → zone and weather → asset edges."""
@@ -583,6 +587,471 @@ class HeteroGraphBuilder:
             "time_steps": np.array(detail["time_steps"], dtype=np.int64),
             "time_hours": np.array(detail["time_hours"], dtype=np.float32),
         }
+
+
+# ============================================================================
+# Temporal Graph Helper Functions
+# ============================================================================
+
+def _extract_time_index(scenario_data: ScenarioData, report: Dict) -> Tuple[int, List]:
+    """Extract time steps from scenario data."""
+    detail = report.get("detail", {})
+    time_steps = detail.get("time_steps", [])
+    time_hours = detail.get("time_hours", [])
+    
+    T = len(time_steps)
+    if T == 0:
+        raise ValueError("No time steps found in report detail")
+    
+    # Create time index (can be enhanced with actual timestamps)
+    time_index = [f"t={t}" for t in range(T)]
+    return T, time_index
+
+
+def _make_time_encoding(time_index: List, T: int, method: str = "sinusoidal") -> np.ndarray:
+    """
+    Create time encoding features.
+    
+    Args:
+        time_index: List of time identifiers
+        T: Number of time steps
+        method: 'sinusoidal' or 'cyclic-hod' (hour-of-day)
+    
+    Returns:
+        [T, Ft] time encoding array
+    """
+    if method == "sinusoidal":
+        # Simple positional encoding
+        positions = np.arange(T, dtype=np.float32)
+        dim = 4  # 2 frequencies
+        encoding = np.zeros((T, dim), dtype=np.float32)
+        
+        for i in range(dim // 2):
+            div_term = 10000 ** (2 * i / dim)
+            encoding[:, 2*i] = np.sin(positions / div_term)
+            encoding[:, 2*i + 1] = np.cos(positions / div_term)
+        
+        return encoding
+    
+    elif method == "cyclic-hod":
+        # Hour-of-day cyclic encoding (assumes 30-min or 1-hour intervals)
+        # For 48 periods = 24h with 30-min intervals
+        # For 24 periods = 24h with 1-hour intervals
+        hours = np.arange(T, dtype=np.float32) * (24.0 / T)
+        encoding = np.zeros((T, 4), dtype=np.float32)
+        encoding[:, 0] = np.sin(2 * np.pi * hours / 24)
+        encoding[:, 1] = np.cos(2 * np.pi * hours / 24)
+        # Day of week (placeholder - would need actual date info)
+        encoding[:, 2] = 0.0  # sin(day_of_week)
+        encoding[:, 3] = 1.0  # cos(day_of_week)
+        
+        return encoding
+    
+    else:
+        raise ValueError(f"Unknown time encoding method: {method}")
+
+
+def _windows(T: int, window: Optional[int], stride: int) -> List[int]:
+    """Generate window start indices for sequence mode."""
+    if window is None or window >= T:
+        return [0]
+    
+    starts = []
+    for t0 in range(0, T - window + 1, stride):
+        starts.append(t0)
+    return starts
+
+
+def _extract_layers_nodes(scenario_data: ScenarioData) -> Tuple[List, List, Dict]:
+    """Extract layer structure and nodes from scenario."""
+    zones = sorted(scenario_data.zones)
+    regions = sorted(set(scenario_data.region_of_zone.values()))
+    
+    layers = {
+        "nation": ["Nation"],
+        "regions": regions,
+        "zones": zones,
+    }
+    
+    # All nodes (flattened)
+    nodes = ["Nation"] + regions + zones
+    
+    # Node types mapping
+    node_types = {}
+    node_types["Nation"] = NODE_TYPE_NATION
+    for r in regions:
+        node_types[r] = NODE_TYPE_REGION
+    for z in zones:
+        node_types[z] = NODE_TYPE_ZONE
+    
+    return layers, nodes, node_types
+
+
+def _build_single_hetero_snapshot(
+    scenario_data: ScenarioData,
+    report: Dict,
+    time_index_t: str,
+    time_enc: np.ndarray,
+) -> Dict:
+    """Build a single heterogeneous graph snapshot at time t."""
+    # Use the existing builder but for a single timestep
+    builder = HeteroGraphBuilder(scenario_data, report)
+    record = builder.build()
+    
+    # Augment node features with time encoding
+    node_features = record["node_features"]
+    N = node_features.shape[0]
+    time_enc_broadcast = np.tile(time_enc, (N, 1))
+    
+    record["node_features"] = np.concatenate([node_features, time_enc_broadcast], axis=1)
+    record["time_index"] = time_index_t
+    
+    return record
+
+
+def _make_node_ids(nodes: List[str], T: int) -> List[str]:
+    """Generate node IDs for supra-graph: (node_name, t)."""
+    node_ids = []
+    for t in range(T):
+        for node in nodes:
+            node_ids.append(f"{node}#t={t}")
+    return node_ids
+
+
+def _stack_time_features(
+    node_features_all: np.ndarray,  # [N, F]
+    time_encoding: np.ndarray,      # [T, Ft]
+    T: int,
+) -> np.ndarray:
+    """
+    Stack node features over time with time encoding.
+    
+    Args:
+        node_features_all: [N, F] static + time-varying features (already combined)
+        time_encoding: [T, Ft] time encoding
+        T: Number of time steps
+    
+    Returns:
+        [N*T, F+Ft] stacked features
+    """
+    N, F = node_features_all.shape
+    Ft = time_encoding.shape[1]
+    
+    X = np.zeros((N * T, F + Ft), dtype=np.float32)
+    
+    for t in range(T):
+        idx_start = t * N
+        idx_end = (t + 1) * N
+        X[idx_start:idx_end, :F] = node_features_all
+        X[idx_start:idx_end, F:] = time_encoding[t]
+    
+    return X
+
+
+def _tile_node_types(node_types: np.ndarray, T: int) -> np.ndarray:
+    """Replicate node types for each time step."""
+    return np.tile(node_types, T)
+
+
+def _repeat_edges_over_time(
+    edges: List[Tuple],  # [(src, dst, etype, attr), ...]
+    edge_types: np.ndarray,
+    edge_features: np.ndarray,
+    N: int,
+    T: int,
+) -> Tuple[List, List, List]:
+    """
+    Repeat spatial edges for each time step.
+    
+    Returns:
+        edges_expanded, edge_types_expanded, edge_features_expanded
+    """
+    E = len(edges)
+    edges_expanded = []
+    edge_types_expanded = []
+    edge_features_expanded = []
+    
+    for t in range(T):
+        offset = t * N
+        for i in range(E):
+            src, dst = edges[i]
+            edges_expanded.append([src + offset, dst + offset])
+            edge_types_expanded.append(edge_types[i])
+            edge_features_expanded.append(edge_features[i])
+    
+    return edges_expanded, edge_types_expanded, edge_features_expanded
+
+
+def _build_soc_edges(
+    asset_to_idx: Dict[str, int],
+    N: int,
+    T: int,
+) -> Tuple[List, List, List]:
+    """Build SOC (state-of-charge) temporal edges for storage assets."""
+    edges = []
+    edge_types = []
+    edge_attrs = []
+    
+    # Find storage assets (battery, pumped, hydro_res)
+    storage_assets = [
+        (key, idx) for key, idx in asset_to_idx.items()
+        if any(s in key for s in ["battery", "pumped", "hydro_res"])
+    ]
+    
+    for key, base_idx in storage_assets:
+        # Connect t -> t+1 for storage continuity
+        for t in range(T - 1):
+            src = base_idx + t * N
+            dst = base_idx + (t + 1) * N
+            edges.append([src, dst])
+            edge_types.append(EDGE_TYPE_TEMPORAL_SOC)
+            edge_attrs.append([1.0])  # Could add retention rate here
+    
+    return edges, edge_types, edge_attrs
+
+
+def _build_ramp_edges(
+    asset_to_idx: Dict[str, int],
+    scenario_data: ScenarioData,
+    N: int,
+    T: int,
+) -> Tuple[List, List, List]:
+    """Build ramping constraint edges for thermal/nuclear generators."""
+    edges = []
+    edge_types = []
+    edge_attrs = []
+    
+    # Find thermal and nuclear assets
+    for key, base_idx in asset_to_idx.items():
+        if "thermal" in key or "nuclear" in key:
+            zone = key.rsplit("_", 1)[0]
+            ramp_rate = scenario_data.thermal_ramp.get(zone, 0.0) if "thermal" in key else 0.0
+            
+            # Connect t -> t+1 for ramp constraints
+            for t in range(T - 1):
+                src = base_idx + t * N
+                dst = base_idx + (t + 1) * N
+                edges.append([src, dst])
+                edge_types.append(EDGE_TYPE_TEMPORAL_RAMP)
+                edge_attrs.append([ramp_rate])
+    
+    return edges, edge_types, edge_attrs
+
+
+def _build_dr_edges(
+    asset_to_idx: Dict[str, int],
+    scenario_data: ScenarioData,
+    N: int,
+    T: int,
+) -> Tuple[List, List, List]:
+    """Build demand response cooldown edges."""
+    edges = []
+    edge_types = []
+    edge_attrs = []
+    
+    # Find DR assets
+    dr_assets = [(key, idx) for key, idx in asset_to_idx.items() if "dr" in key]
+    
+    for key, base_idx in dr_assets:
+        # DR cooldown: connect multiple future time steps
+        cooldown = 2  # periods (could be parameterized)
+        for t in range(T - cooldown):
+            src = base_idx + t * N
+            for dt in range(1, cooldown + 1):
+                if t + dt < T:
+                    dst = base_idx + (t + dt) * N
+                    edges.append([src, dst])
+                    edge_types.append(EDGE_TYPE_TEMPORAL_DR)
+                    edge_attrs.append([float(dt)])
+    
+    return edges, edge_types, edge_attrs
+
+
+def _pack_edges(
+    edges: List,
+    edge_types: List,
+    edge_attrs: List,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Pack edges into numpy arrays."""
+    if not edges:
+        return (
+            np.zeros((2, 0), dtype=np.int64),
+            np.zeros(0, dtype=np.int64),
+            np.zeros((0, 1), dtype=np.float32),
+        )
+    
+    edge_index = np.array(edges, dtype=np.int64).T  # [2, E]
+    edge_types_arr = np.array(edge_types, dtype=np.int64)
+    
+    # Pad edge attributes to same dimension
+    if edge_attrs:
+        max_dim = max(len(a) for a in edge_attrs)
+        padded_attrs = []
+        for attr in edge_attrs:
+            padded = list(attr) + [0.0] * (max_dim - len(attr))
+            padded_attrs.append(padded)
+        edge_attr = np.array(padded_attrs, dtype=np.float32)
+    else:
+        edge_attr = np.zeros((len(edges), 1), dtype=np.float32)
+    
+    return edge_index, edge_types_arr, edge_attr
+
+
+def build_hetero_temporal_record(
+    scenario_data: ScenarioData,
+    report: Dict,
+    *,
+    mode: str = "supra",
+    time_window: Optional[int] = None,
+    stride: int = 1,
+    temporal_edges: Tuple[str, ...] = ("soc", "ramp", "dr"),
+    time_encoding: str = "sinusoidal",
+    target_horizon: int = 0,
+) -> Union[Dict, List[Dict]]:
+    """
+    Build a temporal heterogeneous multi-layer grid graph.
+    
+    Args:
+        scenario_data: Parsed scenario
+        report: MILP report with per-timestep outputs
+        mode: "sequence" (list of graphs) or "supra" (single time-expanded graph)
+        time_window: Number of steps per graph (for sequence mode)
+        stride: Sliding window stride
+        temporal_edges: Types of temporal edges to add ("soc", "ramp", "dr")
+        time_encoding: Method for time encoding ("sinusoidal", "cyclic-hod")
+        target_horizon: Prediction horizon (0 = same-step labels)
+    
+    Returns:
+        Single dict (supra) or list of dicts (sequence)
+    """
+    # Build base heterogeneous graph to get structure
+    base_builder = HeteroGraphBuilder(scenario_data, report)
+    base_record = base_builder.build()
+    
+    # Extract time information
+    detail = report.get("detail", {})
+    time_steps = detail.get("time_steps", [])
+    T = len(time_steps)
+    
+    if T == 0:
+        raise ValueError("No time steps found in report")
+    
+    time_index = [f"t={t}" for t in range(T)]
+    
+    # Build time encoding
+    TE = _make_time_encoding(time_index, T, method=time_encoding)
+    
+    if mode == "sequence":
+        # Sequence mode: list of graphs, one per time window
+        graphs = []
+        windows = _windows(T, time_window, stride)
+        
+        for t0 in windows:
+            t_end = min(t0 + (time_window or 1), T)
+            for t in range(t0, t_end):
+                # Create a snapshot at time t
+                g = _build_single_hetero_snapshot(
+                    scenario_data,
+                    report,
+                    time_index[t],
+                    TE[t],
+                )
+                g["time_step"] = t
+                graphs.append(g)
+        
+        return graphs
+    
+    elif mode == "supra":
+        # Supra-graph mode: single large time-expanded graph
+        N = len(base_record["node_types"])
+        
+        # Stack node features with time encoding
+        node_features = base_record["node_features"]  # [N, F]
+        X = _stack_time_features(node_features, TE, T)  # [N*T, F+Ft]
+        
+        # Expand node types
+        node_types_expanded = _tile_node_types(base_record["node_types"], T)
+        
+        # Generate node IDs
+        node_metadata = base_builder.node_metadata
+        node_names = [meta.get("name", f"node_{i}") for i, meta in enumerate(node_metadata)]
+        node_ids = _make_node_ids(node_names, T)
+        
+        # Expand spatial edges over time
+        # Note: base hetero graph returns edge_index as [E, 2], not [2, E]
+        base_edges = base_record["edge_index"].tolist()  # [E, 2] - list of [src, dst] pairs
+        base_edge_types = base_record["edge_types"]
+        base_edge_features = base_record["edge_features"]
+        
+        E_spatial, ET_spatial, EF_spatial = _repeat_edges_over_time(
+            base_edges,
+            base_edge_types,
+            base_edge_features,
+            N,
+            T,
+        )
+        
+        # Build temporal edges
+        E_temporal = []
+        ET_temporal = []
+        EF_temporal = []
+        
+        if "soc" in temporal_edges:
+            e, et, ef = _build_soc_edges(base_builder.asset_to_idx, N, T)
+            E_temporal.extend(e)
+            ET_temporal.extend(et)
+            EF_temporal.extend(ef)
+        
+        if "ramp" in temporal_edges:
+            e, et, ef = _build_ramp_edges(base_builder.asset_to_idx, scenario_data, N, T)
+            E_temporal.extend(e)
+            ET_temporal.extend(et)
+            EF_temporal.extend(ef)
+        
+        if "dr" in temporal_edges:
+            e, et, ef = _build_dr_edges(base_builder.asset_to_idx, scenario_data, N, T)
+            E_temporal.extend(e)
+            ET_temporal.extend(et)
+            EF_temporal.extend(ef)
+        
+        # Combine spatial and temporal edges
+        all_edges = E_spatial + E_temporal
+        all_edge_types = ET_spatial + ET_temporal
+        all_edge_features = EF_spatial + EF_temporal
+        
+        edge_index, edge_types, edge_attr = _pack_edges(
+            all_edges,
+            all_edge_types,
+            all_edge_features,
+        )
+        
+        return {
+            "graph_type": "hetero_multi_layer_temporal_supra",
+            "node_features": X,
+            "node_types": node_types_expanded,
+            "node_ids": node_ids,
+            "time_index": time_index,
+            "time_steps": time_steps,
+            "edge_index": edge_index,
+            "edge_types": edge_types,
+            "edge_features": edge_attr,
+            "meta": {
+                "N_base": N,
+                "T": T,
+                "temporal_edges": list(temporal_edges),
+                "time_encoding": time_encoding,
+                "target_horizon": target_horizon,
+                "schema_version": "2.0-temporal",
+            },
+            # Keep flat compatibility fields from base record
+            "node_static": base_record.get("node_static"),
+            "node_time": base_record.get("node_time"),
+            "node_labels": base_record.get("node_labels"),
+            "zone_region_index": base_record.get("zone_region_index"),
+        }
+    
+    else:
+        raise ValueError(f"Unknown temporal mode: {mode}")
 
 
 def build_hetero_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray]:

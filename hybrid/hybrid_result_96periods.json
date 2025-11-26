@@ -1,0 +1,15 @@
+{
+  "scenario": "scenario_00286.json",
+  "method": "hybrid",
+  "n_periods": 96,
+  "n_thermal": 40,
+  "total_time_seconds": 1136.4232828617096,
+  "avg_time_per_period": 11.837702579796314,
+  "total_cost_eur": 36845921.755109124,
+  "total_generation_mw": 274787.6292570072,
+  "total_demand_mw": 274787.6292570072,
+  "units_on_avg": 8.385416666666666,
+  "units_on_max": 24,
+  "units_on_min": 2,
+  "success": true
+}

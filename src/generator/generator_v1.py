@@ -413,6 +413,154 @@ def normalized_distance(a: np.ndarray, b: np.ndarray, mins: np.ndarray, maxs: np
     denom = np.maximum(maxs - mins, 1e-9)
     return np.linalg.norm((a - b) / denom)
 
+
+def compute_flexibility_metrics(cfg: ScenarioConfig) -> Dict[str, Any]:
+    """
+    Compute flexibility metrics for a scenario.
+    
+    Estimates total storage capacity, DR capacity, ramp capability, etc.
+    These help categorize scenarios by their operational flexibility.
+    """
+    counts = estimate_assets_count(cfg.assets)
+    zones = sum(cfg.graph.zones_per_region)
+    
+    # Storage estimates (batteries + pumped hydro)
+    # Assume typical capacities based on realistic power system data
+    avg_battery_power_mw = 50.0  # MW per battery unit
+    avg_battery_energy_mwh = avg_battery_power_mw * cfg.tech.battery_e_to_p_hours
+    avg_pumped_power_mw = 200.0  # MW per pumped hydro unit
+    avg_pumped_energy_mwh = avg_pumped_power_mw * 8.0  # ~8 hours typical
+    
+    total_battery_power = counts["battery"] * avg_battery_power_mw
+    total_battery_energy = counts["battery"] * avg_battery_energy_mwh
+    total_pumped_power = counts["hydro_pumped"] * avg_pumped_power_mw
+    total_pumped_energy = counts["hydro_pumped"] * avg_pumped_energy_mwh
+    
+    total_storage_power_mw = total_battery_power + total_pumped_power
+    total_storage_capacity_mwh = total_battery_energy + total_pumped_energy
+    
+    # Demand response estimates
+    # DR is per zone, estimate based on typical load
+    avg_zone_demand_mw = 500.0 * cfg.exogenous.demand_scale_factor
+    total_dr_capacity_mw = zones * avg_zone_demand_mw * cfg.tech.dr_max_shed_share
+    
+    # Ramping capability (thermal + nuclear)
+    avg_thermal_capacity_mw = 300.0  # MW per thermal unit
+    avg_nuclear_capacity_mw = 1000.0  # MW per nuclear unit
+    thermal_total_capacity = counts["thermal"] * avg_thermal_capacity_mw
+    nuclear_total_capacity = counts["nuclear"] * avg_nuclear_capacity_mw
+    
+    # Ramp rates per timestep (dt_minutes)
+    dt_hours = cfg.dt_minutes / 60.0
+    thermal_ramp_per_step = thermal_total_capacity * cfg.tech.thermal_ramp_pct * dt_hours
+    nuclear_ramp_per_step = nuclear_total_capacity * 0.05 * dt_hours  # Nuclear ramps slowly
+    
+    total_ramp_up_mw_per_step = thermal_ramp_per_step + nuclear_ramp_per_step
+    total_ramp_down_mw_per_step = total_ramp_up_mw_per_step  # Symmetric
+    
+    # Flexibility ratio: storage + DR relative to total dispatchable capacity
+    dispatchable_capacity = thermal_total_capacity + nuclear_total_capacity
+    flex_capacity = total_storage_power_mw + total_dr_capacity_mw
+    thermal_flex_ratio = flex_capacity / dispatchable_capacity if dispatchable_capacity > 0 else 0.0
+    
+    return {
+        "total_storage_power_mw": round(total_storage_power_mw, 1),
+        "total_storage_capacity_mwh": round(total_storage_capacity_mwh, 1),
+        "battery_power_mw": round(total_battery_power, 1),
+        "battery_capacity_mwh": round(total_battery_energy, 1),
+        "pumped_power_mw": round(total_pumped_power, 1),
+        "pumped_capacity_mwh": round(total_pumped_energy, 1),
+        "total_dr_capacity_mw": round(total_dr_capacity_mw, 1),
+        "total_ramp_up_mw_per_step": round(total_ramp_up_mw_per_step, 1),
+        "total_ramp_down_mw_per_step": round(total_ramp_down_mw_per_step, 1),
+        "thermal_flex_ratio": round(thermal_flex_ratio, 3),
+        "dr_duration_hours": round(cfg.tech.dr_duration_hours, 2),
+        "battery_roundtrip_efficiency": round(cfg.tech.battery_roundtrip_eff, 3),
+    }
+
+
+def compute_difficulty_indicators(cfg: ScenarioConfig, vars_total: int, cons_total: int, est_hours: float) -> Dict[str, Any]:
+    """
+    Compute difficulty indicators for a scenario.
+    
+    Estimates VRE penetration, demand volatility, problem complexity, etc.
+    These help categorize scenarios by expected solver difficulty.
+    """
+    counts = estimate_assets_count(cfg.assets)
+    zones = sum(cfg.graph.zones_per_region)
+    
+    # VRE penetration estimate
+    avg_solar_capacity_mw = 100.0  # MW per solar site
+    avg_wind_capacity_mw = 150.0  # MW per wind site
+    avg_thermal_capacity_mw = 300.0
+    avg_nuclear_capacity_mw = 1000.0
+    
+    vre_capacity = counts["solar"] * avg_solar_capacity_mw + counts["wind"] * avg_wind_capacity_mw
+    thermal_capacity = counts["thermal"] * avg_thermal_capacity_mw + counts["nuclear"] * avg_nuclear_capacity_mw
+    hydro_capacity = counts["hydro_reservoir"] * 500.0 + counts["hydro_ror"] * 200.0
+    
+    total_capacity = vre_capacity + thermal_capacity + hydro_capacity
+    vre_penetration_pct = (vre_capacity / total_capacity * 100.0) if total_capacity > 0 else 0.0
+    
+    # Net demand volatility estimate (based on weather/demand profile types)
+    # Stormy/sunny have high variability, calm/overcast are moderate
+    weather_volatility_map = {
+        "calm_winter": 0.12,
+        "stormy_winter": 0.25,
+        "sunny_summer": 0.22,
+        "overcast_summer": 0.10,
+        "mixed": 0.18,
+    }
+    base_volatility = weather_volatility_map.get(cfg.exogenous.weather_profile, 0.15)
+    
+    # Demand profile volatility
+    demand_volatility_map = {
+        "wkday_peak": 0.15,
+        "wkend_flat": 0.08,
+        "cold_snap": 0.20,
+        "heatwave": 0.22,
+        "shoulder": 0.10,
+    }
+    demand_volatility = demand_volatility_map.get(cfg.exogenous.demand_profile, 0.15)
+    
+    # Combined volatility
+    net_demand_volatility = round(np.sqrt(base_volatility**2 + demand_volatility**2), 3)
+    
+    # Peak to valley ratio estimate (typical power system)
+    # Higher demand scale and volatile weather → higher ratio
+    base_peak_valley = 1.8
+    peak_to_valley_ratio = round(base_peak_valley * cfg.exogenous.demand_scale_factor, 2)
+    
+    # Complexity score based on problem size and structure
+    # Categories: trivial, easy, medium, hard, very_hard
+    if vars_total < 10000:
+        complexity_score = "trivial"
+    elif vars_total < 30000:
+        complexity_score = "easy"
+    elif vars_total < 70000:
+        complexity_score = "medium"
+    elif vars_total < 120000:
+        complexity_score = "hard"
+    else:
+        complexity_score = "very_hard"
+    
+    # Additional indicators
+    n_binary_vars = counts["thermal"] * int(cfg.horizon_hours * 60 / cfg.dt_minutes)
+    n_timesteps = int(cfg.horizon_hours * 60 / cfg.dt_minutes)
+    
+    return {
+        "vre_penetration_pct": round(vre_penetration_pct, 2),
+        "net_demand_volatility": net_demand_volatility,
+        "peak_to_valley_ratio": peak_to_valley_ratio,
+        "estimated_milp_solve_time_seconds": round(est_hours * 3600, 1),
+        "complexity_score": complexity_score,
+        "n_binary_variables": n_binary_vars,
+        "n_timesteps": n_timesteps,
+        "n_zones": zones,
+        "weather_profile": cfg.exogenous.weather_profile,
+        "demand_profile": cfg.exogenous.demand_profile,
+    }
+
 # ---------- Metadata helpers
 
 def build_meta(cfg: ScenarioConfig, vars_total: int, cons_total: int, est_hours: float) -> Dict[str, Any]:
@@ -550,6 +698,9 @@ def generate_scenarios(space_path: str, out_dir: str):
         accepted.append(cfg)
 
         meta = build_meta(cfg, vars_total, cons_total, est_hours)
+        flexibility_metrics = compute_flexibility_metrics(cfg)
+        difficulty_indicators = compute_difficulty_indicators(cfg, vars_total, cons_total, est_hours)
+        
         payload = {
             "id": cfg.id,
             "horizon_hours": cfg.horizon_hours,
@@ -563,6 +714,8 @@ def generate_scenarios(space_path: str, out_dir: str):
             "mip_gap_target_pct": cfg.mip_gap_target_pct,
             "estimates": meta["estimates"],
             "meta": {k: v for k, v in meta.items() if k != "estimates"},
+            "flexibility_metrics": flexibility_metrics,
+            "difficulty_indicators": difficulty_indicators,
         }
 
         cfg_path = output_dir / f"scenario_{len(accepted):05d}.json"

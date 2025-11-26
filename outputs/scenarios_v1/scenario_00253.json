@@ -1,5 +1,5 @@
 {
-  "id": "a7d1f74b-33fe-48e7-93ad-ab78b2da1f07",
+  "id": "97a8d668-8a6a-4a93-afd8-eb4a6142235d",
   "horizon_hours": 24,
   "dt_minutes": 15,
   "graph": {
@@ -377,5 +377,31 @@
       "pumped_final_level_tolerance": 0.057718464379093094,
       "pumped_self_discharge_per_hour": 0.0028493554363338875
     }
+  },
+  "flexibility_metrics": {
+    "total_storage_power_mw": 1450.0,
+    "total_storage_capacity_mwh": 8397.3,
+    "battery_power_mw": 1250.0,
+    "battery_capacity_mwh": 6797.3,
+    "pumped_power_mw": 200.0,
+    "pumped_capacity_mwh": 1600.0,
+    "total_dr_capacity_mw": 3040.2,
+    "total_ramp_up_mw_per_step": 654.2,
+    "total_ramp_down_mw_per_step": 654.2,
+    "thermal_flex_ratio": 0.303,
+    "dr_duration_hours": 5.07,
+    "battery_roundtrip_efficiency": 0.849
+  },
+  "difficulty_indicators": {
+    "vre_penetration_pct": 36.4,
+    "net_demand_volatility": 0.266,
+    "peak_to_valley_ratio": 2.01,
+    "estimated_milp_solve_time_seconds": 8546.3,
+    "complexity_score": "very_hard",
+    "n_binary_variables": 3456,
+    "n_timesteps": 96,
+    "n_zones": 26,
+    "weather_profile": "sunny_summer",
+    "demand_profile": "wkday_peak"
   }
 }

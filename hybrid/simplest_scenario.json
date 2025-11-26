@@ -1,0 +1,26 @@
+{
+  "simplest_scenario": "scenario_00285.json",
+  "top_10_simplest": [
+    "scenario_00285.json",
+    "scenario_00085.json",
+    "scenario_00101.json",
+    "scenario_00103.json",
+    "scenario_00369.json",
+    "scenario_00365.json",
+    "scenario_00069.json",
+    "scenario_00007.json",
+    "scenario_00315.json",
+    "scenario_00450.json"
+  ],
+  "stats": {
+    "file": "scenario_00285.json",
+    "id": "66eae1ba-d1bf-453b-abf1-18ddcdaf792d",
+    "vars_total": 30048,
+    "cons_total": 39062,
+    "est_cpu_hours": 0.6095197777777778,
+    "total_assets": 54,
+    "thermal": 10,
+    "regions": 2,
+    "zones": 6
+  }
+}

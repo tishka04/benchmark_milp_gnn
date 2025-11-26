@@ -1,0 +1,8 @@
+{
+  "scenario": "scenario_00286.json",
+  "method": "milp_period_by_period",
+  "success": true,
+  "solve_time_seconds": 1.5524382591247559,
+  "total_cost_eur": 36254972.87676238,
+  "total_generation_mw": 274787.6292570072
+}
