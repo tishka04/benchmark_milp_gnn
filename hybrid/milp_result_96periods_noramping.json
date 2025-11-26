@@ -1,0 +1,6 @@
+{
+  "scenario": "scenario_00286.json",
+  "method": "milp_noramping",
+  "success": false,
+  "solve_time_seconds": 1.8365771770477295
+}

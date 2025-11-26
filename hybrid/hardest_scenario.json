@@ -1,0 +1,26 @@
+{
+  "hardest_scenario": "scenario_00286.json",
+  "top_10": [
+    "scenario_00286.json",
+    "scenario_00152.json",
+    "scenario_00202.json",
+    "scenario_00319.json",
+    "scenario_00374.json",
+    "scenario_00114.json",
+    "scenario_00170.json",
+    "scenario_00174.json",
+    "scenario_00054.json",
+    "scenario_00162.json"
+  ],
+  "stats": {
+    "file": "scenario_00286.json",
+    "id": "7503285b-3ebf-40c2-938e-347e16f5a544",
+    "vars_total": 139872,
+    "cons_total": 181833,
+    "est_cpu_hours": 2.569266333333333,
+    "total_assets": 251,
+    "regions": 5,
+    "zones": 28,
+    "thermal": 40
+  }
+}
