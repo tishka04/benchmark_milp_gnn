@@ -1,0 +1,40 @@
+{
+  "scenarios_total": 2000,
+  "success_count": 2000,
+  "failure_count": 0,
+  "objective_avg": 226554282.88,
+  "objective_min": 222441.56,
+  "objective_max": 1489641956.46,
+  "solve_seconds_total": 21331.2,
+  "solve_seconds_avg": 10.67,
+  "solve_seconds_min": 0.77,
+  "solve_seconds_max": 23.22,
+  "cost_totals": {
+    "thermal_fuel": 0.0,
+    "nuclear_fuel": 4268329539.75,
+    "demand_response": 13751579941.02,
+    "unserved_energy": 35637340591.3,
+    "solar_spill": 126424015266.26,
+    "wind_spill": 208759714012.63,
+    "hydro_spill": 7282667472.93,
+    "overgen_spill": 178963402.99,
+    "imports": 104800671.3,
+    "exports": 23747051971.71,
+    "battery_cycle": 25735222466.11,
+    "pumped_cycle": 7218880428.84
+  },
+  "cost_totals_avg": {
+    "thermal_fuel": 0.0,
+    "nuclear_fuel": 2134164.77,
+    "demand_response": 6875789.97,
+    "unserved_energy": 17818670.3,
+    "solar_spill": 63212007.63,
+    "wind_spill": 104379857.01,
+    "hydro_spill": 3641333.74,
+    "overgen_spill": 89481.7,
+    "imports": 52400.34,
+    "exports": 11873525.99,
+    "battery_cycle": 12867611.23,
+    "pumped_cycle": 3609440.21
+  }
+}
