@@ -75,8 +75,9 @@ def train_epoch(model, loader, optimizer, criterion, device):
         
         optimizer.zero_grad()
         
-        # Forward pass
-        pred = model(batch.x, batch.edge_index, batch.edge_type, batch.batch)
+        # Forward pass (pass node_type if available, needed for HGT)
+        node_type = batch.node_type if hasattr(batch, 'node_type') else None
+        pred = model(batch.x, batch.edge_index, batch.edge_type, node_type, batch.batch)
         
         # Compute loss (only on nodes with labels)
         if batch.y is not None:
@@ -106,8 +107,9 @@ def evaluate(model, loader, criterion, device):
         for batch in tqdm(loader, desc="Evaluating", leave=False):
             batch = batch.to(device)
             
-            # Forward pass
-            pred = model(batch.x, batch.edge_index, batch.edge_type, batch.batch)
+            # Forward pass (pass node_type if available, needed for HGT)
+            node_type = batch.node_type if hasattr(batch, 'node_type') else None
+            pred = model(batch.x, batch.edge_index, batch.edge_type, node_type, batch.batch)
             
             # Compute loss
             if batch.y is not None:
@@ -150,7 +152,7 @@ def main():
     # Model arguments
     parser.add_argument(
         "--model-type",
-        choices=["rgcn", "separated"],
+        choices=["rgcn", "separated", "hgt"],
         default="rgcn",
         help="Model architecture",
     )
@@ -171,6 +173,12 @@ def main():
         type=float,
         default=0.1,
         help="Dropout rate",
+    )
+    parser.add_argument(
+        "--num-heads",
+        type=int,
+        default=4,
+        help="Number of attention heads (for HGT model)",
     )
     
     # Training arguments
@@ -300,6 +308,7 @@ def main():
         output_dim=output_dim,
         num_layers=args.num_layers,
         dropout=args.dropout,
+        num_heads=args.num_heads,
     )
     model = model.to(args.device)
     

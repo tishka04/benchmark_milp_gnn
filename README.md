@@ -150,6 +150,19 @@ Each run now also emits:
 - `test_metrics.json`: nested metric dictionaries (`value` + `details`) for easier downstream analysis.
 
 
+python -m src.gnn.train_temporal_hetero `
+    --data-dir outputs/graphs/hetero_temporal_v1 `
+    --model-type hgt `
+    --hidden-dim 1 `
+    --num-layers 1 `
+    --num-heads 1 `
+    --dropout 0.1 `
+    --epochs 2 `
+    --batch-size 1 `
+    --lr 0.0005 `
+    --train-split 0.7 `
+    --target-vars thermal,nuclear,solar,wind,hydro_release,hydro_ror,dr,battery_charge,battery_discharge,pumped_charge,pumped_discharge,net_import,unserved `
+
 
 ### 6.1 Analyse GNN vs MILP performance
 

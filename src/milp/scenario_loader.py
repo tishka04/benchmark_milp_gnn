@@ -60,10 +60,12 @@ class ScenarioData:
     thermal_cost: Dict[str, float]
     thermal_ramp: Dict[str, float]
     thermal_initial_output: Dict[str, float]
+    thermal_startup_cost: Dict[str, float]
 
     nuclear_capacity: Dict[str, float]
     nuclear_min_power: Dict[str, float]
     nuclear_cost: Dict[str, float]
+    nuclear_startup_cost: Dict[str, float]
 
     solar_capacity: Dict[str, float]
     solar_available: Dict[Tuple[str, int], float]
@@ -523,10 +525,12 @@ def load_scenario_data(path: Path) -> ScenarioData:
     thermal_cost: Dict[str, float] = {}
     thermal_ramp: Dict[str, float] = {}
     thermal_initial: Dict[str, float] = {}
+    thermal_startup_cost: Dict[str, float] = {}
 
     nuclear_capacity: Dict[str, float] = {}
     nuclear_min: Dict[str, float] = {}
     nuclear_cost: Dict[str, float] = {}
+    nuclear_startup_cost: Dict[str, float] = {}
 
     solar_capacity: Dict[str, float] = {}
     solar_available: Dict[Tuple[str, int], float] = {}
@@ -564,6 +568,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
     voll_value = costs["value_of_lost_load_eur_per_mwh"]
     thermal_fuel_cost = costs["thermal_fuel_eur_per_mwh"]
     nuclear_fuel_cost = costs["nuclear_fuel_eur_per_mwh"]
+    thermal_startup_cost_value = costs.get("thermal_startup_cost_eur", 5000.0)  # Default 5000 EUR
+    nuclear_startup_cost_value = costs.get("nuclear_startup_cost_eur", 30000.0)  # Default 30000 EUR
 
     for idx, zone in enumerate(zones):
         zone_profile = zone_profiles[zone]
@@ -581,11 +587,13 @@ def load_scenario_data(path: Path) -> ScenarioData:
         thermal_cost[zone] = thermal_fuel_cost + tech["thermal_marg_cost"] + co2_price * THERMAL.emission_rate_t_per_mwh
         thermal_ramp[zone] = thermal_capacity[zone] * tech["thermal_ramp_pct"]
         thermal_initial[zone] = 0.0
+        thermal_startup_cost[zone] = thermal_startup_cost_value
 
         nuclear_units = max(0, nuclear_per_zone[idx])
         nuclear_capacity[zone] = nuclear_units * NUCLEAR.unit_capacity_mw
         nuclear_min[zone] = nuclear_capacity[zone] * (NUCLEAR.min_power_fraction if nuclear_capacity[zone] > 0 else 0.0)
         nuclear_cost[zone] = nuclear_fuel_cost
+        nuclear_startup_cost[zone] = nuclear_startup_cost_value
 
         solar_units = max(0, solar_units_per_zone[idx])
         solar_capacity[zone] = solar_units * SOLAR.unit_capacity_mw
@@ -696,9 +704,11 @@ def load_scenario_data(path: Path) -> ScenarioData:
         thermal_cost=thermal_cost,
         thermal_ramp=thermal_ramp,
         thermal_initial_output=thermal_initial,
+        thermal_startup_cost=thermal_startup_cost,
         nuclear_capacity=nuclear_capacity,
         nuclear_min_power=nuclear_min,
         nuclear_cost=nuclear_cost,
+        nuclear_startup_cost=nuclear_startup_cost,
         solar_capacity=solar_capacity,
         solar_available=solar_available,
         wind_capacity=wind_capacity,
