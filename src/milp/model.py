@@ -43,10 +43,12 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.thermal_cost = Param(m.Z, initialize=data.thermal_cost, mutable=False)
     m.thermal_ramp = Param(m.Z, initialize=data.thermal_ramp, mutable=False)
     m.thermal_initial = Param(m.Z, initialize=data.thermal_initial_output, mutable=False)
+    m.thermal_startup_cost = Param(m.Z, initialize=data.thermal_startup_cost, mutable=False)
 
     m.nuclear_capacity = Param(m.Z, initialize=data.nuclear_capacity, mutable=False)
     m.nuclear_min = Param(m.Z, initialize=data.nuclear_min_power, mutable=False)
     m.nuclear_cost = Param(m.Z, initialize=data.nuclear_cost, mutable=False)
+    m.nuclear_startup_cost = Param(m.Z, initialize=data.nuclear_startup_cost, mutable=False)
 
     m.battery_power = Param(m.Z, initialize=lambda _, z: data.battery_power.get(z, 0.0), mutable=False)
     m.battery_energy = Param(m.Z, initialize=lambda _, z: data.battery_energy.get(z, 0.0), mutable=False)
@@ -85,8 +87,11 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
 
     m.p_thermal = Var(m.Z, m.T, within=NonNegativeReals)
     m.u_thermal = Var(m.Z, m.T, within=Binary)
+    m.v_thermal_startup = Var(m.Z, m.T, within=Binary)  # Startup indicator
 
     m.p_nuclear = Var(m.Z, m.T, within=NonNegativeReals)
+    m.u_nuclear = Var(m.Z, m.T, within=Binary)  # Commitment binary for nuclear
+    m.v_nuclear_startup = Var(m.Z, m.T, within=Binary)  # Startup indicator
 
     m.p_solar = Var(m.Z, m.T, within=NonNegativeReals)
     m.spill_solar = Var(m.Z, m.T, within=NonNegativeReals)
@@ -141,15 +146,37 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.thermal_ramp_up = Constraint(m.Z, m.T, rule=_thermal_ramp_up_rule)
     m.thermal_ramp_down = Constraint(m.Z, m.T, rule=_thermal_ramp_down_rule)
 
-    # Nuclear limits
+    # Thermal startup logic
+    def _thermal_startup_rule(model, z, t):
+        if t == model.T.first():
+            # Assume initially off (thermal_initial = 0 for most zones)
+            # If unit turns on at t=0, count as startup
+            return model.v_thermal_startup[z, t] >= model.u_thermal[z, t]
+        else:
+            # Startup occurs when u[t] > u[t-1]
+            return model.v_thermal_startup[z, t] >= model.u_thermal[z, t] - model.u_thermal[z, t - 1]
+
+    m.thermal_startup_detection = Constraint(m.Z, m.T, rule=_thermal_startup_rule)
+
+    # Nuclear limits with commitment variable
     def _nuclear_cap_rule(model, z, t):
-        return model.p_nuclear[z, t] <= model.nuclear_capacity[z]
+        return model.p_nuclear[z, t] <= model.nuclear_capacity[z] * model.u_nuclear[z, t]
 
     def _nuclear_min_rule(model, z, t):
-        return model.p_nuclear[z, t] >= model.nuclear_min[z]
+        return model.p_nuclear[z, t] >= model.nuclear_min[z] * model.u_nuclear[z, t]
 
     m.nuclear_capacity_limit = Constraint(m.Z, m.T, rule=_nuclear_cap_rule)
     m.nuclear_min_limit = Constraint(m.Z, m.T, rule=_nuclear_min_rule)
+
+    # Nuclear startup logic
+    def _nuclear_startup_rule(model, z, t):
+        if t == model.T.first():
+            # Assume nuclear initially on (baseload) - only count startup if going from off to on
+            return model.v_nuclear_startup[z, t] >= model.u_nuclear[z, t] - 1.0
+        else:
+            return model.v_nuclear_startup[z, t] >= model.u_nuclear[z, t] - model.u_nuclear[z, t - 1]
+
+    m.nuclear_startup_detection = Constraint(m.Z, m.T, rule=_nuclear_startup_rule)
 
     # Renewable curtailment
     def _solar_balance_rule(model, z, t):
@@ -326,6 +353,11 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
             + model.nuclear_cost[z] * model.p_nuclear[z, t]
             for z in model.Z for t in model.T
         )
+        startup_cost = sum(
+            model.thermal_startup_cost[z] * model.v_thermal_startup[z, t]
+            + model.nuclear_startup_cost[z] * model.v_nuclear_startup[z, t]
+            for z in model.Z for t in model.T
+        )
         response_cost = sum(
             model.dr_cost * model.dr_shed[z, t] + model.voll * model.unserved[z, t]
             for z in model.Z for t in model.T
@@ -342,18 +374,27 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
         import_cost = sum(model.import_cost * model.net_import[t] for t in model.T)
         export_cost = sum(model.export_cost * model.net_export[t] for t in model.T)
         overgen_cost = sum(model.overgen_spill_cost * model.overgen_spill[z, t] for z in model.Z for t in model.T)
-        return gen_cost + response_cost + spill_cost + storage_cost + import_cost + export_cost + overgen_cost
+        return gen_cost + startup_cost + response_cost + spill_cost + storage_cost + import_cost + export_cost + overgen_cost
 
     m.obj = Objective(rule=_objective_rule, sense=minimize)
 
     if enable_duals:
         m.dual = Suffix(direction=Suffix.IMPORT)
 
-    # Fix binaries for zones without thermal capacity
+    # Fix binaries for zones without capacity
     for z in data.zones:
         if data.thermal_capacity.get(z, 0.0) <= 1e-6:
             for t in data.periods:
                 m.u_thermal[z, t].fix(0.0)
+                m.v_thermal_startup[z, t].fix(0.0)
+        if data.nuclear_capacity.get(z, 0.0) <= 1e-6:
+            for t in data.periods:
+                m.u_nuclear[z, t].fix(0.0)
+                m.v_nuclear_startup[z, t].fix(0.0)
+        else:
+            # Nuclear typically stays on (baseload) - initialize commitment to 1
+            for t in data.periods:
+                m.u_nuclear[z, t].setlb(1.0)  # Force nuclear to stay on
 
     return m
 

@@ -1,6 +1,0 @@
-{
-  "best_epoch": 26,
-  "best_val_score": 0.33499446090129836,
-  "total_epochs": 30,
-  "total_steps": 126000
-}

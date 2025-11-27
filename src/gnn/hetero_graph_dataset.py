@@ -208,6 +208,9 @@ class HeteroGraphBuilder:
         zones = self.detail["zones"]
         
         # Asset types: thermal, solar, wind, nuclear, hydro_res, hydro_ror, battery, pumped, DR
+        # Track asset info for label decomposition
+        self.asset_metadata = {}  # asset_key -> {type, zone, capacity, cost, ...}
+        
         for zone in zones:
             zone_idx = self.zone_to_idx[zone]
             
@@ -220,6 +223,7 @@ class HeteroGraphBuilder:
                     marginal_cost=self.data.thermal_cost.get(zone, 0.0),
                     min_power=self.data.thermal_min_power.get(zone, 0.0),
                     ramp_rate=self.data.thermal_ramp.get(zone, 0.0),
+                    startup_cost=self.data.thermal_startup_cost.get(zone, 0.0),
                 )
             
             # Solar assets
@@ -240,6 +244,7 @@ class HeteroGraphBuilder:
                     capacity=nuclear_cap,
                     marginal_cost=self.data.nuclear_cost.get(zone, 0.0),
                     min_power=self.data.nuclear_min_power.get(zone, 0.0),
+                    startup_cost=self.data.nuclear_startup_cost.get(zone, 0.0),
                 )
             
             # Hydro reservoir
@@ -284,7 +289,7 @@ class HeteroGraphBuilder:
     
     def _add_asset_node(self, zone: str, zone_idx: int, asset_type: str, **kwargs):
         """Helper to add asset node."""
-        # Feature vector: [capacity, marginal_cost, min_power, ramp_rate, energy_cap, efficiency, zone_idx]
+        # Feature vector: [capacity, marginal_cost, min_power, ramp_rate, energy_cap, efficiency, startup_cost, zone_idx]
         features = [
             kwargs.get("capacity", 0.0),
             kwargs.get("marginal_cost", 0.0),
@@ -292,6 +297,7 @@ class HeteroGraphBuilder:
             kwargs.get("ramp_rate", 0.0),
             kwargs.get("energy_capacity", 0.0),
             kwargs.get("efficiency", 1.0),
+            kwargs.get("startup_cost", 0.0),
             float(zone_idx),
         ]
         
@@ -306,6 +312,18 @@ class HeteroGraphBuilder:
             "zone": zone,
             "asset_type": asset_type,
         })
+        
+        # Store metadata for label decomposition
+        self.asset_metadata[asset_key] = {
+            "type": asset_type,
+            "zone": zone,
+            "capacity": kwargs.get("capacity", 0.0),
+            "marginal_cost": kwargs.get("marginal_cost", 0.0),
+            "min_power": kwargs.get("min_power", 0.0),
+            "energy_capacity": kwargs.get("energy_capacity", 0.0),
+            "efficiency": kwargs.get("efficiency", 1.0),
+            "startup_cost": kwargs.get("startup_cost", 0.0),
+        }
     
     def _build_weather_nodes(self):
         """Create weather cell nodes per region."""
@@ -424,6 +442,9 @@ class HeteroGraphBuilder:
         # Build zone-level static and temporal features compatible with dataset loader
         flat_compat = self._build_flat_compatibility(zones)
         
+        # Build asset-level labels by decomposing zone aggregates
+        asset_labels = self._build_asset_labels(zones)
+        
         record = {
             # Heterogeneous graph fields
             "node_features": np.array(padded_features, dtype=np.float32),
@@ -433,11 +454,161 @@ class HeteroGraphBuilder:
             "edge_features": np.array(padded_edge_features, dtype=np.float32),
             "zone_node_indices": np.array(zone_indices, dtype=np.int64),
             
+            # Asset-level labels (synthetic decomposition from zone aggregates)
+            **asset_labels,
+            
             # Flat graph compatibility fields (for existing dataset loader)
             **flat_compat,
         }
         
         return record
+    
+    def _build_asset_labels(self, zones: List[str]) -> Dict[str, np.ndarray]:
+        """Build synthetic asset-level labels by decomposing zone aggregates."""
+        detail = self.detail
+        T = len(detail["time_steps"])
+        
+        # Collect all assets
+        assets_sorted = sorted(self.asset_to_idx.keys())
+        N_assets = len(assets_sorted)
+        
+        # Initialize asset labels: [T, N_assets, label_dim]
+        # Label dimensions: [dispatch_mw, commitment_binary, charge_mw, discharge_mw, soc_mwh]
+        asset_labels = np.zeros((T, N_assets, 5), dtype=np.float32)
+        
+        # Decompose zone aggregates into asset-level targets
+        for zone in zones:
+            zone_assets = [a for a in assets_sorted if a.startswith(f"{zone}_")]
+            
+            # For each asset type, decompose zone aggregate
+            self._decompose_thermal(zone, zone_assets, asset_labels, assets_sorted, T)
+            self._decompose_nuclear(zone, zone_assets, asset_labels, assets_sorted, T)
+            self._decompose_solar(zone, zone_assets, asset_labels, assets_sorted, T)
+            self._decompose_wind(zone, zone_assets, asset_labels, assets_sorted, T)
+            self._decompose_hydro(zone, zone_assets, asset_labels, assets_sorted, T)
+            self._decompose_storage(zone, zone_assets, asset_labels, assets_sorted, T)
+            self._decompose_dr(zone, zone_assets, asset_labels, assets_sorted, T)
+        
+        return {
+            "asset_labels": asset_labels,  # [T, N_assets, 5]
+            "asset_node_indices": np.array([self.asset_to_idx[a] for a in assets_sorted], dtype=np.int64),
+            "asset_names": np.array(assets_sorted, dtype=object),
+        }
+    
+    def _decompose_thermal(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray, 
+                          assets_sorted: List[str], T: int):
+        """Decompose thermal dispatch from zone to asset using merit order."""
+        thermal_asset = f"{zone}_thermal"
+        if thermal_asset not in zone_assets:
+            return
+        
+        asset_idx = assets_sorted.index(thermal_asset)
+        zone_thermal = np.array(self.detail["thermal"][zone])  # [T]
+        
+        # Simple allocation: assign all zone thermal to the single thermal asset
+        # In reality, you'd split among multiple thermal units by merit order
+        asset_labels[:, asset_idx, 0] = zone_thermal  # dispatch_mw
+        asset_labels[:, asset_idx, 1] = (zone_thermal > 1e-3).astype(np.float32)  # commitment
+    
+    def _decompose_nuclear(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray,
+                          assets_sorted: List[str], T: int):
+        """Decompose nuclear dispatch (typically baseload, always on)."""
+        nuclear_asset = f"{zone}_nuclear"
+        if nuclear_asset not in zone_assets:
+            return
+        
+        asset_idx = assets_sorted.index(nuclear_asset)
+        zone_nuclear = np.array(self.detail["nuclear"][zone])  # [T]
+        
+        asset_labels[:, asset_idx, 0] = zone_nuclear
+        asset_labels[:, asset_idx, 1] = (zone_nuclear > 1e-3).astype(np.float32)
+    
+    def _decompose_solar(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray,
+                        assets_sorted: List[str], T: int):
+        """Decompose solar dispatch (proportional to capacity)."""
+        solar_asset = f"{zone}_solar"
+        if solar_asset not in zone_assets:
+            return
+        
+        asset_idx = assets_sorted.index(solar_asset)
+        zone_solar = np.array(self.detail["solar"][zone])  # [T]
+        
+        asset_labels[:, asset_idx, 0] = zone_solar
+        asset_labels[:, asset_idx, 1] = (zone_solar > 1e-3).astype(np.float32)
+    
+    def _decompose_wind(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray,
+                       assets_sorted: List[str], T: int):
+        """Decompose wind dispatch (proportional to capacity)."""
+        wind_asset = f"{zone}_wind"
+        if wind_asset not in zone_assets:
+            return
+        
+        asset_idx = assets_sorted.index(wind_asset)
+        zone_wind = np.array(self.detail["wind"][zone])  # [T]
+        
+        asset_labels[:, asset_idx, 0] = zone_wind
+        asset_labels[:, asset_idx, 1] = (zone_wind > 1e-3).astype(np.float32)
+    
+    def _decompose_hydro(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray,
+                        assets_sorted: List[str], T: int):
+        """Decompose hydro dispatch."""
+        hydro_res_asset = f"{zone}_hydro_res"
+        hydro_ror_asset = f"{zone}_hydro_ror"
+        
+        if hydro_res_asset in zone_assets:
+            asset_idx = assets_sorted.index(hydro_res_asset)
+            zone_hydro_release = np.array(self.detail["hydro_release"][zone])  # [T]
+            asset_labels[:, asset_idx, 0] = zone_hydro_release
+            asset_labels[:, asset_idx, 1] = (zone_hydro_release > 1e-3).astype(np.float32)
+        
+        if hydro_ror_asset in zone_assets:
+            asset_idx = assets_sorted.index(hydro_ror_asset)
+            zone_hydro_ror = np.array(self.detail.get("hydro_ror", {}).get(zone, [0.0] * T))
+            asset_labels[:, asset_idx, 0] = zone_hydro_ror
+            asset_labels[:, asset_idx, 1] = (zone_hydro_ror > 1e-3).astype(np.float32)
+    
+    def _decompose_storage(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray,
+                          assets_sorted: List[str], T: int):
+        """Decompose storage dispatch (battery and pumped)."""
+        battery_asset = f"{zone}_battery"
+        pumped_asset = f"{zone}_pumped"
+        
+        if battery_asset in zone_assets:
+            asset_idx = assets_sorted.index(battery_asset)
+            battery_charge = np.array(self.detail["battery_charge"][zone])  # [T]
+            battery_discharge = np.array(self.detail["battery_discharge"][zone])  # [T]
+            battery_soc = np.array(self.detail["battery_soc"][zone])  # [T]
+            
+            asset_labels[:, asset_idx, 0] = battery_discharge  # net dispatch (positive = discharge)
+            asset_labels[:, asset_idx, 1] = ((battery_charge > 1e-3) | (battery_discharge > 1e-3)).astype(np.float32)
+            asset_labels[:, asset_idx, 2] = battery_charge
+            asset_labels[:, asset_idx, 3] = battery_discharge
+            asset_labels[:, asset_idx, 4] = battery_soc
+        
+        if pumped_asset in zone_assets:
+            asset_idx = assets_sorted.index(pumped_asset)
+            pumped_charge = np.array(self.detail["pumped_charge"][zone])  # [T]
+            pumped_discharge = np.array(self.detail["pumped_discharge"][zone])  # [T]
+            pumped_level = np.array(self.detail["pumped_level"][zone])  # [T]
+            
+            asset_labels[:, asset_idx, 0] = pumped_discharge
+            asset_labels[:, asset_idx, 1] = ((pumped_charge > 1e-3) | (pumped_discharge > 1e-3)).astype(np.float32)
+            asset_labels[:, asset_idx, 2] = pumped_charge
+            asset_labels[:, asset_idx, 3] = pumped_discharge
+            asset_labels[:, asset_idx, 4] = pumped_level
+    
+    def _decompose_dr(self, zone: str, zone_assets: List[str], asset_labels: np.ndarray,
+                     assets_sorted: List[str], T: int):
+        """Decompose demand response."""
+        dr_asset = f"{zone}_dr"
+        if dr_asset not in zone_assets:
+            return
+        
+        asset_idx = assets_sorted.index(dr_asset)
+        zone_dr = np.array(self.detail["demand_response"][zone])  # [T]
+        
+        asset_labels[:, asset_idx, 0] = zone_dr
+        asset_labels[:, asset_idx, 1] = (zone_dr > 1e-3).astype(np.float32)
     
     def _build_flat_compatibility(self, zones: List[str]) -> Dict[str, np.ndarray]:
         """Build flat graph compatibility fields for existing dataset loader."""

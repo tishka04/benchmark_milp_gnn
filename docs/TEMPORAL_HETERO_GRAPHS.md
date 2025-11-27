@@ -39,12 +39,7 @@ The temporal graph builder extends the static heterogeneous graph with time-awar
 ### Basic Command
 
 ```bash
-python -m src.gnn.build_hetero_graph_dataset \
-    scenarios/ \
-    reports/ \
-    outputs/temporal_graphs/supra/ \
-    --temporal \
-    --temporal-mode supra
+python -m src.gnn.build_hetero_graph_dataset outputs/scenarios_v1 outputs/scenarios_v1/reports outputs/graphs/hetero_temporal_v1 --temporal --temporal-mode supra
 ```
 
 ### Command-Line Arguments

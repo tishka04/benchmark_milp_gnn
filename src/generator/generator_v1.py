@@ -142,6 +142,8 @@ class TechScalers:
 class OperationCosts:
     thermal_fuel_eur_per_mwh: float
     nuclear_fuel_eur_per_mwh: float
+    thermal_startup_cost_eur: float
+    nuclear_startup_cost_eur: float
     demand_response_cost_eur_per_mwh: float
     value_of_lost_load_eur_per_mwh: float
     renewable_spill_cost_eur_per_mwh: float
@@ -259,6 +261,8 @@ def sample_operation_costs(space: Dict[str, Any]) -> OperationCosts:
     return OperationCosts(
         thermal_fuel_eur_per_mwh=rand_float(*cost_cfg["thermal_fuel_eur_per_mwh"]),
         nuclear_fuel_eur_per_mwh=rand_float(*cost_cfg["nuclear_fuel_eur_per_mwh"]),
+        thermal_startup_cost_eur=rand_float(*cost_cfg["thermal_startup_cost_eur"]),
+        nuclear_startup_cost_eur=rand_float(*cost_cfg["nuclear_startup_cost_eur"]),
         demand_response_cost_eur_per_mwh=rand_float(*cost_cfg["demand_response_cost_eur_per_mwh"]),
         value_of_lost_load_eur_per_mwh=rand_float(*cost_cfg["value_of_lost_load_eur_per_mwh"]),
         renewable_spill_cost_eur_per_mwh=rand_float(*cost_cfg["renewable_spill_cost_eur_per_mwh"]),
