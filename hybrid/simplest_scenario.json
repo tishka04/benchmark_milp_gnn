@@ -1,26 +1,26 @@
 {
-  "simplest_scenario": "scenario_00285.json",
+  "simplest_scenario": "scenario_00403.json",
   "top_10_simplest": [
-    "scenario_00285.json",
-    "scenario_00085.json",
-    "scenario_00101.json",
-    "scenario_00103.json",
-    "scenario_00369.json",
-    "scenario_00365.json",
-    "scenario_00069.json",
-    "scenario_00007.json",
-    "scenario_00315.json",
-    "scenario_00450.json"
+    "scenario_00403.json",
+    "scenario_00368.json",
+    "scenario_00038.json",
+    "scenario_00140.json",
+    "scenario_01086.json",
+    "scenario_00412.json",
+    "scenario_01488.json",
+    "scenario_00371.json",
+    "scenario_01980.json",
+    "scenario_00326.json"
   ],
   "stats": {
-    "file": "scenario_00285.json",
-    "id": "66eae1ba-d1bf-453b-abf1-18ddcdaf792d",
-    "vars_total": 30048,
-    "cons_total": 39062,
-    "est_cpu_hours": 0.6095197777777778,
-    "total_assets": 54,
-    "thermal": 10,
+    "file": "scenario_00403.json",
+    "id": "69b95b96-7d7a-4822-82ca-09285b9704e1",
+    "vars_total": 22464,
+    "cons_total": 29203,
+    "est_cpu_hours": 0.4741892222222222,
+    "total_assets": 43,
+    "thermal": 9,
     "regions": 2,
-    "zones": 6
+    "zones": 4
   }
 }
