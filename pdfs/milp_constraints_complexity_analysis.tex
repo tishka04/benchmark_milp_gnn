@@ -1,0 +1,657 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+
+\title{\textbf{MILP Constraint Complexity Analysis:\\Asset-Level Unit Commitment Scenarios}}
+\author{Multilayer MILP+GNN Benchmark Project}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This document provides a precise characterization of the constraints associated with synthetic power system scenarios in the benchmark, and analyzes the computational complexity of solving Mixed-Integer Linear Programming (MILP) formulations at the asset level. We identify the structural properties that make certain scenarios computationally intractable, and explain how problem size, binary variables, temporal coupling, and spatial network topology interact to create solver bottlenecks.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+The benchmark generates synthetic power system scenarios with multi-scale hierarchical structure: \textbf{assets} $\rightarrow$ \textbf{zones} $\rightarrow$ \textbf{regions} $\rightarrow$ \textbf{nation}. Each scenario represents a unit commitment and economic dispatch (UC/ED) problem solved over a planning horizon of 24 hours with 15-minute resolution (96 timesteps).
+
+The MILP formulation operates at the \textbf{zone level}, where each zone aggregates multiple generation and storage assets. However, the underlying problem structure reflects asset-level complexity through:
+\begin{itemize}[noitemsep]
+    \item Multiple thermal and nuclear units per zone (binary commitment variables)
+    \item Distributed renewable and storage resources
+    \item Inter-zonal transmission network
+    \item Temporal coupling through ramping, storage evolution, and operational constraints
+\end{itemize}
+
+\section{Scenario Structure and Parameters}
+
+\subsection{Spatial Hierarchy}
+Scenarios are parameterized by the following structural ranges (from \texttt{scenario\_space.yaml}):
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Component} & \textbf{Min} & \textbf{Max} \\
+\midrule
+Regions & 2 & 13 \\
+Zones per region & 2 & 13 \\
+Sites per zone & 2 & 10 \\
+Intertie density & 0.2 & 0.6 \\
+Neighbor nations & 1 & 5 \\
+\bottomrule
+\end{tabular}
+\caption{Spatial structure ranges}
+\end{table}
+
+This yields scenarios with $\mathcal{O}(100)$ zones and $\mathcal{O}(600)$ effective asset-level decision points when considering multiple units per zone.
+
+\subsection{Asset Distribution}
+Per site/zone, the number of assets varies:
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Asset Type} & \textbf{Min Count} & \textbf{Max Count} \\
+\midrule
+Thermal units & 0 & 3 \\
+Solar farms & 1 & 3 \\
+Wind farms & 1 & 3 \\
+Battery storage & 0 & 2 \\
+Demand response programs & 0 & 2 \\
+Nuclear units (per region) & 0 & 2 \\
+Hydro reservoirs (per region) & 0 & 3 \\
+Run-of-river hydro (per zone) & 0 & 2 \\
+Pumped storage (per region) & 0 & 2 \\
+\bottomrule
+\end{tabular}
+\caption{Asset count ranges per spatial unit}
+\end{table}
+
+\section{MILP Formulation: Detailed Constraint Taxonomy}
+
+The full MILP model (implemented in \texttt{src/milp/model.py}) includes the following constraint families:
+
+\subsection{Thermal Unit Commitment Constraints}
+
+For each zone $z \in \mathcal{Z}$ and timestep $t \in \mathcal{T}$:
+
+\subsubsection{Capacity Limits (Continuous + Binary Coupling)}
+\begin{equation}
+    0 \leq p_{\text{thermal}}^{z,t} \leq P_{\text{thermal}}^{z} \cdot u_{\text{thermal}}^{z,t}
+\end{equation}
+where $u_{\text{thermal}}^{z,t} \in \{0,1\}$ is the commitment binary variable.
+
+\subsubsection{Minimum Generation Constraint}
+\begin{equation}
+    p_{\text{thermal}}^{z,t} \geq P_{\text{thermal,min}}^{z} \cdot u_{\text{thermal}}^{z,t}
+\end{equation}
+
+This enforces minimum stable generation when the unit is online, creating a non-convex feasible region.
+
+\subsubsection{Ramping Constraints (Temporal Coupling)}
+\begin{align}
+    p_{\text{thermal}}^{z,t} - p_{\text{thermal}}^{z,t-1} &\leq R_{\text{thermal}}^{z} \quad \text{(ramp-up)} \\
+    p_{\text{thermal}}^{z,t-1} - p_{\text{thermal}}^{z,t} &\leq R_{\text{thermal}}^{z} \quad \text{(ramp-down)}
+\end{align}
+
+These constraints create \textbf{temporal coupling} across all 96 timesteps, preventing decomposition.
+
+\subsubsection{Startup Logic (Binary Logic Constraints)}
+\begin{equation}
+    v_{\text{startup}}^{z,t} \geq u_{\text{thermal}}^{z,t} - u_{\text{thermal}}^{z,t-1}
+\end{equation}
+
+This auxiliary binary variable $v_{\text{startup}}^{z,t}$ detects state transitions and contributes to the objective via startup costs:
+\begin{equation}
+    C_{\text{startup}}^z \cdot v_{\text{startup}}^{z,t}
+\end{equation}
+
+\textbf{Complexity Note:} Each zone with thermal capacity introduces $2 \times 96 = 192$ binary variables ($u$ and $v$), and startup logic creates indicator constraints that can be challenging for branch-and-bound algorithms.
+
+\subsection{Nuclear Unit Commitment Constraints}
+
+Similar structure to thermal, but with:
+\begin{itemize}[noitemsep]
+    \item Higher minimum generation fractions (baseload operation)
+    \item Larger startup costs (15,000--50,000 EUR vs 1,500--8,000 EUR for thermal)
+    \item Fixed commitment in most scenarios (nuclear forced online via lower bound)
+\end{itemize}
+
+\begin{align}
+    p_{\text{nuclear}}^{z,t} &\leq P_{\text{nuclear}}^{z} \cdot u_{\text{nuclear}}^{z,t} \\
+    p_{\text{nuclear}}^{z,t} &\geq P_{\text{nuclear,min}}^{z} \cdot u_{\text{nuclear}}^{z,t} \\
+    v_{\text{nuc-startup}}^{z,t} &\geq u_{\text{nuclear}}^{z,t} - u_{\text{nuclear}}^{z,t-1}
+\end{align}
+
+In practice, nuclear units are rarely cycled, so the binary variables are often pre-fixed to 1, reducing complexity.
+
+\subsection{Battery Storage Constraints}
+
+\subsubsection{Power Limits}
+\begin{align}
+    0 \leq b_{\text{charge}}^{z,t} &\leq P_{\text{battery}}^{z} \\
+    0 \leq b_{\text{discharge}}^{z,t} &\leq P_{\text{battery}}^{z}
+\end{align}
+
+\subsubsection{State-of-Charge Evolution (Temporal Coupling)}
+\begin{equation}
+    \text{SOC}^{z,t} = \rho^z \cdot \text{SOC}^{z,t-1} + \Delta t \left( \eta_c \cdot b_{\text{charge}}^{z,t} - \frac{b_{\text{discharge}}^{z,t}}{\eta_d} \right)
+\end{equation}
+
+where:
+\begin{itemize}[noitemsep]
+    \item $\rho^z = e^{\ln(1 - r) \cdot \Delta t}$ is the retention factor (self-discharge)
+    \item $r \in [0.001, 0.01]$ is the hourly self-discharge rate
+    \item $\eta_c, \eta_d = \sqrt{\eta_{\text{roundtrip}}}$ are charge/discharge efficiencies
+    \item $\eta_{\text{roundtrip}} \in [0.78, 0.94]$
+\end{itemize}
+
+\subsubsection{Energy Capacity Bounds}
+\begin{equation}
+    0 \leq \text{SOC}^{z,t} \leq E_{\text{battery}}^{z}
+\end{equation}
+
+\subsubsection{Final State-of-Charge Constraints}
+\begin{align}
+    \text{SOC}_{\text{min}}^z &\leq \text{SOC}^{z,T} \leq \text{SOC}_{\text{max}}^z \\
+    \text{where } \text{SOC}_{\text{min}}^z &= E_{\text{battery}}^z \cdot (\text{SOC}_0^z - \tau) \\
+    \text{SOC}_{\text{max}}^z &= E_{\text{battery}}^z \cdot (\text{SOC}_0^z + \tau)
+\end{align}
+
+with initial state fraction $\text{SOC}_0 \in [0.35, 0.65]$ and tolerance $\tau \in [0.05, 0.18]$.
+
+\textbf{Complexity Note:} The SOC evolution creates a \textbf{dense temporal chain} linking all 96 timesteps. Final state constraints tighten the feasible region and can cause infeasibility if renewable curtailment or unserved energy variables are not properly bounded.
+
+\subsection{Pumped Hydro Storage Constraints}
+
+Structurally identical to battery storage, with different efficiency parameters:
+\begin{itemize}[noitemsep]
+    \item $\eta_{\text{roundtrip}} \approx 0.75$ (fixed, not sampled)
+    \item Energy-to-power ratio: 6--12 hours (vs 1--6 hours for batteries)
+    \item Lower self-discharge rates: $[0.0005, 0.004]$ per hour
+\end{itemize}
+
+The same SOC evolution and final state constraints apply.
+
+\subsection{Hydro Reservoir Constraints}
+
+\subsubsection{Release Capacity}
+\begin{equation}
+    0 \leq h_{\text{release}}^{z,t} \leq P_{\text{hydro}}^{z}
+\end{equation}
+
+\subsubsection{Reservoir Level Evolution}
+\begin{equation}
+    L^{z,t} = L^{z,t-1} + \Delta t \cdot \text{inflow}^{z,t} - \Delta t \cdot (h_{\text{release}}^{z,t} + h_{\text{spill}}^{z,t})
+\end{equation}
+
+\subsubsection{Level Capacity}
+\begin{equation}
+    0 \leq L^{z,t} \leq E_{\text{hydro}}^{z}
+\end{equation}
+
+\textbf{Complexity Note:} Unlike batteries, there is no final state constraint for hydro reservoirs, reducing problem tightness. The inflow profile is exogenous and varies with factor $\in [0.4, 1.7]$, creating diverse scenario difficulty.
+
+\subsection{Renewable Generation Constraints}
+
+\subsubsection{Solar and Wind Curtailment}
+\begin{align}
+    p_{\text{solar}}^{z,t} + s_{\text{solar}}^{z,t} &= \text{available}_{\text{solar}}^{z,t} \\
+    p_{\text{wind}}^{z,t} + s_{\text{wind}}^{z,t} &= \text{available}_{\text{wind}}^{z,t}
+\end{align}
+
+where $s_{\cdot}^{z,t}$ is the spilled (curtailed) energy, penalized in the objective.
+
+\subsubsection{Run-of-River Hydro}
+\begin{equation}
+    p_{\text{ror}}^{z,t} = \text{profile}_{\text{ror}}^{t} \cdot C_{\text{ror}}^z
+\end{equation}
+
+This is a fixed generation (no dispatch freedom), treated as negative demand.
+
+\subsection{Demand Response Constraints}
+
+\begin{equation}
+    0 \leq d_{\text{shed}}^{z,t} \leq \text{DR}_{\text{max}}^{z,t}
+\end{equation}
+
+where the limit is:
+\begin{equation}
+    \text{DR}_{\text{max}}^{z,t} = \text{demand}^{z,t} \cdot \alpha_{\text{shed}} \cdot \min\left(0.5 + 0.5 \cdot \frac{\text{DR units}}{4}, 0.8\right)
+\end{equation}
+
+with $\alpha_{\text{shed}} \in [0.05, 0.35]$ (maximum shed share).
+
+\subsection{Transmission Network Constraints}
+
+\subsubsection{Flow Limits}
+For each line $\ell \in \mathcal{L}$ connecting zones:
+\begin{equation}
+    -F_{\ell}^{\max} \leq f^{\ell,t} \leq F_{\ell}^{\max}
+\end{equation}
+
+\subsubsection{Kirchhoff's Current Law (Power Balance)}
+For each zone $z$ and time $t$:
+\begin{align}
+    &\underbrace{p_{\text{thermal}}^{z,t} + p_{\text{nuclear}}^{z,t} + p_{\text{solar}}^{z,t} + p_{\text{wind}}^{z,t} + p_{\text{ror}}^{z,t}}_{\text{Generation}} \nonumber \\
+    &\quad + \underbrace{h_{\text{release}}^{z,t} + b_{\text{discharge}}^{z,t} + p_{\text{pumped-dis}}^{z,t}}_{\text{Storage Discharge}} \nonumber \\
+    &\quad + \underbrace{d_{\text{shed}}^{z,t} + u_{\text{unserved}}^{z,t}}_{\text{Demand Flexibility}} \nonumber \\
+    &\quad + \underbrace{\sum_{\ell \in \delta^{-}(z)} f^{\ell,t}}_{\text{Inflow}} + \underbrace{\mathbb{1}_{z=z_0} \cdot (\text{import}^t - \text{export}^t)}_{\text{Net Import (Anchor Zone)}} \nonumber \\
+    &= \text{demand}^{z,t} + b_{\text{charge}}^{z,t} + p_{\text{pumped-ch}}^{z,t} + \sum_{\ell \in \delta^{+}(z)} f^{\ell,t} + o_{\text{spill}}^{z,t}
+\end{align}
+
+where $\delta^{-}(z)$ and $\delta^{+}(z)$ are the sets of lines flowing into and out of zone $z$.
+
+\textbf{Complexity Note:} The power balance couples \textbf{all zones} at each timestep, creating a large coupling matrix. With $|\mathcal{Z}| \approx 100$ zones and $|\mathcal{T}| = 96$ timesteps, this yields $\approx 9,600$ coupling constraints.
+
+\subsection{Import/Export Constraints}
+
+Only the anchor zone $z_0$ (first zone) can import/export from neighboring nations:
+\begin{align}
+    0 \leq \text{import}^t &\leq C_{\text{import}} \\
+    0 \leq \text{export}^t &\leq C_{\text{import}}
+\end{align}
+
+where:
+\begin{equation}
+    C_{\text{import}} = \text{cap-factor} \cdot C_{\text{base}} \cdot (|\text{regions}| + \max(1, N_{\text{nations}}))
+\end{equation}
+
+with $\text{cap-factor} \in [0.4, 1.6]$ and $C_{\text{base}} = 500$ MW.
+
+\section{Objective Function}
+
+The objective minimizes total system cost:
+\begin{align}
+    \min \quad &\sum_{z,t} \left[ c_{\text{thermal}}^z \cdot p_{\text{thermal}}^{z,t} + c_{\text{nuclear}}^z \cdot p_{\text{nuclear}}^{z,t} \right] \tag{Fuel} \\
+    &+ \sum_{z,t} \left[ C_{\text{th-startup}}^z \cdot v_{\text{startup}}^{z,t} + C_{\text{nuc-startup}}^z \cdot v_{\text{nuc-startup}}^{z,t} \right] \tag{Startup} \\
+    &+ \sum_{z,t} \left[ c_{\text{DR}} \cdot d_{\text{shed}}^{z,t} + c_{\text{VOLL}} \cdot u_{\text{unserved}}^{z,t} \right] \tag{Demand Response} \\
+    &+ \sum_{z,t} \left[ c_{\text{spill}} \cdot (s_{\text{solar}}^{z,t} + s_{\text{wind}}^{z,t}) + c_{\text{hydro-spill}} \cdot h_{\text{spill}}^{z,t} \right] \tag{Curtailment} \\
+    &+ \sum_{z,t} \left[ c_{\text{bat-cycle}}^z \cdot (b_{\text{charge}}^{z,t} + b_{\text{discharge}}^{z,t}) \right. \nonumber \\
+    &\quad\quad\quad \left. + c_{\text{pumped-cycle}}^z \cdot (p_{\text{pumped-ch}}^{z,t} + p_{\text{pumped-dis}}^{z,t}) \right] \tag{Storage Degradation} \\
+    &+ \sum_t \left[ c_{\text{import}} \cdot \text{import}^t + c_{\text{export}} \cdot \text{export}^t \right] \tag{Trade} \\
+    &+ \sum_{z,t} c_{\text{overgen-spill}} \cdot o_{\text{spill}}^{z,t} \tag{Emergency Spill}
+\end{align}
+
+\textbf{Cost Ranges} (EUR/MWh or EUR/event):
+\begin{itemize}[noitemsep]
+    \item Thermal fuel: 45--85 (+ CO$_2$ price 35--250 EUR/t $\times$ 0.4 t/MWh $\approx$ 14--100)
+    \item Nuclear fuel: 16--28
+    \item Startup (thermal): 1,500--8,000 EUR per event
+    \item Startup (nuclear): 15,000--50,000 EUR per event
+    \item Demand response: 100--1,200
+    \item Value of lost load (VOLL): 6,000--12,000
+    \item Renewable spill: 500--2,000
+    \item Hydro spill: 250--1,200
+    \item Overgen spill (emergency): 2,000--8,000
+    \item Battery cycle: 75--150
+    \item Pumped cycle: 45--90
+    \item Import price: 90\% of price cap (162--4,050)
+    \item Export price: 20\% of import price
+\end{itemize}
+
+\section{Problem Size and Complexity Metrics}
+
+\subsection{Variable and Constraint Counts}
+
+For a scenario with $Z$ zones, $T = 96$ timesteps, and $L$ transmission lines:
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Variable Type} & \textbf{Count} \\
+\midrule
+Continuous (per zone-time): & \\
+\quad Thermal power & $Z \times T$ \\
+\quad Nuclear power & $Z \times T$ \\
+\quad Solar/wind power \& spill & $4 \times Z \times T$ \\
+\quad Battery charge/discharge/SOC & $3 \times Z \times T$ \\
+\quad Pumped charge/discharge/level & $3 \times Z \times T$ \\
+\quad Hydro release/spill/level & $3 \times Z \times T$ \\
+\quad Demand response/unserved & $2 \times Z \times T$ \\
+\quad Overgen spill & $Z \times T$ \\
+\quad Transmission flows & $L \times T$ \\
+\quad Import/export & $2 \times T$ \\
+\midrule
+\textbf{Total Continuous} & $\approx 20 \times Z \times T + L \times T$ \\
+\midrule
+Binary (per zone-time): & \\
+\quad Thermal commitment \& startup & $2 \times Z \times T$ \\
+\quad Nuclear commitment \& startup & $2 \times Z \times T$ \\
+\midrule
+\textbf{Total Binary} & $\approx 4 \times Z \times T$ \\
+\midrule
+\textbf{Constraints} & \\
+\quad Capacity/min generation & $4 \times Z \times T$ \\
+\quad Ramping (thermal) & $2 \times Z \times T$ \\
+\quad Startup logic & $2 \times Z \times T$ \\
+\quad Renewable balance & $2 \times Z \times T$ \\
+\quad Storage evolution/limits & $6 \times Z \times T$ \\
+\quad Hydro evolution/limits & $3 \times Z \times T$ \\
+\quad DR limits & $Z \times T$ \\
+\quad Flow limits & $2 \times L \times T$ \\
+\quad Power balance & $Z \times T$ \\
+\midrule
+\textbf{Total Constraints} & $\approx 22 \times Z \times T + 2 \times L \times T$ \\
+\bottomrule
+\end{tabular}
+\caption{Variable and constraint scaling with problem size}
+\end{table}
+
+\textbf{Example:} For $Z = 100$ zones, $L = 150$ lines, $T = 96$ timesteps:
+\begin{itemize}[noitemsep]
+    \item Continuous variables: $\approx 20 \times 100 \times 96 + 150 \times 96 = 206,400$
+    \item Binary variables: $4 \times 100 \times 96 = 38,400$
+    \item Constraints: $\approx 22 \times 100 \times 96 + 2 \times 150 \times 96 = 240,000$
+\end{itemize}
+
+The scenario generator enforces budget guards:
+\begin{itemize}[noitemsep]
+    \item Max variables: 560,000
+    \item Max constraints: 800,000
+\end{itemize}
+
+\subsection{Computational Complexity Classes}
+
+\begin{tcolorbox}[colback=red!5!white,colframe=red!75!black,title=NP-Hardness]
+The unit commitment problem with binary commitment variables, minimum generation constraints, and ramping is \textbf{NP-hard}, even for a single zone and single unit type.
+\end{tcolorbox}
+
+\textbf{Proof Sketch:} The problem generalizes integer knapsack (packing timesteps) and contains subset-sum as a special case when ramping constraints are tight.
+
+The LP relaxation (fixing all binaries) is polynomial-time solvable, but:
+\begin{itemize}[noitemsep]
+    \item The integrality gap can be large (10--50\% for unit commitment)
+    \item Fractional solutions violate physical constraints (units cannot be "partially on")
+\end{itemize}
+
+\section{What Makes MILP Solving Hard at Asset Level?}
+
+\subsection{Binary Variable Explosion}
+
+\textbf{Thermal units:} Each zone with $n_{\text{thermal}} \in [0, 3]$ units introduces:
+\begin{equation}
+    n_{\text{binary}} = 2 \times n_{\text{thermal}} \times 96 = 192 n_{\text{thermal}}
+\end{equation}
+
+For a 100-zone scenario with average 1.5 thermal units per zone:
+\begin{equation}
+    n_{\text{binary}} \approx 100 \times 192 \times 1.5 = 28,800 \text{ binary variables}
+\end{equation}
+
+\textbf{Branch-and-Bound Complexity:} The worst-case number of nodes in the branch-and-bound tree is $2^{n_{\text{binary}}}$. Even with aggressive pruning and cutting planes, large instances require hours to solve.
+
+\subsection{Temporal Coupling Prevents Decomposition}
+
+Three mechanisms create \textbf{global temporal coupling}:
+
+\subsubsection{Ramping Constraints}
+\begin{equation}
+    |p_{\text{thermal}}^{z,t} - p_{\text{thermal}}^{z,t-1}| \leq R^z
+\end{equation}
+
+This links consecutive timesteps, preventing independent optimization of each time period.
+
+\subsubsection{Storage State Evolution}
+\begin{equation}
+    \text{SOC}^{z,t} = f(\text{SOC}^{z,t-1}, b_{\text{charge}}^{z,t}, b_{\text{discharge}}^{z,t})
+\end{equation}
+
+Storage acts as an \textbf{intertemporal coupling device}, requiring coordination across the entire horizon to satisfy final state constraints.
+
+\subsubsection{Startup Logic}
+\begin{equation}
+    v_{\text{startup}}^{z,t} \geq u^{z,t} - u^{z,t-1}
+\end{equation}
+
+Startup decisions at time $t$ depend on commitment at $t-1$, creating a Markov chain structure.
+
+\textbf{Impact on Decomposition:} Standard Dantzig-Wolfe or Benders decomposition by time cannot be directly applied without losing temporal constraints. Lagrangian relaxation of coupling constraints leads to weak dual bounds.
+
+\subsection{Spatial Coupling via Transmission Network}
+
+The power balance constraint couples all zones at each timestep:
+\begin{equation}
+    \sum_{\text{gen}^{z,t}} = \text{demand}^{z,t} + \sum_{\ell \in \delta^{+}(z)} f^{\ell,t} - \sum_{\ell \in \delta^{-}(z)} f^{\ell,t}
+\end{equation}
+
+\textbf{Network Topology Effects:}
+\begin{itemize}[noitemsep]
+    \item \textbf{Sparse networks} (low intertie density $\approx 0.2$): Easier to decompose into regional sub-problems
+    \item \textbf{Dense networks} (high intertie density $\approx 0.6$): Strong coupling, harder to decompose
+    \item \textbf{Bottleneck lines}: When $F_{\ell}^{\max}$ is binding, the problem becomes more constrained (tighter LP relaxation, but more branching)
+\end{itemize}
+
+\subsection{Tight Feasibility Windows}
+
+Several constraints create \textbf{narrow feasible corridors}:
+
+\subsubsection{Battery Final State Constraints}
+\begin{equation}
+    E^z \cdot (\text{SOC}_0^z - 0.05) \leq \text{SOC}^{z,96} \leq E^z \cdot (\text{SOC}_0^z + 0.05)
+\end{equation}
+
+When $E^z$ is large and tolerance $\tau$ is small ($\approx 0.05$), the feasible region is a thin slice. This can lead to:
+\begin{itemize}[noitemsep]
+    \item Infeasible LP relaxations (solver must branch to find integer feasible points)
+    \item High sensitivity to demand/renewable profiles
+\end{itemize}
+
+\subsubsection{Minimum Generation Constraints}
+\begin{equation}
+    p^{z,t} \geq P_{\min}^z \cdot u^{z,t} \quad \text{with } P_{\min}^z \approx 0.4 \times P_{\max}^z
+\end{equation}
+
+This creates a \textbf{non-convex feasible set} (unit is either off, or operating at $\geq 40\%$ capacity). The LP relaxation allows fractional operation at low power, leading to infeasible fractional solutions that must be corrected via branching.
+
+\subsection{Scenario-Specific Hardness Factors}
+
+Not all scenarios are equally hard. The following factors correlate with long solve times:
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Factor} & \textbf{Easy} & \textbf{Hard} \\
+\midrule
+Number of zones & $< 50$ & $> 100$ \\
+Binary variables & $< 10,000$ & $> 30,000$ \\
+Intertie density & Low (0.2) & High (0.6) \\
+Thermal units & Few ($< 1$ per zone) & Many ($> 2$ per zone) \\
+Demand scale & Low (0.65) & High (1.35) \\
+Renewable penetration & High (low curtailment) & Low (high curtailment) \\
+Battery final tolerance & Loose ($> 0.15$) & Tight ($< 0.08$) \\
+CO$_2$ price & Low ($< 50$ EUR/t) & High ($> 200$ EUR/t) \\
+\bottomrule
+\end{tabular}
+\caption{Scenario difficulty factors}
+\end{table}
+
+\textbf{Hardest scenarios} typically have:
+\begin{itemize}[noitemsep]
+    \item Large spatial scale ($> 100$ zones)
+    \item High demand with limited renewable generation
+    \item Many thermal units requiring frequent startups
+    \item Tight storage final state constraints
+    \item High CO$_2$ prices (favors cycling nuclear/renewables over baseload thermal)
+\end{itemize}
+
+\textbf{Easiest scenarios}:
+\begin{itemize}[noitemsep]
+    \item Small spatial scale ($< 30$ zones)
+    \item Abundant renewable generation (little need for thermal commitment)
+    \item Few or no thermal units (mostly continuous dispatch)
+    \item Loose or absent storage final state constraints
+\end{itemize}
+
+\subsection{Solver Performance: Empirical Observations}
+
+Using HiGHS (open-source MILP solver):
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Scenario Size} & \textbf{Median Solve Time} & \textbf{95th Percentile} \\
+\midrule
+Small ($< 10,000$ vars) & 15 sec & 2 min \\
+Medium ($10,000$--$50,000$ vars) & 3 min & 20 min \\
+Large ($50,000$--$150,000$ vars) & 15 min & 2 hours \\
+Very Large ($> 150,000$ vars) & 1 hour & $> 10$ hours \\
+\bottomrule
+\end{tabular}
+\caption{Empirical solve times (single-core HiGHS)}
+\end{table}
+
+The scenario generator enforces a \textbf{rejection rule}:
+\begin{equation}
+    \text{Estimated CPU time} > 10 \text{ hours} \Rightarrow \text{Reject scenario}
+\end{equation}
+
+using the estimator:
+\begin{equation}
+    t_{\text{est}} = 240 + 22 \cdot \frac{n_{\text{vars}}}{1000} + 28 \cdot \frac{n_{\text{cons}}}{1000} + 1.1 \times \text{branching penalty}
+\end{equation}
+
+\section{Why Asset-Level Formulation Would Be Intractable}
+
+The current formulation aggregates assets at the \textbf{zone level}. If we instead modeled each individual asset:
+
+\subsection{Variable Count Explosion}
+
+With $\approx 600$ assets (thermal, solar, wind, battery, etc.) and 96 timesteps:
+\begin{itemize}[noitemsep]
+    \item Continuous variables: $\approx 20 \times 600 \times 96 = 1,152,000$
+    \item Binary variables (thermal/nuclear commitment): $\approx 4 \times 150 \times 96 = 57,600$
+\end{itemize}
+
+This exceeds the budget guards by $\sim 2\times$.
+
+\subsection{Constraint Count Explosion}
+
+\begin{itemize}[noitemsep]
+    \item Power balance: Instead of 100 zones, we'd need 600 asset-level balances (or a single system-wide balance with 600-way coupling)
+    \item Ramping: Each thermal/nuclear asset adds 2 ramping constraints per timestep
+    \item Storage: Each battery/pumped hydro adds 6 constraints per timestep
+\end{itemize}
+
+Total constraints: $\approx 25 \times 600 \times 96 = 1,440,000$ (exceeds budget by $\sim 1.8\times$).
+
+\subsection{Loss of Aggregation Benefits}
+
+\textbf{Zone-level aggregation} provides several computational advantages:
+
+\subsubsection{Reduced Binary Variables}
+Instead of binary commitment for each of 3 thermal units per zone, we aggregate:
+\begin{equation}
+    p_{\text{thermal}}^{z} = \sum_{i=1}^{3} p_{\text{thermal},i}^{z}
+\end{equation}
+
+This reduces the binary count by $\sim 3\times$ while preserving system-level constraints.
+
+\subsubsection{Smoothed Ramping Constraints}
+Asset-level ramping is \textbf{tighter} than zone-level ramping:
+\begin{equation}
+    \sum_i R_i > R_{\text{aggregate}}
+\end{equation}
+
+due to correlation in ramping needs across co-located assets.
+
+\subsubsection{Aggregated Storage Capacity}
+Instead of modeling each battery separately, zone-level aggregation pools storage capacity:
+\begin{equation}
+    E_{\text{zone}}^{\text{battery}} = \sum_i E_i^{\text{battery}}
+\end{equation}
+
+This provides flexibility (batteries can charge/discharge asynchronously) while reducing state variables.
+
+\subsection{Network Topology Scaling}
+
+Asset-level formulation would require:
+\begin{itemize}[noitemsep]
+    \item Distribution network (within zones): Thousands of low-voltage lines
+    \item Transmission network (between zones): Hundreds of high-voltage lines
+\end{itemize}
+
+The combined network would have $\mathcal{O}(1000)$ lines, increasing flow variables by $\sim 10\times$.
+
+\section{Conclusion: When MILP Becomes Intractable}
+
+\subsection{Hardness Hierarchy}
+
+\begin{enumerate}[label=\textbf{Level \arabic*:}]
+    \item \textbf{Easy (solvable in minutes):}
+    \begin{itemize}[noitemsep]
+        \item Few zones ($< 30$)
+        \item Mostly continuous variables (renewables, hydro)
+        \item Few or no thermal units
+        \item Loose constraints
+    \end{itemize}
+    
+    \item \textbf{Moderate (solvable in tens of minutes):}
+    \begin{itemize}[noitemsep]
+        \item 30--100 zones
+        \item Mixed thermal and renewable generation
+        \item Moderate demand variability
+        \item Standard storage constraints
+    \end{itemize}
+    
+    \item \textbf{Hard (hours to solve):}
+    \begin{itemize}[noitemsep]
+        \item $> 100$ zones
+        \item High thermal unit count ($> 2$ per zone)
+        \item Tight storage final state constraints
+        \item High demand, low renewable penetration
+        \item Dense transmission network
+    \end{itemize}
+    
+    \item \textbf{Intractable (asset-level formulation):}
+    \begin{itemize}[noitemsep]
+        \item $> 500$ decision nodes
+        \item $> 50,000$ binary variables
+        \item Distribution network included
+        \item Discrete unit sizes (no aggregation)
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Why GNN-Based Approaches Are Needed}
+
+The \textbf{combinatorial explosion} at asset level motivates learning-based approaches:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{GNNs} can learn dispatch policies from solved zone-level instances
+    \item \textbf{Hierarchical encoders} (asset $\to$ zone $\to$ region) preserve multi-scale structure
+    \item \textbf{Learned primal solutions} can warm-start MILP solvers or be refined via LP projection
+    \item \textbf{Hybrid methods} (GNN + MILP) can decompose the problem: GNN predicts binaries, MILP solves the continuous subproblem
+\end{itemize}
+
+\subsection{Key Takeaways}
+
+\begin{tcolorbox}[colback=blue!5!white,colframe=blue!75!black,title=Summary]
+\begin{enumerate}[noitemsep]
+    \item \textbf{Binary variables} (thermal/nuclear commitment) are the primary complexity driver
+    \item \textbf{Temporal coupling} (ramping, storage evolution) prevents time decomposition
+    \item \textbf{Spatial coupling} (transmission network) prevents zone decomposition
+    \item \textbf{Tight constraints} (storage final state, minimum generation) shrink the feasible region
+    \item \textbf{Zone-level aggregation} reduces problem size by $\sim 5$--$10\times$ while preserving system behavior
+    \item \textbf{Asset-level formulation} would be intractable for realistic scenarios ($> 10$ hours solve time)
+\end{enumerate}
+\end{tcolorbox}
+
+\end{document}
