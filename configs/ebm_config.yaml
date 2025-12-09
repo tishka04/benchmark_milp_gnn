@@ -1,0 +1,111 @@
+# Configuration for EBM Training
+# Energy-Based Model for UC/DR/Storage Binary Variable Learning
+
+# Data settings
+data:
+  scenarios_dir: "outputs/scenarios_v1"
+  embedding_cache_dir: null  # Set to path if embeddings are cached
+  train_split: 0.8
+  val_split: 0.2
+  temporal: false  # Whether to preserve temporal structure
+  
+# Model settings
+model:
+  type: "structured"  # Options: basic, structured, factorized
+  dim_u: 672  # Binary decision dimension (96 timesteps × 7 vars/timestep)
+  dim_h: 128  # Graph embedding dimension
+  hidden_dims: [256, 256, 64]  # MLP hidden layers
+  activation: "gelu"  # Options: gelu, silu
+  dropout: 0.1
+  
+  # Structured model specific
+  use_quadratic: true
+  quadratic_rank: 16
+  
+# Training settings
+training:
+  batch_size: 32
+  num_epochs: 100
+  learning_rate: 0.0001
+  weight_decay: 0.00001
+  gradient_clip: 1.0
+  
+  # Optimizer
+  optimizer: "adamw"
+  
+  # Learning rate schedule
+  use_scheduler: true
+  scheduler_type: "cosine"  # Options: cosine, step, exponential
+  warmup_epochs: 5
+  
+# Sampling settings
+sampling:
+  method: "gibbs"  # Options: gibbs, sgld, pcd
+  num_gibbs_steps: 50
+  temperature: 1.0
+  
+  # Temperature annealing
+  initial_temperature: 2.0
+  final_temperature: 1.0
+  anneal_steps: 10000
+  
+  # PCD specific
+  use_pcd: false
+  num_pcd_chains: 100
+  
+  # Negative samples
+  num_negative_samples_train: 1
+  num_negative_samples_val: 5
+  
+# Evaluation settings
+evaluation:
+  validate_every: 5  # Validate every N epochs
+  save_every: 10  # Save checkpoint every N epochs
+  
+  # Metrics to track
+  metrics:
+    - energy_gap
+    - classification_accuracy
+    - feasibility_rate
+    - sample_diversity
+    - constraint_violations
+    
+# Logging settings
+logging:
+  use_wandb: false
+  wandb_project: "milp-ebm"
+  wandb_entity: null
+  log_interval: 10  # Log every N batches
+  
+  # Checkpoints
+  checkpoint_dir: "outputs/ebm_models"
+  save_best: true
+  save_last: true
+  
+# Device settings
+device: "cuda"  # Options: cuda, cpu
+seed: 42
+
+# Constraints to learn (for evaluation)
+constraints:
+  battery_simultaneous: true
+  pumped_simultaneous: true
+  temporal_consistency: true
+  ramping_limits: true
+  max_ramp_rate: 2
+  
+# Advanced settings
+advanced:
+  # Mixed precision training
+  use_amp: false
+  
+  # Distributed training
+  distributed: false
+  
+  # Energy regularization
+  energy_reg_weight: 0.01
+  
+  # Early stopping
+  early_stopping: true
+  patience: 20
+  min_delta: 0.001

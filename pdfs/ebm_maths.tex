@@ -1,0 +1,213 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{hyperref}
+\usepackage{bm}
+
+\title{Technical Note:\\
+Energy-Based Model for UC/DR/Storage Configurations\\
+Conditioned on 128-Dimensional Graph Embeddings}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{1. Problem Setting}
+
+For each scenario $t$, we dispose of:
+\begin{itemize}
+    \item A graph-derived embedding $h_t \in \mathbb{R}^{128}$.
+    \item A binary decision vector 
+    \[
+        u_t \in \{0,1\}^N,
+    \]
+    representing UC flags, DR activations, and discrete storage choices.
+\end{itemize}
+
+We aim to learn an Energy-Based Model (EBM) of the form:
+\[
+    E_\theta(u \mid h) \in \mathbb{R},
+\]
+such that MILP-feasible configurations satisfy
+\[
+    E_\theta(u^+ \mid h) < E_\theta(u^- \mid h),
+\]
+where $u^+$ are MILP solutions and $u^-$ are negative samples produced by a sampler.
+
+This induces the model distribution:
+\[
+    p_\theta(u \mid h)
+    = \frac{\exp\!\left( - E_\theta(u \mid h) \right)}
+           {Z(h)},
+\qquad
+Z(h) = \sum_{u} \exp( -E_\theta(u \mid h) ).
+\]
+
+\section*{2. Energy Function Architecture}
+
+We construct the input:
+\[
+    x = \big[\, u \;\|\; h \;\|\; (u \odot h) \,\big],
+\]
+where:
+\begin{itemize}
+    \item $u \odot h$ is an elementwise bilinear interaction,
+    \item $\|\,$ denotes concatenation.
+\end{itemize}
+
+The energy is modeled as a multilayer perceptron:
+\[
+    E_\theta(u \mid h)
+    = f_\theta(x),
+\]
+with:
+\[
+    f_\theta(x)
+    =
+    W_3 \,\phi\!\left(
+        W_2 \,\phi\!\left(W_1 x + b_1\right) + b_2
+    \right)
+    + b_3,
+\]
+where $\phi$ is GELU or SiLU.
+
+\paragraph{Recommended layer sizes:}
+\[
+    W_1: (N + 128 + N) \rightarrow 256,\qquad
+    W_2: 256 \rightarrow 256,\qquad
+    W_3: 256 \rightarrow 64 \rightarrow 1.
+\]
+
+\section*{3. Optional Structured Energy Extension}
+
+We may add a quadratic interaction learned from the context:
+\[
+    E_\theta(u \mid h)
+    =
+    f_\theta(x)
+    +
+    u^\top A_\theta(h)\,u,
+\]
+where $A_\theta(h) \in \mathbb{R}^{N \times N}$ is predicted by a secondary network.
+
+A factorized decomposition is also possible:
+\[
+    E(u \mid h)
+    = \sum_i \phi_i(u_i, h)
+    + \sum_{i,j} \psi_{ij}(u_i, u_j, h),
+\]
+useful to encode ramping, min-up/min-down or storage consistency.
+
+\section*{4. Training Objective: Conditional Contrastive Divergence}
+
+Given positive samples $u^+$ and negative samples $u^-$ obtained from a sampler targeting $p_\theta(u\mid h)$, the objective is:
+\[
+    \mathcal{L}(\theta)
+    =
+    \mathbb{E}\!\left[E_\theta(u^+ \mid h)\right]
+    -
+    \mathbb{E}\!\left[E_\theta(u^- \mid h)\right].
+\]
+
+Its gradient is:
+\[
+    \nabla_\theta \mathcal{L}
+    =
+    \mathbb{E}\!\left[\nabla_\theta E_\theta(u^+ \mid h)\right]
+    -
+    \mathbb{E}\!\left[\nabla_\theta E_\theta(u^- \mid h)\right].
+\]
+
+Optimization: AdamW, $10^{-4}$ recommended; batch size 32–128.
+
+\section*{5. Gibbs Sampling}
+
+For each coordinate $u_i \in \{0,1\}$:
+
+\[
+    p(u_i = 1 \mid u_{-i}, h)
+    =
+    \frac{
+        \exp\!\left( -E_\theta(u_i{=}1, u_{-i} \mid h) \right)
+    }{
+        \exp\!\left( -E_\theta(u_i{=}1, u_{-i} \mid h) \right)
+        +
+        \exp\!\left( -E_\theta(u_i{=}0, u_{-i} \mid h) \right)
+    }.
+\]
+
+Sampling:
+\[
+    u_i \leftarrow \mathrm{Bernoulli}\!\left( p(u_i=1 \mid u_{-i}, h) \right).
+\]
+
+After $K$ iterations, the resulting sample $u^-$ approximates $p_\theta(u \mid h)$.
+
+\section*{6. Discrete SGLD Alternative}
+
+Define continuous dynamics:
+\[
+    u_{t+1}
+    =
+    u_t - \eta \nabla_u E_\theta(u_t \mid h)
+    + \sqrt{2\eta}\,\xi_t,
+\qquad
+\xi_t \sim \mathcal{N}(0, I),
+\]
+then threshold:
+\[
+    u_i =
+    \begin{cases}
+        1, & u_i > 0.5,\\
+        0, & \text{otherwise}.
+    \end{cases}
+\]
+
+\section*{7. Integration in the UC/DR/Storage Pipeline}
+
+\begin{enumerate}
+    \item MILP oracle provides exact feasible configurations $u^+$.
+    \item GNN encoder provides embeddings $h$.
+    \item EBM learns $E_\theta(u \mid h)$.
+    \item Gibbs/SGLD sampler produces candidate configurations $u^-$.
+    \item LP Worker validates feasibility and computes dispatch cost.
+\end{enumerate}
+
+\section*{8. Evaluation Metrics}
+
+\begin{itemize}
+    \item \textbf{Feasibility Rate}:\; $\Pr[\mathrm{LP}(u^-)~\text{feasible}]$.
+    \item \textbf{Energy Gap}:\; $E(u^+) - E(u^-)$.
+    \item \textbf{Hamming distance} between $u^+$ and $u^-$.
+    \item \textbf{Optimality Gap}: relative cost vs MILP optimum.
+    \item \textbf{Mixing Speed}: convergence diagnostics of the sampler.
+\end{itemize}
+
+\section*{9. Prototype PyTorch Implementation}
+
+\begin{verbatim}
+class EBM(nn.Module):
+    def __init__(self, dim_u, dim_h=128):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(dim_u + dim_h + dim_u, 256),
+            nn.GELU(),
+            nn.Linear(256, 256),
+            nn.GELU(),
+            nn.Linear(256, 64),
+            nn.GELU(),
+            nn.Linear(64, 1)
+        )
+
+    def forward(self, u, h):
+        uh = u * h.mean(-1, keepdim=True)
+        x = torch.cat([u, h, uh], dim=-1)
+        return self.net(x)
+\end{verbatim}
+
+\end{document}
