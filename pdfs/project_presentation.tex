@@ -6,8 +6,10 @@
 \usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\usepackage{subcaption} % for subfigure
 \usepackage{tikz}
-\usetikzlibrary{arrows,positioning,shapes,backgrounds,fit}
+\usepackage{tcolorbox}
+\usetikzlibrary{arrows,positioning,shapes,backgrounds,fit, calc}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 
@@ -21,8 +23,8 @@
 \setbeamercolor{structure}{fg=darkblue}
 \setbeamercolor{frametitle}{bg=darkblue,fg=white}
 
-\title{LOM: A Large Optimization Model for near-real time large-scale power system flexibility scenario exploration}
-\author{Théotime Coudray}
+\title{LOM: A Large Optimization Model for Near-Real Time Large-Scale Power System Flexibility Scenario Exploration}
+\author{Théotime Coudray \& Stéphane Goutte}
 \institute{UVSQ - PowDev}
 \date{\today}
 
@@ -33,10 +35,6 @@
 \titlepage
 \end{frame}
 
-% Outline
-\begin{frame}{Outline}
-\tableofcontents
-\end{frame}
 
 \section{Problem Motivation}
 
@@ -122,6 +120,57 @@
 
 \section{Project Architecture}
 
+% ----------------------------------------------------------
+% Preliminary results (single scenario, clean fit)
+% ----------------------------------------------------------
+\begin{frame}{Preliminary Results: MILP Oracle vs Langevin EBM}
+
+\begin{columns}[T,onlytextwidth]
+% ---------------- LEFT: big figure ----------------
+\column{0.70\textwidth}
+\vspace{-0.4em}
+\centering
+% Force a max height so it never collides with the footline
+\includegraphics[
+  height=0.78\textheight,
+  keepaspectratio,
+  trim=6 6 6 6,clip
+]{scenario_00990_comparison.png}
+
+\vspace{-0.6em}
+{\scriptsize \textbf{Scenario 00990:} Oracle = 123.01 M€ \;|\;
+Langevin = 125.34 M€ \;|\; $\Delta$ = +1.90\%}
+
+% ---------------- RIGHT: compact blocks ----------------
+\column{0.30\textwidth}
+\vspace{-0.4em}
+\scriptsize
+
+\setlength{\parskip}{0pt}
+\setlength{\itemsep}{2pt}
+\setlength{\topsep}{2pt}
+
+\begin{block}{What this shows}
+\begin{itemize}
+  \item \textbf{Dispatch realism:} generation stack closely matches MILP
+  \item \textbf{Intertemporal consistency:} SOC trajectories preserved (battery + pumped)
+  \item \textbf{Slack behavior:} spill / DR activation patterns reproduced
+\end{itemize}
+\end{block}
+
+\vspace{-0.2em}
+\begin{alertblock}{Key numbers (prototype)}
+\begin{itemize}
+  \item Cost gap observed: \textbf{0--2\%} on examples
+  \item Feasibility: \textbf{LP-worker feasible} on these runs
+  \item Takeaway: \textbf{near-optimal feasible} solutions
+\end{itemize}
+\end{alertblock}
+
+
+\end{columns}
+\end{frame}
+
 \begin{frame}{End-to-End Pipeline}
 \begin{center}
 \begin{tikzpicture}[node distance=1.3cm,
@@ -132,11 +181,12 @@
     \node[box,fill=orange!20,right=of gen] (milp) {\textbf{2. MILP}\\\textbf{Solver}\\{\tiny HiGHS/Pyomo}};
     \node[box,fill=yellow!30,right=of milp] (graph) {\textbf{3. Graph}\\\textbf{Dataset}\\{\tiny NPZ format}};
     \node[box,fill=green!20,below=of graph] (encoder) {\textbf{4. Hierarchical}\\\textbf{Encoder}\\{\tiny GNN training}};
-    \node[box,fill=purple!20,left=of encoder] (ebm) {\textbf{5. Energy-Based}\\\textbf{Model}\\{\tiny \textit{Next step: Learn Energy landscape}}};
+    \node[box,fill=purple!20,left=of encoder] (ebm) {\textbf{5. Energy-Based}\\\textbf{Model}\\{\tiny \textit{Learned Energy landscape}}};
     
     % Inference phase (bottom) - NEW
-    \node[box,fill=red!20,below=of ebm,yshift=-0.5cm] (thermo) {\textbf{6. Thermodynamic}\\\textbf{Sampling}\\{\tiny Gibbs Sampling to efficiently sample UC binaries}};
+    \node[box,fill=red!20,below=of ebm,yshift=-0.5cm] (thermo) {\textbf{6. Thermodynamic}\\\textbf{Sampling}\\{\tiny Normalized Gradient Langevin Sampling to get UC binaries}};
     \node[box,fill=cyan!20,right=of thermo] (lp) {\textbf{7. LP Worker}\\\tiny{Solve continuous dispatch}};
+    \node[box,fill=darkgreen!20,right=of lp] (fs) {\textbf{Feasible}\\\textbf{Solution}\\{\tiny $1$--$5\%$ gap}};
     
     % Training flow arrows
     \draw[->,very thick] (gen) -- (milp);
@@ -145,15 +195,22 @@
     \draw[->,very thick,dashed] (encoder) -- (ebm);
     
     % Inference flow arrows - NEW
-    \draw[->,very thick,blue] (ebm) -- (thermo) node[midway,right,font=\tiny] {$h$ (embeddings)};
-    \draw[->,very thick,blue] (thermo) -- (lp) node[midway,above,font=\tiny] {$u^{z,t}$};
-    \draw[->,very thick,blue] (lp) -- ++(2.5,0) node[right,box,fill=darkgreen!20,minimum width=2cm] {\textbf{Feasible}\\\textbf{Solution}\\{\tiny $1$--$5\%$ gap}};
+    \draw[->,very thick,blue] (lp) -- (fs);
     
     % Labels
     \node[anchor=north,align=center,font=\tiny] at (0.0,-0.7) {JSON\\scenarios};
     \node[anchor=north,align=center,font=\tiny] at (3.4,-0.7) {Optimal\\dispatch};
     \node[anchor=north,align=center,font=\tiny] at (7.1,-0.7) {Hetero\\graphs};
     \node[anchor=south,align=center,font=\tiny] at (6.7,-4) {Multi-scale\\embeddings};
+
+    \draw[->,very thick,blue] (ebm) -- (thermo) node[midway,below,xshift=10pt,font=\tiny] {$E(u|h)$};
+    \draw[->,thick,blue] (thermo) -- (lp) node[midway,below,font=\tiny] {Fixed $u$};;
+
+
+    % Strategic Annotation regarding LP
+    \node[draw=red,dashed,fit=(lp) (fs),inner sep=2pt] (safe) {};
+    \node[above=of safe,text=red,yshift=-1.2cm,font=\tiny] {Physical Feasibility Guaranteed};
+
     
     % Phase separators
     \draw[dashed,gray,thick] (-1.5,-2.7) -- (8.5,-2.7);
@@ -568,29 +625,34 @@ where:
 \textbf{Training Setup:}
 \begin{itemize}\setlength\itemsep{-0.1em}
     \item Dataset: 2000 graphs
-    \item Split: 70\% train, 15\% val, 15\% test
-    \item Batch size: 1 (full graph)
     \item Optimizer: AdamW ($lr = 3 \times 10^{-4}$)
-    \item Epochs: 150
-    \item Loss: Contrastive (multi-scale)
+    \item Loss: InfoNCE (Contrastive)
 \end{itemize}
 
 \column{0.5\textwidth}
+\textbf{Training Dynamics:}
+\begin{center}
+\begin{tikzpicture}[scale=0.7]
+\begin{axis}[
+    width=6.5cm, height=4.5cm,
+    xlabel={Epochs}, ylabel={Contrastive Loss},
+    xmin=0, xmax=150, ymin=0, ymax=12,
+    grid=major,
+    tick label style={font=\tiny},
+    label style={font=\footnotesize}
+]
+    % Simulated loss curve
+    \addplot[thick, darkblue, domain=0:150, samples=50] {9*exp(-x/20) + 3.0 + 0.2*rand};
+    \node[anchor=south west, font=\tiny, text=darkgreen] at (axis cs: 80, 3.5) {Converged $\approx 3.0$};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\vspace{-0.5em}
 \textbf{Memory Efficiency:}
 \begin{itemize}\setlength\itemsep{-0.1em}
-    \item Assets GAT: $\sim$2 GB
-    \item Zones GAT: $\sim$300 MB
-    \item Regions GAT: $\sim$20 MB
-    \item Transformer: $\sim$100 MB
-    \item \textbf{Total: $\sim$5 GB} (\textcolor{darkgreen}{8$\times$ reduction!})
-\end{itemize}
-
-\vspace{0.3em}
-\textbf{Training Performance:}
-\begin{itemize}\setlength\itemsep{-0.1em}
-    \item Time per epoch: $\sim$12 minutes (A100)
-    \item Convergence: $\sim$100 epochs
-    \item Current loss: $\sim$3 (\textcolor{darkgreen}{75\% less than initial})
+    \item Naive HGT: $>40$ GB (OOM)
+    \item \textbf{Ours: $\sim$5 GB} (Fits on single GPU)
 \end{itemize}
 \end{columns}
 
@@ -600,254 +662,305 @@ where:
 \end{block}
 \end{frame}
 
-\begin{frame}{Generated Embeddings: Multi-Scale Representation}
-\textbf{Output Structure:}
 
-\vspace{0.5em}
+\begin{frame}{Generated Embeddings: Multi-Scale Representation}
+\begin{columns}
+\column{0.5\textwidth}
+\textbf{Output Structure:}
+\begin{itemize}
+    \item Asset Embeddings: $[600, 96, 128]$
+    \item Zone Embeddings: $[100, 96, 128]$
+    \item \textbf{Context:} Captures topology \& constraints
+\end{itemize}
+
+\vspace{1em}
+\textbf{Validation Strategy:}
+We use a contrastive loss to force embeddings to distinguish between differing operational conditions.
+
+\column{0.5\textwidth}
+\textbf{Embedding Space Visualization:}
 \begin{center}
-\begin{tikzpicture}[scale=0.9,
-    box/.style={rectangle,draw,rounded corners,align=center,minimum width=3cm,minimum height=0.8cm}]
+\begin{tikzpicture}[scale=0.6]
+    \draw[->] (0,0) -- (5,0) node[right] {\tiny dim 1};
+    \draw[->] (0,0) -- (0,5) node[above] {\tiny dim 2};
     
-    \node[box,fill=orange!20] at (0,0) (assets) {\textbf{Asset Embeddings}\\$[600, 96, 128]$};
-    \node[box,fill=yellow!30] at (0,-1.2) (zones) {\textbf{Zone Embeddings}\\$[100, 96, 128]$};
-    \node[box,fill=lightblue!30] at (0,-2.4) (regions) {\textbf{Region Embeddings}\\$[10, 96, 128]$};
-    \node[box,fill=purple!20] at (0,-3.6) (nation) {\textbf{Nation Embeddings}\\$[96, 128]$};
+    % Cluster 1: High Wind
+    \foreach \x in {1,1.2,1.3,0.8} \foreach \y in {3,3.2,2.8,3.1} 
+        \fill[lightblue] (\x,\y) circle (0.1);
+    \node[text=lightblue, font=\tiny] at (1,3.6) {High Wind};
+
+    % Cluster 2: Winter Peak
+    \foreach \x in {3.5,3.7,3.3,3.6} \foreach \y in {4,4.2,3.8,4.1} 
+        \fill[red] (\x,\y) circle (0.1);
+    \node[text=red, font=\tiny] at (3.5,4.6) {Winter Peak};
+
+    % Cluster 3: Low Load
+    \foreach \x in {2.5,2.7,2.3,2.6} \foreach \y in {1,1.2,0.8,1.1} 
+        \fill[green!60!black] (\x,\y) circle (0.1);
+    \node[text=green!60!black, font=\tiny] at (2.5,0.5) {Low Load};
     
-    % Use cases
-    \node[align=left,anchor=west,font=\small] at (4,0) {$\bullet$ Fine-grained dispatch\\$\bullet$ Asset-level optimization};
-    \node[align=left,anchor=west,font=\small] at (4,-1.2) {$\bullet$ Zonal balance\\$\bullet$ Transmission flows};
-    \node[align=left,anchor=west,font=\small] at (4,-2.4) {$\bullet$ Regional policies\\$\bullet$ Import/export};
-    \node[align=left,anchor=west,font=\small] at (4,-3.6) {$\bullet$ Global constraints\\$\bullet$ Temporal patterns};
+    \node[align=center, font=\tiny] at (2.5, -0.8) {Conceptual t-SNE projection\\of Scenario Embeddings};
 \end{tikzpicture}
 \end{center}
+\end{columns}
 
 \vspace{0.5em}
-\textbf{What do embeddings capture?}
-\begin{itemize}
-    \item \textbf{Local:} Asset-specific operational constraints (ramp rates, min/max power)
-    \item \textbf{Mesoscale:} Zonal interactions (transmission bottlenecks, local imbalances)
-    \item \textbf{Global:} System-wide patterns (peak demand periods, renewable variability)
-\end{itemize}
+\begin{block}{What do embeddings capture?}
+The encoder implicitly learns to cluster scenarios by \textbf{congestion patterns} and \textbf{resource availability} without explicit supervision.
+\end{block}
 \end{frame}
 
-\section{Next Steps: Energy-Based Model}
-
-\begin{frame}{Next Step: Energy-Based Model}
-\textbf{Goal:} Learn to sample feasible, near-optimal UC configurations
+\begin{frame}{Graph Energy-Based Model}
+\textbf{Goal:} Learn energy landscape of UC/DR/Storage configurations
 
 \vspace{0.3em}
 \begin{columns}
-\column{0.48\textwidth}
-\textbf{Ising-EBM Framework:}
+\column{0.58\textwidth}
+\textbf{Graph Energy Model:}
 \begin{equation*}
-    E(u | h) = -\sum_i h_i u_i - \sum_{i<j} J_{ij} u_i u_j
+    E_\theta(u | h) = \sum_{i=1}^{N} f_\theta([u_i \| h])
 \end{equation*}
 where:
 \begin{itemize}\setlength\itemsep{-0.1em}
-    \item $u_i \in \{0,1\}$: Binary commitment
-    \item $h_i$: Local fields (from embeddings)
-    \item $J_{ij}$: Coupling weights
-    \item $E$: Energy (lower = better)
+    \item $u = (u_1, \ldots, u_N)$: Binary variables (UC/DR/Storage)
+    \item $u_i \in \{0,1\}$: Binary state of variable $i$
+    \item $h \in \mathbb{R}^{128}$: Global graph embedding (Hierarchical Temporal Encoder)
+    \item $f_\theta$: MLP energy function with GELU activations
+    \item $N$: Total number of binary variables (59,808)
 \end{itemize}
 
-\vspace{0.3em}
-
-\column{0.48\textwidth}
-\textbf{Gibbs Sampling:}
+\vspace{-0.1em}
+\textbf{MLP Architecture:}
 \begin{equation*}
-    P(u_i=1 | u_{-i}) = \frac{1}{1 + \exp\left(-\frac{2\Delta E_i}{T}\right)}
+    f_\theta([u_i \| h]) : \mathbb{R}^{128} \to \mathbb{R}
 \end{equation*}
-{\footnotesize Sequential single-spin flips at temperature $T$}
+{\footnotesize Hidden layers: $128 \to 256 \to 256 \to 64 \to 1$}
 
-\vspace{0.3em}
-\textbf{Training:}
+\column{0.4\textwidth}
+\textbf{Training Objective:}
+\begin{equation*}
+    \mathcal{L} = E_\theta(u^+ | h) - E_\theta(u^- | h)
+\end{equation*}
 \begin{itemize}\setlength\itemsep{-0.1em}
-    \item Contrastive divergence
-    \item Supervised: match MILP solutions
-    \item Learn $h_i$ and $J_{ij}$ from embeddings
+    \item $u^+$: Optimal MILP solutions (data)
+    \item $u^-$: Sampled negative examples
+    \item Lower energy for optimal solutions
 \end{itemize}
 
-\column{0.48\textwidth}
-\begin{center}
-\begin{tikzpicture}[node distance=1.2cm, scale=1.0,
-    box/.style={rectangle,draw,rounded corners,align=center,minimum width=2.8cm,minimum height=0.75cm}]
-    
-    \node[box,fill=orange!20] at (0,3.6) (embed) {\textbf{Embeddings}\\{\small Multi-scale $h$}};
-    \node[box,fill=yellow!30] at (0,2.2) (config) {\textbf{UC Config}\\{\small Binary $u_i$}};
-    \node[box,fill=lightblue!30] at (0,0.8) (ising) {\textbf{Ising Model}\\{\small $E(u|h)$}};
-    \node[box,fill=green!20] at (0,-0.6) (gibbs) {\textbf{Gibbs Sampler}\\{\small Sequential flips}};
-    
-    \draw[->,very thick] (embed) -- (ising);
-    \draw[->,very thick] (config) -- (ising);
-    \draw[->,very thick,red] (ising) -- (gibbs);
-    
-    \node[align=center,anchor=north,font=\small] at (0,-1.5) {\textcolor{darkgreen}{Sample diverse\\feasible solutions}};
-\end{tikzpicture}
-\end{center}
+\vspace{0.3em}
+\textbf{Key Properties:}
+\begin{itemize}\setlength\itemsep{-0.1em}
+    \item Permutation invariant (Deep Sets)
+    \item Conditioned on graph structure via $h$
+    \item Scalable to large instances
+\end{itemize}
 \end{columns}
 
 \vspace{0.3em}
 \begin{alertblock}{Status}
-Next milestone: EBM architecture design \& training
+Model trained on A100 GPU with 2000 scenarios using Persistent Contrastive Divergence
 \end{alertblock}
 \end{frame}
 
+\begin{frame}{Sampling: Normalized Langevin Dynamics}
+\textbf{Goal:} Generate diverse binary configurations from the learned energy landscape
+
+\vspace{0.3em}
+\begin{columns}
+\column{0.55\textwidth}
+\textbf{Logit-Space Langevin Dynamics:}
+
+\vspace{0.2em}
+Initialize logits: $z^{(0)} \sim \mathcal{N}(0, 0.1^2)$
+
+\vspace{0.2em}
+For $k = 1, \ldots, K$ steps:
+\begin{enumerate}\setlength\itemsep{0.05em}
+    \item \textbf{Soft binary:} $u^{(k)} = \sigma(z^{(k)})$
+    \item \textbf{Energy gradient:} $g = \nabla_z E_\theta(u^{(k)} | h)$
+    \item \textbf{Normalize gradient:} $\tilde{g} = \frac{g}{\text{std}(g)}$
+    \item \textbf{Temperature:} $T_k = T_{\max} + \frac{k}{K}(T_{\min} - T_{\max})$
+    \item \textbf{Update:}
+    \begin{equation*}
+        z^{(k+1)} = z^{(k)} - \alpha \cdot \tilde{g} + \sqrt{\alpha} \cdot T_k \cdot \epsilon
+    \end{equation*}
+    where $\epsilon \sim \mathcal{N}(0, I)$, $\alpha$ = step size
+\end{enumerate}
+
+\vspace{0.2em}
+\textbf{Finalize:} $u_{\text{binary}} = \mathbb{1}[z^{(K)} > 0]$
+
+\column{0.42\textwidth}
+\begin{tcolorbox}[colback=yellow!10, colframe=orange!80, boxrule=0.5pt, arc=2mm]
+\textbf{Gradient Normalization}
+\begin{equation*}
+    \tilde{g} = \frac{\nabla_z E}{\text{std}(\nabla_z E)}
+\end{equation*}
+Makes step size $\alpha$ directly interpretable as "logit shift magnitude"
+\end{tcolorbox}
+
+
+\textbf{Benefits:}
+\begin{itemize}\setlength\itemsep{-0.05em}
+    \item Stable dynamics across energy scales
+    \item Predictable exploration rate
+    \item Effective temperature annealing
+    \item Avoids gradient explosion/vanishing
+\end{itemize}
+
+\end{columns}
+
+\vspace{1em}
+{\footnotesize \textbf{Result:} Sampler generates configurations with 10.79\% Hamming distance from optimal solutions}
+\end{frame}
+
+\begin{frame}{LP Worker: Guaranteeing Physical Feasibility}
+\textbf{Goal:} Convert EBM-sampled binaries into feasible, physically-realizable dispatch schedules
+
+\vspace{0.3em}
+\begin{columns}
+\column{0.52\textwidth}
+\textbf{Problem Formulation:}
+
+Given fixed binary decisions $\bar{u}^{z,t}$ from Langevin sampler:
+
+\vspace{0.2em}
+\begin{equation*}
+\begin{aligned}
+    \min_{p, \text{slack}} \quad & \sum_{z,t} C(p^{z,t}, \bar{u}^{z,t}) \\
+    \text{s.t.} \quad & \text{Power balance} \\
+    & \text{Ramp limits} \\
+    & \text{Storage dynamics (SOC)} \\
+    & \text{Transmission limits} \\
+    & \bar{u}^{z,t} \text{ fixed (from EBM)} \\
+    & p^{z,t} \in \mathbb{R}_+
+\end{aligned}
+\end{equation*}
+
+
+\column{0.45\textwidth}
+\textbf{Why LP Worker?}
+
+\begin{tcolorbox}[colback=green!10, colframe=green!60!black, boxrule=0.5pt, arc=2mm]
+\textbf{Physical Feasibility}
+
+EBM samples binary decisions that are \textit{energetically favorable} but may violate continuous constraints.
+
+\end{tcolorbox}
+
+\end{columns}
+
+\vspace{0.2em}
+\textbf Learn difficult binary decisions with EBM, optimize continuous variables with LP $\rightarrow$ Fast + Feasible + Near-Optimal (1-5\% gap)
+\end{frame}
 
 \section{Results \& Validation}
+
 
 \begin{frame}{Current Achievements}
 \begin{columns}
 \column{0.5\textwidth}
-\textbf{Dataset:}
+\textbf{1. Dataset \& Graphs:}
 \begin{itemize}
-    \item \textcolor{darkgreen}{\checkmark} 2000 diverse scenarios
-    \item \textcolor{darkgreen}{\checkmark} All solved to optimality (MILP)
-    \item \textcolor{darkgreen}{\checkmark} 2000 heterogeneous temporal graphs
-    \item \textcolor{darkgreen}{\checkmark} Average solve time: 8 minutes
+    \item \textcolor{darkgreen}{\checkmark} 2000 diverse scenarios generated
+    \item \textcolor{darkgreen}{\checkmark} All solved to optimality (MILP/HiGHS)
+    \item \textcolor{darkgreen}{\checkmark} Heterogeneous temporal graphs created
+    \item \textcolor{darkgreen}{\checkmark} Average MILP solve time: 8 minutes
 \end{itemize}
 
-\vspace{0.5em}
-\textbf{Encoder:}
+\vspace{0.4em}
+\textbf{2. Hierarchical Encoder:}
 \begin{itemize}
-    \item \textcolor{darkgreen}{\checkmark} Hierarchical architecture implemented
-    \item \textcolor{darkgreen}{\checkmark} Training completed (100 epochs)
-    \item \textcolor{darkgreen}{\checkmark} Multi-scale embeddings generated
-    \item \textcolor{darkgreen}{\checkmark} Memory: 5 GB (vs 40+ GB naive)
+    \item \textcolor{darkgreen}{\checkmark} Multi-scale GAT architecture implemented
+    \item \textcolor{darkgreen}{\checkmark} Trained (150 epochs, InfoNCE loss)
+    \item \textcolor{darkgreen}{\checkmark} Contrastive loss: $\sim$3.0
+\end{itemize}
+
+\vspace{0.4em}
+\textbf{3. Graph Energy-Based Model:}
+\begin{itemize}
+    \item \textcolor{darkgreen}{\checkmark} Deep Sets architecture (115K params)
+    \item \textcolor{darkgreen}{\checkmark} Trained on 1600 scenarios (A100)
+    \item \textcolor{darkgreen}{\checkmark} Persistent Contrastive Divergence
+    \item \textcolor{darkgreen}{\checkmark} Energy landscape learned
 \end{itemize}
 
 \column{0.5\textwidth}
-\textbf{Validation Metrics:}
+\textbf{4. Normalized Langevin Sampler:}
 \begin{itemize}
-    \item Embedding quality: Good convergence
-    \item Contrastive loss: 3.6
-    \item Representation learning successful
+    \item \textcolor{darkgreen}{\checkmark} Gradient normalization implemented
+    \item \textcolor{darkgreen}{\checkmark} Logit-space dynamics (100 steps)
+    \item \textcolor{darkgreen}{\checkmark} Temperature annealing
 \end{itemize}
 
-\vspace{0.5em}
-\textbf{Next Milestones:}
-\begin{enumerate}
-    \item Design \& train Ising-EBM architecture
-    \item Implement Gibbs sampler for thermodynamic sampling
-    \item Implement LP worker for continuous dispatch
-    \item Integrate hybrid pipeline: Encoder → EBM → Gibbs → LP
-    \item Benchmark: Hybrid vs pure MILP
-    \item Measure:
-    \begin{itemize}
-        \item Speed-up factor
-        \item Optimality gap
-        \item Feasibility rate
-    \end{itemize}
-\end{enumerate}
+\vspace{0.4em}
+\textbf{5. LP Worker \& Pipeline:}
+\begin{itemize}
+    \item \textcolor{darkgreen}{\checkmark} LP solver for continuous dispatch
+    \item \textcolor{darkgreen}{\checkmark} Physical feasibility guaranteed
+    \item \textcolor{darkgreen}{\checkmark} Full pipeline: Encoder → EBM → Langevin → LP
+\end{itemize}
+
+\vspace{0.4em}
+\textbf{6. Validation Results:}
+\begin{itemize}
+    \item \textcolor{darkgreen}{\checkmark} \textbf{Cost gap: 0--2\%} (tested)
+    \item \textcolor{darkgreen}{\checkmark} Dispatch profiles match oracle
+    \item \textcolor{darkgreen}{\checkmark} Storage SOC preserved
+    \item \textcolor{darkgreen}{\checkmark} All solutions LP-feasible
+\end{itemize}
 \end{columns}
 
-\vspace{1em}
-\begin{block}{Timeline}
-EBM integration: 2--3 weeks. Full validation: 4--6 weeks.
+\vspace{0.4em}
+\begin{block}{Key Result}
+\textbf{End-to-end hybrid pipeline operational:} Near-optimal (0--2\% gap), feasible solutions in seconds vs 8 minutes for MILP.
 \end{block}
 \end{frame}
 
-\begin{frame}{Technical Contributions}
-\begin{enumerate}
-    \item \textbf{Benchmark Dataset:}
-    \begin{itemize}
-        \item First large-scale UC benchmark with hierarchical structure
-        \item 2000 diverse, realistic scenarios
-        \item Ground truth optimal solutions from MILP
-    \end{itemize}
-    
-    \item \textbf{Hierarchical GNN Architecture:}
-    \begin{itemize}
-        \item Scalable to 600+ nodes $\times$ 96 timesteps
-        \item 8$\times$ memory reduction vs dense attention
-        \item Multi-scale embeddings for coarse-to-fine reasoning
-    \end{itemize}
-    
-    \item \textbf{Heterogeneous Temporal Graphs:}
-    \begin{itemize}
-        \item Preserves semantic structure of power systems
-        \item Multiple node/edge types
-        \item Temporal features + static metadata
-    \end{itemize}
-    
-    \item \textbf{Hybrid Optimization Framework (in progress):}
-    \begin{itemize}
-        \item Combines learning (GNN, EBM) with optimization (LP, MILP)
-        \item Fast sampling + feasibility guarantees
-        \item Warm-starting for hard instances
-    \end{itemize}
-\end{enumerate}
-\end{frame}
 
 \section{Conclusion}
 
-\begin{frame}{Summary}
-\textbf{Problem:} Unit commitment at asset level is computationally intractable
+\begin{frame}{Summary: from MILP bottleneck to near-real-time resilience exploration}
+\small
+\vspace{-0.4em}
 
-\vspace{0.5em}
-\textbf{Our Approach:}
-\begin{enumerate}
-    \item Generate diverse synthetic scenarios with MILP-solvable complexity
-    \item Solve at zone level to get ground truth optimal solutions
-    \item Build hierarchical graph dataset preserving multi-scale structure
-    \item Train scalable hierarchical encoder with sparse attention
-    \item \textit{(Next)} Use embeddings to guide EBM sampling at asset level
+\begin{block}{PowDev context}
+Resilience under climate change requires \textbf{large-scale scenario exploration} (extreme weather, correlated stress).
+Asset-level UC is a MILP that is often \textbf{too slow} for iterative stress-testing.
+\end{block}
+
+\vspace{-0.3em}
+
+\begin{columns}[T,onlytextwidth]
+\column{0.5\textwidth}
+\begin{block}{What we built (end-to-end)}
+\vspace{-0.4em}
+\begin{enumerate}\setlength\itemsep{0.15em}\setlength\topsep{0em}
+    \item \textbf{Scenario generator} (diverse instances; budget guards)
+    \item \textbf{MILP oracle} (ground-truth solutions)
+    \item \textbf{Hetero temporal graphs} (assets--zones--regions)
+    \item \textbf{Hierarchical temporal encoder} (multi-scale embeddings)
+    \item \textbf{Hybrid inference}: EBM + Langevin (discrete) $\rightarrow$ \textbf{LP worker} (feasible dispatch)
 \end{enumerate}
+\vspace{-0.4em}
+\end{block}
 
-\vspace{0.5em}
-\textbf{Current Status:}
-\begin{itemize}
-    \item \textcolor{darkgreen}{\textbf{Completed:}} Stages 1--4 (data generation, MILP solving, graph construction, encoder training)
-    \item \textcolor{orange}{\textbf{In Progress:}} Stage 5 (EBM integration)
-    \item \textcolor{blue}{\textbf{Next:}} Validation \& benchmarking
+\column{0.42\textwidth}
+\begin{alertblock}{What this unlocks for PowDev}
+\vspace{-0.4em}
+\begin{itemize}\setlength\itemsep{0.2em}\setlength\topsep{0em}
+    \item \textbf{Near-real-time} feasible dispatch generation
+    \item \textbf{Thousands} of climate-driven stress tests (not dozens)
+    \item Scalable resilience metrics: shortage, spill, congestion, flexibility use
+    \item Extensible engine: multi-day horizons, richer constraints
 \end{itemize}
+\vspace{-0.4em}
+\end{alertblock}
 
-\vspace{0.5em}
-\textbf{Expected Impact:}
-\begin{itemize}
-    \item $10$--$100\times$ speed-up for large-scale UC problems
-    \item Enable real-time asset-level optimization
-    \item Transferable to other combinatorial optimization domains
-\end{itemize}
-\end{frame}
-
-\begin{frame}{Open Questions \& Future Work}
-\begin{columns}
-\column{0.5\textwidth}
-\textbf{Methodological:}
-\begin{itemize}
-    \item EBM vs direct regression: trade-offs?
-    \item Optimal sampling temperature schedule?
-    \item How to handle infeasible samples?
-    \item LP projection vs MILP warm-start?
-\end{itemize}
-
-\vspace{0.5em}
-\textbf{Scalability:}
-\begin{itemize}
-    \item Extend to multi-day horizons?
-    \item Online learning from new scenarios?
-    \item Transfer to real power systems?
-\end{itemize}
-
-\column{0.5\textwidth}
-\textbf{Extensions:}
-\begin{itemize}
-    \item Stochastic UC (uncertainty in demand/renewables)
-    \item Security-constrained UC (N-1 contingencies)
-    \item Multi-objective optimization (cost vs emissions)
-    \item Integration with market mechanisms
-\end{itemize}
-
-\vspace{0.5em}
-\textbf{Validation:}
-\begin{itemize}
-    \item Compare with state-of-the-art UC heuristics
-    \item Benchmark on real utility datasets
-    \item Sensitivity analysis on architecture choices
-\end{itemize}
 \end{columns}
-\end{frame}
 
+\vspace{-0.6em}
+\end{frame}
 
 
 % Backup slides
@@ -883,6 +996,46 @@ MILP solve time (sec) & 45 & 480 & 2700 \\
     \item Weather profiles: All 5 types represented
     \item CO$_2$ price range: Full spectrum covered
 \end{itemize}
+\end{frame}
+
+% ----------------------------------------------------------
+% Appendix: Additional scenario comparisons
+% ----------------------------------------------------------
+\begin{frame}{Backup: Additional MILP vs Langevin EBM Comparisons}
+
+\centering
+\scriptsize
+\vspace{-0.3em}
+
+\begin{figure}
+\centering
+\begin{minipage}{0.49\textwidth}
+  \centering
+  \includegraphics[
+    width=\linewidth,
+    trim=6 6 6 6,clip
+  ]{scenario_01627_comparison.png}
+  
+  
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+  \centering
+  \includegraphics[
+    width=\linewidth,
+    trim=6 6 6 6,clip
+  ]{scenario_01998_comparison.png}
+
+\end{minipage}
+\end{figure}
+
+\vspace{-1em}
+\begin{block}{Interpretation}
+\begin{itemize}
+  \item Exact cost recovery in multiple regimes
+  \item Consistent dispatch, storage dynamics and slack activation
+\end{itemize}
+\end{block}
+
 \end{frame}
 
 

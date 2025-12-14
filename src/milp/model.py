@@ -33,6 +33,21 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
 
     m.demand = Param(m.Z, m.T, initialize=data.demand, mutable=False)
     m.dr_limit = Param(m.Z, m.T, initialize=data.dr_limit, mutable=False)
+    
+    # DR tiered blocks
+    m.dr_num_blocks = Param(initialize=data.dr_num_blocks, mutable=False)
+    m.DR_BLOCKS = RangeSet(0, data.dr_num_blocks - 1)
+    m.dr_block_limit = Param(m.Z, m.T, m.DR_BLOCKS, initialize=data.dr_block_limit, mutable=False)
+    m.dr_block_cost = Param(m.DR_BLOCKS, initialize=data.dr_block_cost, mutable=False)
+    
+    # DR rebound parameters
+    m.dr_rebound_decay = Param(initialize=data.dr_rebound_decay, mutable=False)
+    m.dr_rebound_tolerance = Param(initialize=data.dr_rebound_tolerance, mutable=False)
+    
+    # DR event constraints parameters
+    m.dr_max_events = Param(m.Z, initialize=data.dr_max_events, mutable=False)
+    m.dr_min_duration = Param(m.Z, initialize=data.dr_min_duration, mutable=False)
+    m.dr_ramp_limit = Param(m.Z, initialize=data.dr_ramp_limit, mutable=False)
     m.solar_available = Param(m.Z, m.T, initialize=data.solar_available, mutable=False)
     m.wind_available = Param(m.Z, m.T, initialize=data.wind_available, mutable=False)
     m.hydro_ror = Param(m.Z, m.T, initialize=data.hydro_ror_generation, mutable=False)
@@ -99,11 +114,15 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.spill_wind = Var(m.Z, m.T, within=NonNegativeReals)
 
     m.dr_shed = Var(m.Z, m.T, within=NonNegativeReals)
+    m.dr_shed_block = Var(m.Z, m.T, m.DR_BLOCKS, within=NonNegativeReals)  # DR per tier
+    m.dr_rebound = Var(m.Z, m.T, within=NonNegativeReals)  # DR energy backlog
+    m.dr_active = Var(m.Z, m.T, within=Binary)  # DR event indicator
     m.unserved = Var(m.Z, m.T, within=NonNegativeReals)
 
     m.b_charge = Var(m.Z, m.T, within=NonNegativeReals)
     m.b_discharge = Var(m.Z, m.T, within=NonNegativeReals)
     m.b_soc = Var(m.Z, m.T, within=NonNegativeReals)
+    m.b_charge_mode = Var(m.Z, m.T, within=Binary)  # 1=charge, 0=discharge
 
     m.h_release = Var(m.Z, m.T, within=NonNegativeReals)
     m.h_spill = Var(m.Z, m.T, within=NonNegativeReals)
@@ -112,10 +131,12 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.pumped_charge = Var(m.Z, m.T, within=NonNegativeReals)
     m.pumped_discharge = Var(m.Z, m.T, within=NonNegativeReals)
     m.pumped_level = Var(m.Z, m.T, within=NonNegativeReals)
+    m.pumped_charge_mode = Var(m.Z, m.T, within=Binary)  # 1=charge, 0=discharge
 
     m.flow = Var(m.L, m.T, within=Reals)
     m.net_import = Var(m.T, within=NonNegativeReals, bounds=(0.0, data.import_capacity))
     m.net_export = Var(m.T, within=NonNegativeReals, bounds=(0.0, data.import_capacity))
+    m.import_mode = Var(m.T, within=Binary)  # 1=import, 0=export
     m.overgen_spill = Var(m.Z, m.T, within=NonNegativeReals)
 
     # Thermal constraints
@@ -188,11 +209,67 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.solar_balance = Constraint(m.Z, m.T, rule=_solar_balance_rule)
     m.wind_balance = Constraint(m.Z, m.T, rule=_wind_balance_rule)
 
-    # Demand response bounds
-    def _dr_limit_rule(model, z, t):
+    # Demand response constraints
+    # DR total = sum of tiered blocks
+    def _dr_block_sum_rule(model, z, t):
+        return model.dr_shed[z, t] == sum(model.dr_shed_block[z, t, k] for k in model.DR_BLOCKS)
+    
+    m.dr_block_sum_con = Constraint(m.Z, m.T, rule=_dr_block_sum_rule)
+    
+    # Each block limited by its capacity
+    def _dr_block_limit_rule(model, z, t, k):
+        return model.dr_shed_block[z, t, k] <= model.dr_block_limit[z, t, k]
+    
+    m.dr_block_limit_con = Constraint(m.Z, m.T, m.DR_BLOCKS, rule=_dr_block_limit_rule)
+    
+    # Overall DR limit
+    def _dr_total_limit_rule(model, z, t):
         return model.dr_shed[z, t] <= model.dr_limit[z, t]
-
-    m.dr_limit_con = Constraint(m.Z, m.T, rule=_dr_limit_rule)
+    
+    m.dr_total_limit_con = Constraint(m.Z, m.T, rule=_dr_total_limit_rule)
+    
+    # DR rebound state evolution: e_dr[t] = (1-decay)*e_dr[t-1] + dt*dr_shed[t]
+    def _dr_rebound_evolution_rule(model, z, t):
+        if t == model.T.first():
+            return model.dr_rebound[z, t] == model.dt_hours * model.dr_shed[z, t]
+        else:
+            decay = model.dr_rebound_decay
+            return model.dr_rebound[z, t] == (1.0 - decay) * model.dr_rebound[z, t-1] + model.dt_hours * model.dr_shed[z, t]
+    
+    m.dr_rebound_evolution_con = Constraint(m.Z, m.T, rule=_dr_rebound_evolution_rule)
+    
+    # DR rebound must be cleared by end of horizon (within tolerance)
+    def _dr_rebound_final_rule(model, z):
+        return model.dr_rebound[z, model.T.last()] <= model.dr_rebound_tolerance
+    
+    m.dr_rebound_final_con = Constraint(m.Z, rule=_dr_rebound_final_rule)
+    
+    # DR activation binary: if dr_shed > 0, then dr_active = 1
+    def _dr_activation_rule(model, z, t):
+        # dr_shed <= M * dr_active, where M = dr_limit
+        return model.dr_shed[z, t] <= model.dr_limit[z, t] * model.dr_active[z, t]
+    
+    m.dr_activation_con = Constraint(m.Z, m.T, rule=_dr_activation_rule)
+    
+    # Max number of DR events per zone
+    def _dr_max_events_rule(model, z):
+        return sum(model.dr_active[z, t] for t in model.T) <= model.dr_max_events[z]
+    
+    m.dr_max_events_con = Constraint(m.Z, rule=_dr_max_events_rule)
+    
+    # DR ramp limits (if duration constraints are enabled via min_duration > 0, ramp limits help smooth transitions)
+    def _dr_ramp_up_rule(model, z, t):
+        if t == model.T.first():
+            return Constraint.Skip
+        return model.dr_shed[z, t] - model.dr_shed[z, t-1] <= model.dr_ramp_limit[z]
+    
+    def _dr_ramp_down_rule(model, z, t):
+        if t == model.T.first():
+            return Constraint.Skip
+        return model.dr_shed[z, t-1] - model.dr_shed[z, t] <= model.dr_ramp_limit[z]
+    
+    m.dr_ramp_up_con = Constraint(m.Z, m.T, rule=_dr_ramp_up_rule)
+    m.dr_ramp_down_con = Constraint(m.Z, m.T, rule=_dr_ramp_down_rule)
 
     # Battery power limits
     def _battery_power_charge_rule(model, z, t):
@@ -203,6 +280,16 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
 
     m.battery_charge_power = Constraint(m.Z, m.T, rule=_battery_power_charge_rule)
     m.battery_discharge_power = Constraint(m.Z, m.T, rule=_battery_power_discharge_rule)
+
+    # Battery mutual exclusivity (charge OR discharge, not both)
+    def _battery_charge_binary_rule(model, z, t):
+        return model.b_charge[z, t] <= model.battery_power[z] * model.b_charge_mode[z, t]
+    
+    def _battery_discharge_binary_rule(model, z, t):
+        return model.b_discharge[z, t] <= model.battery_power[z] * (1.0 - model.b_charge_mode[z, t])
+    
+    m.battery_charge_binary = Constraint(m.Z, m.T, rule=_battery_charge_binary_rule)
+    m.battery_discharge_binary = Constraint(m.Z, m.T, rule=_battery_discharge_binary_rule)
 
     # Battery state of charge
     def _battery_energy_rule(model, z, t):
@@ -276,6 +363,16 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.pumped_charge_limit = Constraint(m.Z, m.T, rule=_pumped_charge_limit_rule)
     m.pumped_discharge_limit = Constraint(m.Z, m.T, rule=_pumped_discharge_limit_rule)
 
+    # Pumped storage mutual exclusivity (charge OR discharge, not both)
+    def _pumped_charge_binary_rule(model, z, t):
+        return model.pumped_charge[z, t] <= model.pumped_power[z] * model.pumped_charge_mode[z, t]
+    
+    def _pumped_discharge_binary_rule(model, z, t):
+        return model.pumped_discharge[z, t] <= model.pumped_power[z] * (1.0 - model.pumped_charge_mode[z, t])
+    
+    m.pumped_charge_binary = Constraint(m.Z, m.T, rule=_pumped_charge_binary_rule)
+    m.pumped_discharge_binary = Constraint(m.Z, m.T, rule=_pumped_discharge_binary_rule)
+
     def _pumped_level_rule(model, z, t):
         eta_c = data.pumped_eta_charge
         eta_d = data.pumped_eta_discharge
@@ -324,6 +421,16 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.flow_upper = Constraint(m.L, m.T, rule=_flow_upper_rule)
     m.flow_lower = Constraint(m.L, m.T, rule=_flow_lower_rule)
 
+    # Import/export mutual exclusivity (import OR export, not both)
+    def _import_binary_rule(model, t):
+        return model.net_import[t] <= model.import_capacity * model.import_mode[t]
+    
+    def _export_binary_rule(model, t):
+        return model.net_export[t] <= model.import_capacity * (1.0 - model.import_mode[t])
+    
+    m.import_binary_con = Constraint(m.T, rule=_import_binary_rule)
+    m.export_binary_con = Constraint(m.T, rule=_export_binary_rule)
+
     # Power balance
     def _power_balance_rule(model, z, t):
         generation = (
@@ -358,10 +465,16 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
             + model.nuclear_startup_cost[z] * model.v_nuclear_startup[z, t]
             for z in model.Z for t in model.T
         )
-        response_cost = sum(
-            model.dr_cost * model.dr_shed[z, t] + model.voll * model.unserved[z, t]
+        # Use tiered DR block costs instead of flat dr_cost
+        dr_block_cost = sum(
+            model.dr_block_cost[k] * model.dr_shed_block[z, t, k]
+            for z in model.Z for t in model.T for k in model.DR_BLOCKS
+        )
+        unserved_cost = sum(
+            model.voll * model.unserved[z, t]
             for z in model.Z for t in model.T
         )
+        response_cost = dr_block_cost + unserved_cost
         spill_cost = sum(
             model.res_spill_cost * (model.spill_solar[z, t] + model.spill_wind[z, t]) + model.hydro_spill_cost * model.h_spill[z, t]
             for z in model.Z for t in model.T
@@ -392,9 +505,8 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
                 m.u_nuclear[z, t].fix(0.0)
                 m.v_nuclear_startup[z, t].fix(0.0)
         else:
-            # Nuclear typically stays on (baseload) - initialize commitment to 1
             for t in data.periods:
-                m.u_nuclear[z, t].setlb(1.0)  # Force nuclear to stay on
+                m.u_nuclear[z, t].value = 1.0 
 
     return m
 

@@ -63,13 +63,7 @@ Useful tips:
 ### 4.1 Single scenario
 
 ```bash
-python -m src.milp.run_milp outputs/scenarios_v1/scenario_00001.json \
-    --solver highs \
-    --tee \
-    --save-json outputs/scenarios_v1/reports/scenario_00001.json \
-    --plot --plot-dir outputs/scenarios_v1/plots \
-    --export-prefix outputs/scenarios_v1/dispatch/scenario_00001 \
-    --export-hdf outputs/scenarios_v1/dispatch/scenario_00001.h5
+python -m src.milp.run_milp outputs/scenarios_v1/scenario_00001.json --solver highs --tee --save-json outputs/scenarios_v1/reports/scenario_00001.json --plot --plot-dir outputs/scenarios_v1/plots
 ```
 
 Flags of interest:
@@ -84,7 +78,7 @@ Storage units (batteries and pumped hydro) incorporate cycle-throughput costs, p
 ### 4.2 Batch solving
 
 ```bash
-python -m src.milp.batch_runner outputs/scenarios_v1 --solver highs --workers 4 --reports-dir outputs/scenarios_v1/reports --dispatch-dir outputs/scenarios_v1/dispatch_batch --plots-dir outputs/scenarios_v1/plots --summary-json outputs/scenarios_v1/batch_summary.json
+python -m src.milp.batch_runner outputs/scenarios_v1 --solver highs --workers 4 --reports-dir outputs/scenarios_v1/reports --dispatch-dir outputs/scenarios_v1/dispatch_batch --plot --plots-dir outputs/scenarios_v1/plots --summary-json outputs/scenarios_v1/batch_summary.json
 ```
 
 Notes:

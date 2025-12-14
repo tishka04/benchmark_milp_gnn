@@ -75,6 +75,14 @@ class ScenarioData:
     res_available: Dict[Tuple[str, int], float]
 
     dr_limit: Dict[Tuple[str, int], float]
+    dr_num_blocks: int
+    dr_block_limit: Dict[Tuple[str, int, int], float]
+    dr_block_cost: Dict[int, float]
+    dr_rebound_decay: float
+    dr_rebound_tolerance: float
+    dr_max_events: Dict[str, int]
+    dr_min_duration: Dict[str, int]
+    dr_ramp_limit: Dict[str, float]
 
     battery_power: Dict[str, float]
     battery_energy: Dict[str, float]
@@ -540,6 +548,10 @@ def load_scenario_data(path: Path) -> ScenarioData:
     res_available: Dict[Tuple[str, int], float] = {}
 
     dr_limit: Dict[Tuple[str, int], float] = {}
+    dr_block_limit: Dict[Tuple[str, int, int], float] = {}
+    dr_max_events: Dict[str, int] = {}
+    dr_min_duration: Dict[str, int] = {}
+    dr_ramp_limit: Dict[str, float] = {}
 
     battery_power: Dict[str, float] = {}
     battery_energy: Dict[str, float] = {}
@@ -570,6 +582,14 @@ def load_scenario_data(path: Path) -> ScenarioData:
     nuclear_fuel_cost = costs["nuclear_fuel_eur_per_mwh"]
     thermal_startup_cost_value = costs.get("thermal_startup_cost_eur", 5000.0)  # Default 5000 EUR
     nuclear_startup_cost_value = costs.get("nuclear_startup_cost_eur", 30000.0)  # Default 30000 EUR
+    
+    # DR tiered blocks parameters
+    dr_num_blocks_value = int(tech.get("dr_num_blocks", 3))
+    dr_rebound_decay_value = float(tech.get("dr_rebound_decay", 0.15))
+    dr_rebound_tolerance_value = float(tech.get("dr_rebound_tolerance", 0.5))
+    dr_max_events_per_zone = int(tech.get("dr_max_events", 10))
+    dr_min_duration_value = int(tech.get("dr_min_duration", 1))
+    dr_ramp_limit_factor = float(tech.get("dr_ramp_limit_factor", 0.5))
 
     for idx, zone in enumerate(zones):
         zone_profile = zone_profiles[zone]
@@ -615,6 +635,20 @@ def load_scenario_data(path: Path) -> ScenarioData:
         share = tech["dr_max_shed_share"] * (0.5 + 0.5 * min(dr_units, 4))
         for t in periods:
             dr_limit[(zone, t)] = demand[(zone, t)] * min(share, 0.8)
+        
+        # DR tiered blocks: divide total DR capacity into blocks with increasing cost
+        for t in periods:
+            total_dr = dr_limit[(zone, t)]
+            for k in range(dr_num_blocks_value):
+                # Each block gets an equal fraction of total capacity
+                block_fraction = 1.0 / dr_num_blocks_value
+                dr_block_limit[(zone, t, k)] = total_dr * block_fraction
+        
+        # Zone-specific DR event constraints
+        dr_max_events[zone] = dr_max_events_per_zone
+        dr_min_duration[zone] = dr_min_duration_value
+        # Ramp limit as fraction of peak demand
+        dr_ramp_limit[zone] = peak_demand[zone] * dr_ramp_limit_factor
 
         bat_units = max(0, assets["battery_per_site"][idx])
         battery_power[zone] = bat_units * BATTERY.power_per_unit_mw
@@ -682,6 +716,14 @@ def load_scenario_data(path: Path) -> ScenarioData:
             pumped_cycle_cost_map[zone] = 0.0
             pumped_retention[zone] = 1.0
 
+    # Create DR block cost dictionary with increasing marginal costs
+    # Base cost is dr_cost_value, each subsequent block gets more expensive
+    dr_block_cost_dict: Dict[int, float] = {}
+    for k in range(dr_num_blocks_value):
+        # Exponentially increasing cost: base * (1.5^k)
+        # Block 0 is cheapest, last block is most expensive
+        dr_block_cost_dict[k] = dr_cost_value * (1.5 ** k)
+
     lines = _build_lines(zones, zones_per_region, graph["intertie_density"])
     from_idx: Dict[str, List[str]] = defaultdict(list)
     to_idx: Dict[str, List[str]] = defaultdict(list)
@@ -716,6 +758,14 @@ def load_scenario_data(path: Path) -> ScenarioData:
         res_capacity=res_capacity,
         res_available=res_available,
         dr_limit=dr_limit,
+        dr_num_blocks=dr_num_blocks_value,
+        dr_block_limit=dr_block_limit,
+        dr_block_cost=dr_block_cost_dict,
+        dr_rebound_decay=dr_rebound_decay_value,
+        dr_rebound_tolerance=dr_rebound_tolerance_value,
+        dr_max_events=dr_max_events,
+        dr_min_duration=dr_min_duration,
+        dr_ramp_limit=dr_ramp_limit,
         battery_power=battery_power,
         battery_energy=battery_energy,
         battery_initial=battery_initial,

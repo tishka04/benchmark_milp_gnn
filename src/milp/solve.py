@@ -71,7 +71,6 @@ def _compute_cost_components(model) -> Dict[str, float]:
     components["thermal_fuel"] = _sum_param_times_var(model, model.thermal_cost, model.p_thermal)
     components["nuclear_fuel"] = _sum_param_times_var(model, model.nuclear_cost, model.p_nuclear)
 
-    scalar_dr_cost = float(value(model.dr_cost))
     scalar_voll = float(value(model.voll))
     scalar_res_spill = float(value(model.res_spill_cost))
     scalar_hydro_spill = float(value(model.hydro_spill_cost))
@@ -79,7 +78,15 @@ def _compute_cost_components(model) -> Dict[str, float]:
     scalar_import = float(value(model.import_cost))
     scalar_export = float(value(model.export_cost))
 
-    components["demand_response"] = scalar_dr_cost * _sum_var(model, model.dr_shed)
+    # Calculate DR cost using tiered blocks
+    dr_total_cost = 0.0
+    for z in model.Z:
+        for t in model.T:
+            for k in model.DR_BLOCKS:
+                block_cost = float(value(model.dr_block_cost[k]))
+                block_shed = float(value(model.dr_shed_block[z, t, k]))
+                dr_total_cost += block_cost * block_shed
+    components["demand_response"] = dr_total_cost
     components["unserved_energy"] = scalar_voll * _sum_var(model, model.unserved)
 
     solar_spill = scalar_res_spill * _sum_var(model, model.spill_solar)
@@ -313,13 +320,26 @@ def solve_scenario(
             "pumped_discharge": {zone: [float(value(mip_model.pumped_discharge[zone, t])) for t in periods] for zone in zones},
             "pumped_level": {zone: [float(value(mip_model.pumped_level[zone, t])) for t in periods] for zone in zones},
             "demand_response": {zone: [float(value(mip_model.dr_shed[zone, t])) for t in periods] for zone in zones},
+            "dr_rebound": {zone: [float(value(mip_model.dr_rebound[zone, t])) for t in periods] for zone in zones},
+            "dr_active": {zone: [float(value(mip_model.dr_active[zone, t])) for t in periods] for zone in zones},
             "unserved": {zone: [float(value(mip_model.unserved[zone, t])) for t in periods] for zone in zones},
             "overgen_spill": {zone: [float(value(mip_model.overgen_spill[zone, t])) for t in periods] for zone in zones},
+            "battery_charge_mode": {zone: [float(value(mip_model.b_charge_mode[zone, t])) for t in periods] for zone in zones},
+            "pumped_charge_mode": {zone: [float(value(mip_model.pumped_charge_mode[zone, t])) for t in periods] for zone in zones},
+            "thermal_commitment": {zone: [float(value(mip_model.u_thermal[zone, t])) for t in periods] for zone in zones},
+            "thermal_startup": {zone: [float(value(mip_model.v_thermal_startup[zone, t])) for t in periods] for zone in zones},
+            "nuclear_commitment": {zone: [float(value(mip_model.u_nuclear[zone, t])) for t in periods] for zone in zones},
+            "nuclear_startup": {zone: [float(value(mip_model.v_nuclear_startup[zone, t])) for t in periods] for zone in zones},
             "net_import": {"values": [float(value(mip_model.net_import[t])) for t in periods]},
             "net_export": {"values": [float(value(mip_model.net_export[t])) for t in periods]},
+            "import_mode": {"values": [float(value(mip_model.import_mode[t])) for t in periods]},
             "flows": {
                 str(line): [float(value(mip_model.flow[line, t])) for t in periods]
                 for line in mip_model.L
+            },
+            "dr_shed_blocks": {
+                f"{zone}_block_{k}": [float(value(mip_model.dr_shed_block[zone, t, k])) for t in periods]
+                for zone in zones for k in mip_model.DR_BLOCKS
             },
         }
 
