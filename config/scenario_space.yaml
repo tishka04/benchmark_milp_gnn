@@ -12,7 +12,7 @@ structure:
   regions: [2, 13]
   zones_per_region: [2, 13]
   sites_per_zone: [2, 10]
-  intertie_density: [0.2, 0.7]
+  intertie_density: [0.2, 0.6]
   neighbor_nations: [1, 5]
 
 assets:
@@ -28,30 +28,30 @@ assets:
 
 economics_policy:
   co2_price_eur_per_t: [35, 250]
-  price_cap_eur_per_mwh: [180, 4500]
+  price_cap_eur_per_mwh: [180, 2000]
   cross_border_policy: ["allow", "cap", "block"]
   import_export_caps_factor: [0.4, 1.6]
 
 techno_params_scalers:
   thermal_marg_cost: [0, 15]              # additional variable O&M cost adders
-  thermal_ramp_pct: [0.05, 0.45]
+  thermal_ramp_pct: [0.05, 0.25]
   battery_roundtrip_eff: [0.78, 0.94]
   battery_e_to_p_hours: [1.0, 6.0]
-  dr_max_shed_share: [0.05, 0.35]
+  dr_max_shed_share: [0.05, 0.3]
   dr_duration_hours: [1, 6]
   dr_num_blocks: [2, 5]                   # number of tiered DR cost blocks
-  dr_rebound_decay: [0.05, 0.3]           # decay rate per timestep for DR rebound state
-  dr_rebound_tolerance: [0.1, 2.0]        # max remaining rebound energy at horizon end (MWh)
-  dr_max_events: [5, 20]                  # max number of DR activation events per zone
+  dr_rebound_decay: [0.01, 0.15]           # decay rate per timestep for DR rebound state
+  dr_rebound_tolerance: [0.1, 5]        # max remaining rebound energy at horizon end (MWh)
+  dr_max_events: [2, 12]                  # max number of DR activation events per zone
   dr_min_duration: [1, 3]                 # min consecutive periods for DR event
-  dr_ramp_limit_factor: [0.2, 0.8]        # DR ramp limit as fraction of peak demand
-  hydro_reservoir_head_eff: [0.75, 1.05]
+  dr_ramp_limit_factor: [0.1, 0.5]        # DR ramp limit as fraction of peak demand
+  hydro_reservoir_head_eff: [0.75, 0.95]
   battery_initial_soc_fraction: [0.35, 0.65]
-  battery_final_soc_tolerance: [0.05, 0.18]
-  battery_self_discharge_per_hour: [0.001, 0.01]
+  battery_final_soc_tolerance: [0.05, 0.2]
+  battery_self_discharge_per_hour: [0.0001, 0.002]
   pumped_initial_level_fraction: [0.4, 0.7]
   pumped_final_level_tolerance: [0.05, 0.18]
-  pumped_self_discharge_per_hour: [0.0005, 0.004]
+  pumped_self_discharge_per_hour: [0.00005,0.0008]
 
 operation_costs:
   thermal_fuel_eur_per_mwh: [45, 85]
@@ -60,10 +60,10 @@ operation_costs:
   nuclear_startup_cost_eur: [15000, 50000]        # Cold start cost per nuclear unit
   demand_response_cost_eur_per_mwh: [80, 500]
   value_of_lost_load_eur_per_mwh: [6000, 12000]
-  renewable_spill_cost_eur_per_mwh: [500, 2000]
-  hydro_spill_cost_eur_per_mwh: [250, 1200]
+  renewable_spill_cost_eur_per_mwh: [500, 1000]
+  hydro_spill_cost_eur_per_mwh: [250, 750]
   overgen_spill_cost_eur_per_mwh: [2000, 8000]
-  battery_cycle_cost_eur_per_mwh: [75, 150]
+  battery_cycle_cost_eur_per_mwh: [50, 125]
   pumped_cycle_cost_eur_per_mwh: [45, 90]
 
 exogenous:
