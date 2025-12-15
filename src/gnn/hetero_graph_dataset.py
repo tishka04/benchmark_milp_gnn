@@ -63,12 +63,13 @@ def _load_json(path: Path) -> Dict:
 class HeteroGraphBuilder:
     """Builds multi-level heterogeneous graph from MILP scenario."""
     
-    def __init__(self, data: ScenarioData, report: Dict):
+    def __init__(self, data: ScenarioData, report: Dict, use_solution_features: bool = True):
         self.data = data
         self.report = report
         self.detail = report.get("detail")
         if self.detail is None:
             raise RuntimeError("Report missing 'detail'; rerun MILP with --save-json")
+        self.use_solution_features = use_solution_features
         
         # Node tracking
         self.node_features = []
@@ -100,7 +101,7 @@ class HeteroGraphBuilder:
         self._build_weather_influence_edges()
         self._build_temporal_edges()
         
-        return self._to_record()
+        return self._to_record(use_solution_features=self.use_solution_features)
     
     def _build_nation_node(self):
         """Create single nation-level node."""
@@ -418,8 +419,13 @@ class HeteroGraphBuilder:
                 self.edge_types.append(EDGE_TYPE_TEMPORAL_STORAGE)
                 self.edge_features.append([1.0])
     
-    def _to_record(self) -> Dict[str, np.ndarray]:
-        """Convert to NPZ-compatible record."""
+    def _to_record(self, use_solution_features: bool = True) -> Dict[str, np.ndarray]:
+        """Convert to NPZ-compatible record.
+        
+        Args:
+            use_solution_features: If True, include MILP solution data in node features (old behavior).
+                                  If False, use only input forecasts (no data leakage).
+        """
         # Pad node features to same dimension
         max_node_dim = max(len(f) for f in self.node_features)
         padded_features = []
@@ -440,7 +446,10 @@ class HeteroGraphBuilder:
         zone_node_features = [padded_features[idx] for idx in zone_indices]
         
         # Build zone-level static and temporal features compatible with dataset loader
-        flat_compat = self._build_flat_compatibility(zones)
+        if use_solution_features:
+            flat_compat = self._build_flat_compatibility(zones)
+        else:
+            flat_compat = self._build_flat_compatibility_input_only(zones)
         
         # Build asset-level labels by decomposing zone aggregates
         asset_labels = self._build_asset_labels(zones)
@@ -609,6 +618,137 @@ class HeteroGraphBuilder:
         
         asset_labels[:, asset_idx, 0] = zone_dr
         asset_labels[:, asset_idx, 1] = (zone_dr > 1e-3).astype(np.float32)
+    
+    def _build_flat_compatibility_input_only(self, zones: List[str]) -> Dict[str, np.ndarray]:
+        """Build flat graph compatibility fields using ONLY input data (no solution leakage)."""
+        periods = self.data.periods
+        anchor_zone = getattr(self.data, "import_anchor_zone", None)
+        T = len(periods)
+        
+        # node_static: [N_zones, static_dim] - same as before (capacities, costs)
+        node_static = []
+        for zone in zones:
+            thermal_cap = float(self.data.thermal_capacity.get(zone, 0.0))
+            solar_cap = float(self.data.solar_capacity.get(zone, 0.0))
+            wind_cap = float(self.data.wind_capacity.get(zone, 0.0))
+            battery_power = float(self.data.battery_power.get(zone, 0.0))
+            dr_cap = float(max((self.data.dr_limit.get((zone, t), 0.0) for t in periods), default=0.0))
+            nuclear_cap = float(self.data.nuclear_capacity.get(zone, 0.0))
+            hydro_res_cap = float(self.data.hydro_res_capacity.get(zone, 0.0))
+            hydro_ror_avg = float(np.mean([self.data.hydro_ror_generation.get((zone, t), 0.0) for t in periods])) if periods else 0.0
+            pumped_power = float(self.data.pumped_power.get(zone, 0.0))
+            battery_energy = float(self.data.battery_energy.get(zone, 0.0))
+            battery_initial_frac = self.data.battery_initial.get(zone, 0.0) / battery_energy if battery_energy > 1e-6 else 0.0
+            battery_final_min_frac = self.data.battery_final_min.get(zone, 0.0) / battery_energy if battery_energy > 1e-6 else 0.0
+            battery_final_max_frac = self.data.battery_final_max.get(zone, 0.0) / battery_energy if battery_energy > 1e-6 else 0.0
+            battery_retention = float(self.data.battery_retention.get(zone, 1.0))
+            battery_cycle_cost = float(self.data.battery_cycle_cost.get(zone, 0.0))
+            pumped_energy = float(self.data.pumped_energy.get(zone, 0.0))
+            pumped_initial_frac = self.data.pumped_initial.get(zone, 0.0) / pumped_energy if pumped_energy > 1e-6 else 0.0
+            pumped_final_min_frac = self.data.pumped_final_min.get(zone, 0.0) / pumped_energy if pumped_energy > 1e-6 else 0.0
+            pumped_final_max_frac = self.data.pumped_final_max.get(zone, 0.0) / pumped_energy if pumped_energy > 1e-6 else 0.0
+            pumped_retention = float(self.data.pumped_retention.get(zone, 1.0))
+            pumped_cycle_cost = float(self.data.pumped_cycle_cost.get(zone, 0.0))
+            import_cap = float(self.data.import_capacity) if zone == anchor_zone else 0.0
+            
+            node_static.append([
+                thermal_cap, solar_cap, wind_cap, battery_power, dr_cap,
+                nuclear_cap, hydro_res_cap, hydro_ror_avg, pumped_power,
+                battery_energy, battery_initial_frac, battery_final_min_frac, battery_final_max_frac,
+                battery_retention, battery_cycle_cost, pumped_energy, pumped_initial_frac,
+                pumped_final_min_frac, pumped_final_max_frac, pumped_retention,
+                pumped_cycle_cost, import_cap,
+            ])
+        
+        # node_time: [T, N_zones, temporal_dim]
+        # USE ONLY INPUT FORECASTS - NO SOLUTION DATA
+        node_time = []
+        for zone in zones:
+            # Input forecasts (what the model should see)
+            demand_forecast = np.array([self.data.demand.get((zone, t), 0.0) for t in periods], dtype=np.float32)
+            solar_available = np.array([self.data.solar_available.get((zone, t), 0.0) for t in periods], dtype=np.float32)
+            wind_available = np.array([self.data.wind_available.get((zone, t), 0.0) for t in periods], dtype=np.float32)
+            hydro_inflow = np.array([self.data.hydro_inflow_power.get((zone, t), 0.0) for t in periods], dtype=np.float32)
+            hydro_ror_gen = np.array([self.data.hydro_ror_generation.get((zone, t), 0.0) for t in periods], dtype=np.float32)
+            dr_limit = np.array([self.data.dr_limit.get((zone, t), 0.0) for t in periods], dtype=np.float32)
+            
+            # Storage initial states (boundary conditions, not solution)
+            battery_energy = self.data.battery_energy.get(zone, 0.0)
+            pumped_energy = self.data.pumped_energy.get(zone, 0.0)
+            battery_initial_soc = self.data.battery_initial.get(zone, 0.0)
+            pumped_initial_level = self.data.pumped_initial.get(zone, 0.0)
+            
+            # Replicate initial state across time (simple placeholder)
+            battery_soc_init = np.full(T, battery_initial_soc, dtype=np.float32)
+            pumped_level_init = np.full(T, pumped_initial_level, dtype=np.float32)
+            
+            # Stack: [demand, solar_avail, wind_avail, hydro_inflow, hydro_ror, battery_init, pumped_init, dr_limit]
+            node_time.append(np.stack([
+                demand_forecast,
+                solar_available,
+                wind_available,
+                hydro_inflow,
+                hydro_ror_gen,
+                battery_soc_init,
+                pumped_level_init,
+                dr_limit,
+            ], axis=1))
+        
+        # node_labels: [T, N_zones, label_dim]
+        # Keep labels from solution (for supervised training target)
+        detail = self.detail
+        node_labels = []
+        net_import_dispatch = detail.get("net_import") or {}
+        for zone in zones:
+            thermal = detail["thermal"][zone]
+            nuclear = detail["nuclear"][zone]
+            solar = detail["solar"][zone]
+            wind = detail["wind"][zone]
+            hydro_release = detail["hydro_release"][zone]
+            hydro_ror = detail.get("hydro_ror", {}).get(zone, [0.0] * len(thermal))
+            dr = detail["demand_response"][zone]
+            battery_charge = detail["battery_charge"][zone]
+            battery_discharge = detail["battery_discharge"][zone]
+            pumped_charge = detail["pumped_charge"][zone]
+            pumped_discharge = detail["pumped_discharge"][zone]
+            net_import = net_import_dispatch.get(zone, [0.0] * len(thermal)) if zone == anchor_zone else [0.0] * len(thermal)
+            unserved = detail["unserved"][zone]
+            
+            node_labels.append(np.stack([
+                thermal, nuclear, solar, wind, hydro_release, hydro_ror, dr,
+                battery_charge, battery_discharge, pumped_charge, pumped_discharge,
+                net_import, unserved,
+            ], axis=1))
+        
+        # Transmission edges (same as before)
+        zone_idx_to_flat = {self.zone_to_idx[z]: i for i, z in enumerate(zones)}
+        transmission_edges = []
+        for i in range(len(self.edge_types)):
+            if self.edge_types[i] == EDGE_TYPE_TRANSMISSION:
+                src, dst = self.edges[i]
+                if src in zone_idx_to_flat and dst in zone_idx_to_flat:
+                    flat_src = zone_idx_to_flat[src]
+                    flat_dst = zone_idx_to_flat[dst]
+                    capacity = self.edge_features[i][0] if self.edge_features[i] else 0.0
+                    transmission_edges.append((flat_src, flat_dst, capacity))
+        
+        edge_index_trans = np.array([[e[0], e[1]] for e in transmission_edges], dtype=np.int64) if transmission_edges else np.zeros((0, 2), dtype=np.int64)
+        edge_capacity = np.array([e[2] for e in transmission_edges], dtype=np.float32) if transmission_edges else np.zeros(0, dtype=np.float32)
+        edge_flows = np.zeros((T, len(transmission_edges)), dtype=np.float32)
+        edge_type_flat = np.full(len(transmission_edges), EDGE_TYPE_TRANSMISSION, dtype=np.int64)
+        
+        return {
+            "node_static": np.array(node_static, dtype=np.float32),
+            "node_time": np.stack(node_time, axis=1).astype(np.float32),  # [T, N, 8]
+            "node_labels": np.stack(node_labels, axis=1).astype(np.float32),  # [T, N, 13]
+            "zone_region_index": np.array([self.region_to_idx.get(self.data.region_of_zone.get(z, "unknown"), -1) for z in zones], dtype=np.int64),
+            "edge_index": edge_index_trans,
+            "edge_capacity": edge_capacity,
+            "edge_flows": edge_flows,
+            "edge_type": edge_type_flat,
+            "time_steps": np.array(periods, dtype=np.int64),
+            "time_hours": np.arange(T, dtype=np.float32) * self.data.dt_hours,
+        }
     
     def _build_flat_compatibility(self, zones: List[str]) -> Dict[str, np.ndarray]:
         """Build flat graph compatibility fields for existing dataset loader."""
@@ -1078,6 +1218,7 @@ def build_hetero_temporal_record(
     temporal_edges: Tuple[str, ...] = ("soc", "ramp", "dr"),
     time_encoding: str = "sinusoidal",
     target_horizon: int = 0,
+    use_solution_features: bool = True,
 ) -> Union[Dict, List[Dict]]:
     """
     Build a temporal heterogeneous multi-layer grid graph.
@@ -1088,15 +1229,17 @@ def build_hetero_temporal_record(
         mode: "sequence" (list of graphs) or "supra" (single time-expanded graph)
         time_window: Number of steps per graph (for sequence mode)
         stride: Sliding window stride
-        temporal_edges: Types of temporal edges to add ("soc", "ramp", "dr")
-        time_encoding: Method for time encoding ("sinusoidal", "cyclic-hod")
+        temporal_edges: Types of temporal edges to include
+        time_encoding: Method for time encoding ('sinusoidal' or 'cyclic-hod')
         target_horizon: Prediction horizon (0 = same-step labels)
+        use_solution_features: If True, include MILP solution in node features (data leakage).
+                              If False, use only input forecasts (clean generalization)
     
     Returns:
         Single dict (supra) or list of dicts (sequence)
     """
     # Build base heterogeneous graph to get structure
-    base_builder = HeteroGraphBuilder(scenario_data, report)
+    base_builder = HeteroGraphBuilder(scenario_data, report, use_solution_features)
     base_record = base_builder.build()
     
     # Extract time information
@@ -1225,9 +1368,9 @@ def build_hetero_temporal_record(
         raise ValueError(f"Unknown temporal mode: {mode}")
 
 
-def build_hetero_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray]:
+def build_hetero_graph_record(scenario_data: ScenarioData, report: Dict, use_solution_features: bool = True) -> Dict[str, np.ndarray]:
     """Main entry point to build heterogeneous graph."""
-    builder = HeteroGraphBuilder(data, report)
+    builder = HeteroGraphBuilder(scenario_data, report, use_solution_features)
     return builder.build()
 
 

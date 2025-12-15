@@ -169,6 +169,21 @@ Langevin = 125.34 M€ \;|\; $\Delta$ = +1.90\%}
 
 
 \end{columns}
+
+% RED CROSS OVERLAY - INVALID RESULTS
+\begin{tikzpicture}[remember picture,overlay]
+  % Draw big red cross
+  \draw[red,line width=8mm,opacity=0.7] 
+    (current page.north west) -- (current page.south east);
+  \draw[red,line width=8mm,opacity=0.7] 
+    (current page.north east) -- (current page.south west);
+  
+  % Add warning text
+  \node[fill=red,text=white,font=\Large\bfseries,rotate=30,opacity=0.9,
+        rounded corners=5pt,inner sep=10pt] at (current page.center) 
+    {INVALID - DATA LEAKAGE};
+\end{tikzpicture}
+
 \end{frame}
 
 \begin{frame}{End-to-End Pipeline}
@@ -457,8 +472,14 @@ Typical scenario: \textbf{200K variables} (38K binary), \textbf{240K constraints
 \textbf{Node Features:}
 \begin{itemize}\setlength\itemsep{-0.1em}
     \item \textbf{Static:} Capacity, costs, ramp rates, efficiency
-    \item \textbf{Temporal (96 steps):} Demand, availability, dispatch, SOC
+    \item \textbf{Temporal (96 steps):} Demand, availability, \textcolor{red}{\textbf{dispatch}}, \textcolor{red}{\textbf{SOC}}
 \end{itemize}
+
+\vspace{0.2em}
+\begin{alertblock}{\textcolor{red}{Data Leakage Issue}}
+\footnotesize
+Red features = MILP solution outputs included in encoder inputs!
+\end{alertblock}
 
 \vspace{0.3em}
 \textbf{Graph Statistics:}
@@ -491,8 +512,11 @@ Typical scenario: \textbf{200K variables} (38K binary), \textbf{240K constraints
     
     % Annotations
     \node[align=left,anchor=west,font=\tiny] at (3.8,0.2) {Assets, demands,\\weather profiles};
-    \node[align=left,anchor=west,font=\tiny] at (3.8,-0.3) {Optimal dispatch,\\binary decisions};
+    \node[align=left,anchor=west,font=\tiny,text=red] at (3.8,-0.3) {\textbf{Optimal dispatch,}\\\textbf{binary decisions}};
     \node[align=left,anchor=west,font=\tiny] at (3.8,-1.4) {Node features,\\edge lists,\\temporal tensors};
+    
+    % Red warning box around solution extractor
+    \node[draw=red,thick,dashed,fit=(extractor) (report),inner sep=3pt,label={[text=red,font=\tiny]above right:LEAKAGE SOURCE}] {};
 \end{tikzpicture}
 \end{center}
 
@@ -503,7 +527,23 @@ Typical scenario: \textbf{200K variables} (38K binary), \textbf{240K constraints
     \item \textbf{Temporal}: Features stored as $[\text{nodes}, 96, \text{dim}]$ tensors
     \item \textbf{Hierarchical metadata}: Asset $\to$ Zone $\to$ Region mappings included
 \end{itemize}
+
+% RED CROSS OVERLAY - LEAKAGE PIPELINE
+\begin{tikzpicture}[remember picture,overlay]
+  % Draw big red cross
+  \draw[red,line width=8mm,opacity=0.7] 
+    (current page.north west) -- (current page.south east);
+  \draw[red,line width=8mm,opacity=0.7] 
+    (current page.north east) -- (current page.south west);
+  
+  % Add warning text
+  \node[fill=red,text=white,font=\Large\bfseries,rotate=30,opacity=0.9,
+        rounded corners=5pt,inner sep=10pt] at (current page.center) 
+    {DATA LEAKAGE PIPELINE};
+\end{tikzpicture}
+
 \end{frame}
+
 
 \section{Stage 4: Hierarchical Encoder}
 
@@ -915,6 +955,21 @@ EBM samples binary decisions that are \textit{energetically favorable} but may v
 \begin{block}{Key Result}
 \textbf{End-to-end hybrid pipeline operational:} Near-optimal (0--2\% gap), feasible solutions in seconds vs 8 minutes for MILP.
 \end{block}
+
+% RED CROSS OVERLAY - INVALID ACHIEVEMENTS
+\begin{tikzpicture}[remember picture,overlay]
+  % Draw big red cross
+  \draw[red,line width=8mm,opacity=0.7] 
+    (current page.north west) -- (current page.south east);
+  \draw[red,line width=8mm,opacity=0.7] 
+    (current page.north east) -- (current page.south west);
+  
+  % Add warning text
+  \node[fill=red,text=white,font=\Large\bfseries,rotate=30,opacity=0.9,
+        rounded corners=5pt,inner sep=10pt] at (current page.center) 
+    {RESULTS WITH DATA LEAKAGE};
+\end{tikzpicture}
+
 \end{frame}
 
 
@@ -997,46 +1052,5 @@ MILP solve time (sec) & 45 & 480 & 2700 \\
     \item CO$_2$ price range: Full spectrum covered
 \end{itemize}
 \end{frame}
-
-% ----------------------------------------------------------
-% Appendix: Additional scenario comparisons
-% ----------------------------------------------------------
-\begin{frame}{Backup: Additional MILP vs Langevin EBM Comparisons}
-
-\centering
-\scriptsize
-\vspace{-0.3em}
-
-\begin{figure}
-\centering
-\begin{minipage}{0.49\textwidth}
-  \centering
-  \includegraphics[
-    width=\linewidth,
-    trim=6 6 6 6,clip
-  ]{scenario_01627_comparison.png}
-  
-  
-\end{minipage}\hfill
-\begin{minipage}{0.49\textwidth}
-  \centering
-  \includegraphics[
-    width=\linewidth,
-    trim=6 6 6 6,clip
-  ]{scenario_01998_comparison.png}
-
-\end{minipage}
-\end{figure}
-
-\vspace{-1em}
-\begin{block}{Interpretation}
-\begin{itemize}
-  \item Exact cost recovery in multiple regimes
-  \item Consistent dispatch, storage dynamics and slack activation
-\end{itemize}
-\end{block}
-
-\end{frame}
-
 
 \end{document}

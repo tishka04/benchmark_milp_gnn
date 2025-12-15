@@ -55,6 +55,7 @@ def convert_batch(
     temporal_edges: str = "soc,ramp,dr",
     time_enc: str = "sinusoidal",
     target_horizon: int = 0,
+    use_solution_features: bool = True,
 ) -> Dict:
     """Convert all scenario/report pairs to heterogeneous graphs."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -113,9 +114,10 @@ def convert_batch(
                     temporal_edges=tuple(temporal_edges.split(",")),
                     time_encoding=time_enc,
                     target_horizon=target_horizon,
+                    use_solution_features=use_solution_features,
                 )
             else:
-                record = build_hetero_graph_record(scenario_data, report)
+                record = build_hetero_graph_record(scenario_data, report, use_solution_features)
             
             # Handle sequence mode (list of graphs)
             if temporal and temporal_mode == "sequence":
@@ -265,6 +267,11 @@ def main() -> None:
         default=0,
         help="Prediction horizon (0 = same-step labels, >0 = predict future steps)",
     )
+    parser.add_argument(
+        "--input-only",
+        action="store_true",
+        help="Use ONLY input features (demand, renewable forecasts). Excludes MILP solution data to prevent leakage. Use this for clean generalization experiments.",
+    )
     
     args = parser.parse_args()
     
@@ -280,6 +287,7 @@ def main() -> None:
         temporal_edges=args.temporal_edges,
         time_enc=args.time_enc,
         target_horizon=args.target_horizon,
+        use_solution_features=not args.input_only,  # Invert: --input-only means no solution features
     )
 
 
