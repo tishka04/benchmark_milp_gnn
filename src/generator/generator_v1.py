@@ -153,6 +153,27 @@ class OperationCosts:
 
 
 @dataclass
+class UnitCapacities:
+    thermal_unit_mw: float
+    nuclear_unit_mw: float
+    solar_unit_mw: float
+    wind_unit_mw: float
+    battery_power_unit_mw: float
+    battery_energy_hours: float
+    hydro_reservoir_power_unit_mw: float
+    hydro_reservoir_energy_hours: float
+    hydro_ror_unit_mw: float
+    pumped_power_unit_mw: float
+    pumped_energy_hours: float
+
+
+@dataclass
+class TransportCapacities:
+    transmission_base_mw: float
+    import_export_base_mw: float
+
+
+@dataclass
 class RegionWeatherCell:
     weather_profile: str
     weather_spread_intensity: float
@@ -184,6 +205,8 @@ class ScenarioConfig:
     tech: TechScalers
     costs: OperationCosts
     exogenous: ExogenousSpec
+    unit_capacities: UnitCapacities
+    transport_capacities: TransportCapacities
     mip_gap_target_pct: float
 
 # ---------- Samplers
@@ -263,6 +286,31 @@ def sample_operation_costs(space: Dict[str, Any]) -> OperationCosts:
         overgen_spill_cost_eur_per_mwh=rand_float(*cost_cfg["overgen_spill_cost_eur_per_mwh"]),
         battery_cycle_cost_eur_per_mwh=rand_float(*cost_cfg["battery_cycle_cost_eur_per_mwh"]),
         pumped_cycle_cost_eur_per_mwh=rand_float(*cost_cfg["pumped_cycle_cost_eur_per_mwh"]),
+    )
+
+
+def sample_unit_capacities(space: Dict[str, Any]) -> UnitCapacities:
+    cap_cfg = space["unit_capacities"]
+    return UnitCapacities(
+        thermal_unit_mw=rand_float(*cap_cfg["thermal_unit_mw"]),
+        nuclear_unit_mw=rand_float(*cap_cfg["nuclear_unit_mw"]),
+        solar_unit_mw=rand_float(*cap_cfg["solar_unit_mw"]),
+        wind_unit_mw=rand_float(*cap_cfg["wind_unit_mw"]),
+        battery_power_unit_mw=rand_float(*cap_cfg["battery_power_unit_mw"]),
+        battery_energy_hours=rand_float(*cap_cfg.get("battery_energy_hours", [2.0, 6.0])),
+        hydro_reservoir_power_unit_mw=rand_float(*cap_cfg["hydro_reservoir_power_unit_mw"]),
+        hydro_reservoir_energy_hours=rand_float(*cap_cfg["hydro_reservoir_energy_hours"]),
+        hydro_ror_unit_mw=rand_float(*cap_cfg["hydro_ror_unit_mw"]),
+        pumped_power_unit_mw=rand_float(*cap_cfg["pumped_power_unit_mw"]),
+        pumped_energy_hours=rand_float(*cap_cfg["pumped_energy_hours"]),
+    )
+
+
+def sample_transport_capacities(space: Dict[str, Any]) -> TransportCapacities:
+    trans_cfg = space["transport_capacities"]
+    return TransportCapacities(
+        transmission_base_mw=rand_float(*trans_cfg["transmission_base_mw"]),
+        import_export_base_mw=rand_float(*trans_cfg["import_export_base_mw"]),
     )
 
 
@@ -695,6 +743,8 @@ def generate_scenarios(space_path: str, out_dir: str):
         tech = sample_tech(space)
         costs = sample_operation_costs(space)
         exo = sample_exogenous(space, graph)
+        unit_caps = sample_unit_capacities(space)
+        transport_caps = sample_transport_capacities(space)
         mip_gap = sample_mip_gap(space)
 
         cfg = ScenarioConfig(
@@ -707,6 +757,8 @@ def generate_scenarios(space_path: str, out_dir: str):
             tech=tech,
             costs=costs,
             exogenous=exo,
+            unit_capacities=unit_caps,
+            transport_capacities=transport_caps,
             mip_gap_target_pct=mip_gap,
         )
 

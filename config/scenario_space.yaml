@@ -25,6 +25,22 @@ assets:
   hydro_ror_per_zone: [0, 3]
   hydro_pumped_per_region: [0, 2]
 
+unit_capacities:
+  thermal_unit_mw: [100, 450]
+  nuclear_unit_mw: [450, 1600]
+  solar_unit_mw: [30, 500]
+  wind_unit_mw: [50, 300]
+  battery_power_unit_mw: [20, 100]
+  hydro_reservoir_power_unit_mw: [150, 400]
+  hydro_reservoir_energy_hours: [4.0, 10.0]
+  hydro_ror_unit_mw: [40, 100]
+  pumped_power_unit_mw: [100, 400]
+  pumped_energy_hours: [6.0, 12.0]
+
+transport_capacities:
+  transmission_base_mw: [750, 4500]
+  import_export_base_mw: [1500, 6000]
+
 economics_policy:
   co2_price_eur_per_t: [35, 250]
   price_cap_eur_per_mwh: [500, 3000]
@@ -85,10 +101,26 @@ exogenous:
 
 diversity:
   selection_method: "greedy_cover"
-  cover_metric: ["regions", "zones", "intertie_density", "co2_price_eur_per_t",
-                 "cross_border_policy", "weather_profile", "demand_scale_factor", 
-                 "zone_profile_mix_weight", "dr_num_blocks", "battery_e_to_p_hours", 
-                 "thermal_ramp_pct", "dr_max_events", "inflow_factor"]
+  cover_metric: [
+    # 0. Topologie 
+    "regions",
+
+    # 1. Stress Exogène (Le plus important)
+    "weather_profiles",       # Change la corrélation vent/solaire/demande
+    "demand_scale_factor",    # Change la marge de réserve système
+    "inflow_factor",          # Change la disponibilité hydro
+
+    # 2. Contrainte Réseau
+    "intertie_density",       # Change la congestion (Îlot vs Plaque de cuivre)
+    "cross_border_policy",    # Change la sécurité d'approvisionnement externe
+
+    # 3. Flexibilité Technique
+    "thermal_ramp_pct",       # Change la réactivité du thermique
+    "battery_e_to_p_hours",   # Change la nature du stockage (Puissance vs Énergie)
+
+    # 4. Signal Économique
+    "co2_price_eur_per_t"     # Change le merit order
+  ]
   min_pairwise_distance: 0.35
 
 budget_guard:

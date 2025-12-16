@@ -210,9 +210,11 @@ def _distribute_per_region(values: Iterable[int], zones_per_region: Iterable[int
     return per_zone
 
 
-def _build_lines(zones: List[str], zones_per_region: List[int], intertie_density: float) -> Dict[str, NetworkLine]:
+def _build_lines(zones: List[str], zones_per_region: List[int], intertie_density: float, transmission_base_mw: float = None) -> Dict[str, NetworkLine]:
     lines: Dict[str, NetworkLine] = {}
-    base_capacity = TRANS.base_capacity_mw * (0.6 + 0.8 * intertie_density)
+    if transmission_base_mw is None:
+        transmission_base_mw = TRANS.base_capacity_mw
+    base_capacity = transmission_base_mw * (0.6 + 0.8 * intertie_density)
     
     # Distance parameters (typical power system)
     # Lower intertie_density → more sparse → longer distances
@@ -344,6 +346,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
     tech = scenario["tech"]
     costs = scenario["operation_costs"]
     exo = scenario["exogenous"]
+    unit_caps = scenario.get("unit_capacities", {})
+    transport_caps = scenario.get("transport_capacities", {})
 
     zones_per_region: List[int] = graph["zones_per_region"]
     zones = _iter_zone_names(zones_per_region)
@@ -497,7 +501,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
 
     demand_scale = scenario["exogenous"]["demand_scale_factor"]
     co2_price = econ["co2_price"]
-    import_cap = max(0.0, econ["import_export_caps_factor"]) * IMPORT_BASE_CAPACITY * (
+    import_export_base = transport_caps.get("import_export_base_mw", IMPORT_BASE_CAPACITY)
+    import_cap = max(0.0, econ["import_export_caps_factor"]) * import_export_base * (
         len(zones_per_region) + max(1, graph["neighbor_nations"])
     )
     import_cost = econ["price_cap"] * 0.9
@@ -602,7 +607,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
             demand[(zone, t)] = peak_demand[zone] * zone_profile[t]
 
         thermal_units = max(0, assets["thermal_per_zone"][idx])
-        thermal_capacity[zone] = thermal_units * THERMAL.unit_capacity_mw
+        thermal_unit_mw = unit_caps.get("thermal_unit_mw", THERMAL.unit_capacity_mw)
+        thermal_capacity[zone] = thermal_units * thermal_unit_mw
         thermal_min[zone] = thermal_capacity[zone] * (THERMAL.min_power_fraction if thermal_capacity[zone] > 0 else 0.0)
         thermal_cost[zone] = thermal_fuel_cost + tech["thermal_marg_cost"] + co2_price * THERMAL.emission_rate_t_per_mwh
         thermal_ramp[zone] = thermal_capacity[zone] * tech["thermal_ramp_pct"]
@@ -610,19 +616,22 @@ def load_scenario_data(path: Path) -> ScenarioData:
         thermal_startup_cost[zone] = thermal_startup_cost_value
 
         nuclear_units = max(0, nuclear_per_zone[idx])
-        nuclear_capacity[zone] = nuclear_units * NUCLEAR.unit_capacity_mw
+        nuclear_unit_mw = unit_caps.get("nuclear_unit_mw", NUCLEAR.unit_capacity_mw)
+        nuclear_capacity[zone] = nuclear_units * nuclear_unit_mw
         nuclear_min[zone] = nuclear_capacity[zone] * (NUCLEAR.min_power_fraction if nuclear_capacity[zone] > 0 else 0.0)
         nuclear_cost[zone] = nuclear_fuel_cost
         nuclear_startup_cost[zone] = nuclear_startup_cost_value
 
         solar_units = max(0, solar_units_per_zone[idx])
-        solar_capacity[zone] = solar_units * SOLAR.unit_capacity_mw
+        solar_unit_mw = unit_caps.get("solar_unit_mw", SOLAR.unit_capacity_mw)
+        solar_capacity[zone] = solar_units * solar_unit_mw
         solar_profile = solar_profiles[zone]
         for t in periods:
             solar_available[(zone, t)] = solar_capacity[zone] * solar_profile[t]
 
         wind_units = max(0, wind_units_per_zone[idx])
-        wind_capacity[zone] = wind_units * WIND.unit_capacity_mw
+        wind_unit_mw = unit_caps.get("wind_unit_mw", WIND.unit_capacity_mw)
+        wind_capacity[zone] = wind_units * wind_unit_mw
         wind_profile = wind_profiles[zone]
         for t in periods:
             wind_available[(zone, t)] = wind_capacity[zone] * wind_profile[t]
@@ -651,8 +660,11 @@ def load_scenario_data(path: Path) -> ScenarioData:
         dr_ramp_limit[zone] = peak_demand[zone] * dr_ramp_limit_factor
 
         bat_units = max(0, assets["battery_per_zone"][idx])
-        battery_power[zone] = bat_units * BATTERY.power_per_unit_mw
-        energy_cap = battery_power[zone] * max(1.0, tech["battery_e_to_p_hours"])
+        battery_power_unit_mw = unit_caps.get("battery_power_unit_mw", BATTERY.power_per_unit_mw)
+        battery_energy_hours = unit_caps.get("battery_energy_hours", BATTERY.energy_hours)
+        battery_power[zone] = bat_units * battery_power_unit_mw
+        # Use scenario-specific energy_hours if available, otherwise tech scaler
+        energy_cap = battery_power[zone] * max(1.0, battery_energy_hours if bat_units > 0 else tech["battery_e_to_p_hours"])
         battery_energy[zone] = energy_cap
         if energy_cap > 1e-6:
             init_low = max(0.05, battery_initial_base - 0.1)
@@ -678,20 +690,25 @@ def load_scenario_data(path: Path) -> ScenarioData:
             battery_retention[zone] = 1.0
 
         hydro_res_units = max(0, hydro_reservoir_per_zone[idx])
-        hydro_res_capacity[zone] = hydro_res_units * HYDRO_RES.power_per_unit_mw
-        hydro_res_energy[zone] = hydro_res_capacity[zone] * HYDRO_RES.energy_hours
+        hydro_res_power_unit_mw = unit_caps.get("hydro_reservoir_power_unit_mw", HYDRO_RES.power_per_unit_mw)
+        hydro_res_energy_hours = unit_caps.get("hydro_reservoir_energy_hours", HYDRO_RES.energy_hours)
+        hydro_res_capacity[zone] = hydro_res_units * hydro_res_power_unit_mw
+        hydro_res_energy[zone] = hydro_res_capacity[zone] * hydro_res_energy_hours
         hydro_initial[zone] = 0.5 * hydro_res_energy[zone]
         for t in periods:
             inflow_power = hydro_res_capacity[zone] * 0.25 * inflow_profile[t]
             hydro_inflow[(zone, t)] = inflow_power
 
         hydro_ror_units = max(0, assets["hydro_ror_per_zone"][idx])
+        hydro_ror_unit_mw = unit_caps.get("hydro_ror_unit_mw", HYDRO_ROR.output_per_unit_mw)
         for t in periods:
-            hydro_ror_generation[(zone, t)] = hydro_ror_units * HYDRO_ROR.output_per_unit_mw * runofriver_profile[t]
+            hydro_ror_generation[(zone, t)] = hydro_ror_units * hydro_ror_unit_mw * runofriver_profile[t]
 
         pumped_units = max(0, hydro_pumped_per_zone[idx])
-        pumped_power[zone] = pumped_units * PUMPED.power_per_unit_mw
-        pumped_cap = pumped_power[zone] * PUMPED.energy_hours
+        pumped_power_unit_mw = unit_caps.get("pumped_power_unit_mw", PUMPED.power_per_unit_mw)
+        pumped_energy_hours = unit_caps.get("pumped_energy_hours", PUMPED.energy_hours)
+        pumped_power[zone] = pumped_units * pumped_power_unit_mw
+        pumped_cap = pumped_power[zone] * pumped_energy_hours
         pumped_energy[zone] = pumped_cap
         if pumped_cap > 1e-6:
             init_low = max(0.05, pumped_initial_base - 0.12)
@@ -724,7 +741,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
         # Block 0 is cheapest, last block is most expensive
         dr_block_cost_dict[k] = dr_cost_value * (1.5 ** k)
 
-    lines = _build_lines(zones, zones_per_region, graph["intertie_density"])
+    transmission_base = transport_caps.get("transmission_base_mw", None)
+    lines = _build_lines(zones, zones_per_region, graph["intertie_density"], transmission_base)
     from_idx: Dict[str, List[str]] = defaultdict(list)
     to_idx: Dict[str, List[str]] = defaultdict(list)
     for lid, line in lines.items():
