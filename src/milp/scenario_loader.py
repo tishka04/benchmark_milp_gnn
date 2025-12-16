@@ -444,8 +444,8 @@ def load_scenario_data(path: Path) -> ScenarioData:
         avg_region_spread = float(np.mean(list(region_weather_spread.values())))
     else:
         avg_region_spread = float(exo.get("weather_spread_intensity", 1.0) or 1.0)
-    raw_solar_per_site = assets.get("solar_per_site")
-    raw_wind_per_site = assets.get("wind_per_site")
+    raw_solar_per_zone = assets.get("solar_per_zone")
+    raw_wind_per_zone = assets.get("wind_per_zone")
 
     def _norm_units(values):
         if values is None:
@@ -457,10 +457,10 @@ def load_scenario_data(path: Path) -> ScenarioData:
             seq = seq[:total_zones]
         return [int(max(0, round(seq[idx]))) for idx in range(total_zones)]
 
-    solar_units_per_zone = _norm_units(raw_solar_per_site)
-    wind_units_per_zone = _norm_units(raw_wind_per_site)
+    solar_units_per_zone = _norm_units(raw_solar_per_zone)
+    wind_units_per_zone = _norm_units(raw_wind_per_zone)
 
-    res_counts = list(assets.get("res_per_site", []))
+    res_counts = list(assets.get("res_per_zone", []))
     if len(res_counts) < total_zones:
         res_counts.extend([0] * (total_zones - len(res_counts)))
     elif len(res_counts) > total_zones:
@@ -601,7 +601,7 @@ def load_scenario_data(path: Path) -> ScenarioData:
         for t in periods:
             demand[(zone, t)] = peak_demand[zone] * zone_profile[t]
 
-        thermal_units = max(0, assets["thermal_per_site"][idx])
+        thermal_units = max(0, assets["thermal_per_zone"][idx])
         thermal_capacity[zone] = thermal_units * THERMAL.unit_capacity_mw
         thermal_min[zone] = thermal_capacity[zone] * (THERMAL.min_power_fraction if thermal_capacity[zone] > 0 else 0.0)
         thermal_cost[zone] = thermal_fuel_cost + tech["thermal_marg_cost"] + co2_price * THERMAL.emission_rate_t_per_mwh
@@ -631,7 +631,7 @@ def load_scenario_data(path: Path) -> ScenarioData:
         for t in periods:
             res_available[(zone, t)] = solar_available.get((zone, t), 0.0) + wind_available[(zone, t)]
 
-        dr_units = max(0, assets["dr_per_site"][idx])
+        dr_units = max(0, assets["dr_per_zone"][idx])
         share = tech["dr_max_shed_share"] * (0.5 + 0.5 * min(dr_units, 4))
         for t in periods:
             dr_limit[(zone, t)] = demand[(zone, t)] * min(share, 0.8)
@@ -650,7 +650,7 @@ def load_scenario_data(path: Path) -> ScenarioData:
         # Ramp limit as fraction of peak demand
         dr_ramp_limit[zone] = peak_demand[zone] * dr_ramp_limit_factor
 
-        bat_units = max(0, assets["battery_per_site"][idx])
+        bat_units = max(0, assets["battery_per_zone"][idx])
         battery_power[zone] = bat_units * BATTERY.power_per_unit_mw
         energy_cap = battery_power[zone] * max(1.0, tech["battery_e_to_p_hours"])
         battery_energy[zone] = energy_cap

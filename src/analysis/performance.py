@@ -108,7 +108,6 @@ def build_milp_summary(index_path: Path | str, split: str = 'test', train_fracti
         dt_minutes = scenario.get('dt_minutes')
         regions = meta.get('regions') or graph.get('regions')
         zones = meta.get('zones') or sum(graph.get('zones_per_region', []) or []) or None
-        sites = meta.get('sites') or sum(graph.get('sites_per_zone', []) or []) or None
 
         mip_info = report.get('mip', {}) or {}
         lp_info = report.get('lp', {}) or {}
@@ -128,7 +127,6 @@ def build_milp_summary(index_path: Path | str, split: str = 'test', train_fracti
             'dt_minutes': float(dt_minutes) if dt_minutes is not None else math.nan,
             'regions': regions,
             'zones': zones,
-            'sites': sites,
             'milp_solve_seconds': float(mip_solve_seconds) if mip_solve_seconds is not None else math.nan,
             'lp_solve_seconds': float(lp_solve_seconds) if lp_solve_seconds is not None else math.nan,
         })

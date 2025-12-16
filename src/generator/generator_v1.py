@@ -95,18 +95,17 @@ def load_space(path: str) -> Dict[str, Any]:
 class GraphSpec:
     regions: int
     zones_per_region: List[int]
-    sites_per_zone: List[int]
     intertie_density: float
     neighbor_nations: int
 
 
 @dataclass
 class AssetSpec:
-    thermal_per_site: List[int]
-    solar_per_site: List[int]
-    wind_per_site: List[int]
-    battery_per_site: List[int]
-    dr_per_site: List[int]
+    thermal_per_zone: List[int]
+    solar_per_zone: List[int]
+    wind_per_zone: List[int]
+    battery_per_zone: List[int]
+    dr_per_zone: List[int]
     nuclear_per_region: List[int]
     hydro_reservoir_per_region: List[int]
     hydro_ror_per_zone: List[int]
@@ -193,13 +192,9 @@ def sample_graph(space: Dict[str, Any]) -> GraphSpec:
     structure = space["structure"]
     regions = rand_int(*structure["regions"])
     zones_per_region = [rand_int(*structure["zones_per_region"]) for _ in range(regions)]
-    sites_per_zone: List[int] = []
-    for count in zones_per_region:
-        sites_per_zone.extend(rand_int(*structure["sites_per_zone"]) for _ in range(count))
     return GraphSpec(
         regions=regions,
         zones_per_region=zones_per_region,
-        sites_per_zone=sites_per_zone,
         intertie_density=rand_float(*structure["intertie_density"]),
         neighbor_nations=rand_int(*structure["neighbor_nations"]),
     )
@@ -207,19 +202,17 @@ def sample_graph(space: Dict[str, Any]) -> GraphSpec:
 
 def sample_assets(space: Dict[str, Any], graph: GraphSpec) -> AssetSpec:
     assets_cfg = space["assets"]
-    ns = len(graph.sites_per_zone)
     nz = sum(graph.zones_per_region)
 
-    per_site = lambda bounds: [rand_int(*bounds) for _ in range(ns)]
     per_zone = lambda bounds: [rand_int(*bounds) for _ in range(nz)]
     per_region = lambda bounds: [rand_int(*bounds) for _ in range(len(graph.zones_per_region))]
 
     return AssetSpec(
-        thermal_per_site=per_site(assets_cfg["thermal_per_site"]),
-        solar_per_site=per_site(assets_cfg["solar_per_site"]),
-        wind_per_site=per_site(assets_cfg["wind_per_site"]),
-        battery_per_site=per_site(assets_cfg["battery_per_site"]),
-        dr_per_site=per_site(assets_cfg["dr_per_site"]),
+        thermal_per_zone=per_zone(assets_cfg["thermal_per_zone"]),
+        solar_per_zone=per_zone(assets_cfg["solar_per_zone"]),
+        wind_per_zone=per_zone(assets_cfg["wind_per_zone"]),
+        battery_per_zone=per_zone(assets_cfg["battery_per_zone"]),
+        dr_per_zone=per_zone(assets_cfg["dr_per_zone"]),
         nuclear_per_region=per_region(assets_cfg["nuclear_per_region"]),
         hydro_reservoir_per_region=per_region(assets_cfg["hydro_reservoir_per_region"]),
         hydro_ror_per_zone=per_zone(assets_cfg["hydro_ror_per_zone"]),
@@ -331,11 +324,11 @@ def sample_mip_gap(space: Dict[str, Any]) -> float:
 
 def estimate_assets_count(assets: AssetSpec) -> Dict[str, int]:
     return {
-        "thermal": sum(assets.thermal_per_site),
-        "solar": sum(assets.solar_per_site),
-        "wind": sum(assets.wind_per_site),
-        "battery": sum(assets.battery_per_site),
-        "dr": sum(assets.dr_per_site),
+        "thermal": sum(assets.thermal_per_zone),
+        "solar": sum(assets.solar_per_zone),
+        "wind": sum(assets.wind_per_zone),
+        "battery": sum(assets.battery_per_zone),
+        "dr": sum(assets.dr_per_zone),
         "nuclear": sum(assets.nuclear_per_region),
         "hydro_reservoir": sum(assets.hydro_reservoir_per_region),
         "hydro_ror": sum(assets.hydro_ror_per_zone),
@@ -343,7 +336,7 @@ def estimate_assets_count(assets: AssetSpec) -> Dict[str, int]:
     }
 
 
-def estimate_milp_size(cfg: ScenarioConfig) -> Tuple[int, int]:
+def estimate_milp_size(cfg: ScenarioConfig) -> Tuple[int, int, int]:
     T = int(cfg.horizon_hours * 60 / cfg.dt_minutes)
     counts = estimate_assets_count(cfg.assets)
 
@@ -359,30 +352,36 @@ def estimate_milp_size(cfg: ScenarioConfig) -> Tuple[int, int]:
         + 3 * counts["hydro_pumped"]
     )
     zones = sum(cfg.graph.zones_per_region)
-    sites = len(cfg.graph.sites_per_zone)
-    overhead = 20 * zones + 8 * sites
+    overhead = 20 * zones
 
     vars_total = T * (vars_per_step + overhead)
     cons_total = int(vars_total * 1.3)
-    return vars_total, cons_total
+    
+    # Binary variables: thermal and nuclear commitment decisions per timestep
+    n_binary = T * (counts["thermal"] + counts["nuclear"])
+    
+    return vars_total, cons_total, n_binary
 
 
-def estimate_solve_time_hours(vars_total: int, cons_total: int, space: Dict[str, Any]) -> float:
+def estimate_solve_time_hours(vars_total: int, cons_total: int, n_binary: int, space: Dict[str, Any]) -> float:
     te = space["budget_guard"]["time_estimator"]
     sec = (
         te["base_intercept_sec"]
         + te["per_1k_vars_sec"] * (vars_total / 1000.0)
         + te["per_1k_cons_sec"] * (cons_total / 1000.0)
+        + te.get("per_1k_binary_sec", 0.0) * (n_binary / 1000.0)
     )
     sec *= te.get("branching_penalty", 1.0)
     return sec / 3600.0
 
 
-def passes_budget_guard(vars_total: int, cons_total: int, est_hours: float, space: Dict[str, Any]) -> bool:
+def passes_budget_guard(vars_total: int, cons_total: int, n_binary: int, est_hours: float, space: Dict[str, Any]) -> bool:
     guard = space["budget_guard"]
     if vars_total > guard["max_vars_per_scenario"]:
         return False
     if cons_total > guard["max_cons_per_scenario"]:
+        return False
+    if n_binary > guard.get("max_binary_vars_per_scenario", float('inf')):
         return False
     if est_hours > guard["reject_if_est_cpu_hours_gt"]:
         return False
@@ -398,8 +397,8 @@ def scenario_meta_vector(cfg: ScenarioConfig, space: Dict[str, Any]) -> np.ndarr
     vector.append(float(cfg.econ_policy.co2_price))
     vector.append(float(cfg.econ_policy.price_cap))
     vector.append(float(cfg.exogenous.demand_scale_factor))
-    vector.append(float(np.mean(cfg.assets.solar_per_site)))
-    vector.append(float(np.mean(cfg.assets.wind_per_site)))
+    vector.append(float(np.mean(cfg.assets.solar_per_zone)))
+    vector.append(float(np.mean(cfg.assets.wind_per_zone)))
     vector.extend(cfg.exogenous.zone_profile_mix_weight)
     vector.append(float(cfg.costs.thermal_fuel_eur_per_mwh))
     vector.append(float(cfg.costs.nuclear_fuel_eur_per_mwh))
@@ -570,11 +569,9 @@ def compute_difficulty_indicators(cfg: ScenarioConfig, vars_total: int, cons_tot
 def build_meta(cfg: ScenarioConfig, vars_total: int, cons_total: int, est_hours: float) -> Dict[str, Any]:
     asset_counts = estimate_assets_count(cfg.assets)
     zones = sum(cfg.graph.zones_per_region)
-    sites = len(cfg.graph.sites_per_zone)
     return {
         "regions": cfg.graph.regions,
         "zones": zones,
-        "sites": sites,
         "intertie_density": cfg.graph.intertie_density,
         "neighbor_nations": cfg.graph.neighbor_nations,
         "assets": asset_counts,
@@ -622,8 +619,8 @@ def generate_scenarios(space_path: str, out_dir: str):
         space["economics_policy"]["co2_price_eur_per_t"][0],
         space["economics_policy"]["price_cap_eur_per_mwh"][0],
         exo_cfg["demand_scale_factor"][0],
-        space["assets"]["solar_per_site"][0],
-        space["assets"]["wind_per_site"][0],
+        space["assets"]["solar_per_zone"][0],
+        space["assets"]["wind_per_zone"][0],
         mix_bounds[0],
         mix_bounds[0],
         cost_cfg["thermal_fuel_eur_per_mwh"][0],
@@ -644,8 +641,8 @@ def generate_scenarios(space_path: str, out_dir: str):
         space["economics_policy"]["co2_price_eur_per_t"][1],
         space["economics_policy"]["price_cap_eur_per_mwh"][1],
         exo_cfg["demand_scale_factor"][1],
-        space["assets"]["solar_per_site"][1],
-        space["assets"]["wind_per_site"][1],
+        space["assets"]["solar_per_zone"][1],
+        space["assets"]["wind_per_zone"][1],
         mix_bounds[1],
         mix_bounds[1],
         cost_cfg["thermal_fuel_eur_per_mwh"][1],
@@ -686,9 +683,9 @@ def generate_scenarios(space_path: str, out_dir: str):
             mip_gap_target_pct=mip_gap,
         )
 
-        vars_total, cons_total = estimate_milp_size(cfg)
-        est_hours = estimate_solve_time_hours(vars_total, cons_total, space)
-        if not passes_budget_guard(vars_total, cons_total, est_hours, space):
+        vars_total, cons_total, n_binary = estimate_milp_size(cfg)
+        est_hours = estimate_solve_time_hours(vars_total, cons_total, n_binary, space)
+        if not passes_budget_guard(vars_total, cons_total, n_binary, est_hours, space):
             continue
 
         if space["diversity"]["selection_method"] == "greedy_cover":
@@ -737,19 +734,17 @@ def generate_scenarios(space_path: str, out_dir: str):
     if accepted:
         total_regions = [cfg.graph.regions for cfg in accepted]
         total_zones = [sum(cfg.graph.zones_per_region) for cfg in accepted]
-        total_sites = [len(cfg.graph.sites_per_zone) for cfg in accepted]
         total_vars = []
         total_cons = []
         total_hours = []
         for cfg in accepted:
-            v, c = estimate_milp_size(cfg)
+            v, c, b = estimate_milp_size(cfg)
             total_vars.append(v)
             total_cons.append(c)
-            total_hours.append(estimate_solve_time_hours(v, c, space))
+            total_hours.append(estimate_solve_time_hours(v, c, b, space))
         manifest["stats"] = {
             "avg_regions": round(float(np.mean(total_regions)), 2),
             "avg_zones": round(float(np.mean(total_zones)), 2),
-            "avg_sites": round(float(np.mean(total_sites)), 2),
             "avg_vars_est": round(float(np.mean(total_vars)), 0),
             "avg_cons_est": round(float(np.mean(total_cons)), 0),
             "avg_est_cpu_hours": round(float(np.mean(total_hours)), 2),
