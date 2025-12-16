@@ -357,8 +357,18 @@ def estimate_milp_size(cfg: ScenarioConfig) -> Tuple[int, int, int]:
     vars_total = T * (vars_per_step + overhead)
     cons_total = int(vars_total * 1.3)
     
-    # Binary variables: thermal and nuclear commitment decisions per timestep
-    n_binary = T * (counts["thermal"] + counts["nuclear"])
+    # Binary variables: all commitment, startup, and mode flags
+    # Per zone per timestep: thermal (2), nuclear (2), dr_active (1), battery mode (1), pumped mode (1)
+    # Global per timestep: import_mode (1)
+    n_binary_per_timestep = (
+        2 * counts["thermal"]  # u_thermal + v_thermal_startup
+        + 2 * counts["nuclear"]  # u_nuclear + v_nuclear_startup
+        + zones  # dr_active (all zones)
+        + zones  # b_charge_mode (all zones)
+        + zones  # pumped_charge_mode (all zones)
+        + 1  # import_mode (global)
+    )
+    n_binary = n_binary_per_timestep * T
     
     return vars_total, cons_total, n_binary
 
@@ -536,9 +546,8 @@ def compute_difficulty_indicators(cfg: ScenarioConfig, vars_total: int, cons_tot
     
     # Complexity score based on problem size and structure
     # Categories: trivial, easy, medium, hard, very_hard
-    if vars_total < 10000:
-        complexity_score = "trivial"
-    elif vars_total < 30000:
+    # Adjusted for smaller scenarios with budget_guard at ~180k vars max
+    if vars_total < 30000:
         complexity_score = "easy"
     elif vars_total < 70000:
         complexity_score = "medium"
@@ -548,8 +557,26 @@ def compute_difficulty_indicators(cfg: ScenarioConfig, vars_total: int, cons_tot
         complexity_score = "very_hard"
     
     # Additional indicators
-    n_binary_vars = counts["thermal"] * int(cfg.horizon_hours * 60 / cfg.dt_minutes)
     n_timesteps = int(cfg.horizon_hours * 60 / cfg.dt_minutes)
+    
+    # Count all binary variables in the MILP model:
+    # Per zone and timestep:
+    #   - u_thermal, v_thermal_startup (2 per thermal unit)
+    #   - u_nuclear, v_nuclear_startup (2 per nuclear unit)
+    #   - dr_active (1 per zone with DR)
+    #   - b_charge_mode (1 per zone with battery)
+    #   - pumped_charge_mode (1 per zone with pumped hydro)
+    # Global per timestep:
+    #   - import_mode (1 per timestep)
+    n_binary_per_timestep = (
+        2 * counts["thermal"]  # commitment + startup
+        + 2 * counts["nuclear"]  # commitment + startup
+        + zones  # dr_active (one per zone, even if no DR capacity)
+        + zones  # b_charge_mode (one per zone, even if no battery)
+        + zones  # pumped_charge_mode (one per zone, even if no pumped)
+        + 1  # import_mode (global)
+    )
+    n_binary_vars = n_binary_per_timestep * n_timesteps
     
     return {
         "vre_penetration_pct": round(vre_penetration_pct, 2),

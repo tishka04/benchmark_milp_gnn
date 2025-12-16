@@ -2,7 +2,7 @@
 global:
   seed: 1234
   horizon_hours: 24
-  dt_minutes: 15
+  dt_minutes: 60
   target_scenarios: 3000
   max_scenarios_per_hour_per_core: 3   # calibration locale
   cpu_cores: 12
@@ -92,14 +92,14 @@ diversity:
   min_pairwise_distance: 0.35
 
 budget_guard:
-  max_vars_per_scenario: 560000
-  max_cons_per_scenario: 800000
-  max_binary_vars_per_scenario: 60000
+  max_vars_per_scenario: 150000
+  max_cons_per_scenario: 200000
+  max_binary_vars_per_scenario: 20000
   mip_gap_target: [0.4, 1.5]
   time_estimator:
-    base_intercept_sec: 240
-    per_1k_vars_sec: 22
-    per_1k_cons_sec: 28
-    per_1k_binary_sec: 35
-    branching_penalty: 1.1
-  reject_if_est_cpu_hours_gt: 10.0
+    base_intercept_sec: 180
+    per_1k_vars_sec: 12
+    per_1k_cons_sec: 15
+    per_1k_binary_sec: 50
+    branching_penalty: 1.2
+  reject_if_est_cpu_hours_gt: 2

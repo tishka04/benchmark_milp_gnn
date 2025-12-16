@@ -1,26 +1,26 @@
 {
-  "hardest_scenario": "scenario_01647.json",
+  "hardest_scenario": "scenario_02420.json",
   "top_10": [
-    "scenario_01647.json",
-    "scenario_00993.json",
-    "scenario_01125.json",
-    "scenario_00716.json",
-    "scenario_01103.json",
-    "scenario_00516.json",
-    "scenario_01458.json",
-    "scenario_01689.json",
-    "scenario_01306.json",
-    "scenario_01414.json"
+    "scenario_02420.json",
+    "scenario_00485.json",
+    "scenario_00779.json",
+    "scenario_00539.json",
+    "scenario_02570.json",
+    "scenario_01809.json",
+    "scenario_02182.json",
+    "scenario_02247.json",
+    "scenario_01952.json",
+    "scenario_00231.json"
   ],
   "stats": {
-    "file": "scenario_01647.json",
-    "id": "a7d8cce6-deb0-44e3-8d2a-864d7c42a9fb",
-    "vars_total": 556128,
-    "cons_total": 722966,
-    "est_cpu_hours": 9.997125111111112,
-    "total_assets": 1033,
+    "file": "scenario_02420.json",
+    "id": "d8cf0d4e-f76b-4c52-8c43-55eb87b9d506",
+    "vars_total": 541632,
+    "cons_total": 704121,
+    "est_cpu_hours": 9.865757,
+    "total_assets": 1240,
     "regions": 13,
-    "zones": 111,
-    "thermal": 164
+    "zones": 128,
+    "thermal": 115
   }
 }
