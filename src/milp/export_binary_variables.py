@@ -22,7 +22,14 @@ from pyomo.environ import SolverFactory, value
 
 from .model import build_uc_model
 from .scenario_loader import load_scenario_data, ScenarioData
-from .solve import _compute_cost_components, _relax_integrality, SolveSummary
+from .solve import (
+    _compute_cost_components, 
+    _relax_integrality, 
+    SolveSummary,
+    DEFAULT_TIME_LIMIT_SECONDS,
+    _configure_solver_time_limit,
+    _is_timeout_termination,
+)
 
 
 def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
@@ -95,6 +102,10 @@ def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
         },
         "hydro_spill": {
             zone: [float(value(model.h_spill[zone, t])) for t in periods]
+            for zone in zones
+        },
+        "hydro_level": {
+            zone: [float(value(model.h_level[zone, t])) for t in periods]
             for zone in zones
         },
         "battery_charge": {
@@ -177,6 +188,7 @@ def solve_and_export_scenario(
     output_dir: Path,
     solver_name: str = "highs",
     solve_lp: bool = True,
+    time_limit_seconds: float | None = DEFAULT_TIME_LIMIT_SECONDS,
 ) -> Dict[str, Any]:
     """
     Solve MILP for a scenario and export complete solution.
@@ -187,6 +199,7 @@ def solve_and_export_scenario(
         output_dir: Directory to save JSON output
         solver_name: Solver to use (default: "highs")
         solve_lp: Whether to also solve relaxed LP
+        time_limit_seconds: Maximum solve time in seconds (default: 4 hours)
         
     Returns:
         Dictionary with solve summary and file path
@@ -206,25 +219,76 @@ def solve_and_export_scenario(
     print(f"Loading scenario from: {scenario_path}")
     data = load_scenario_data(scenario_path)
     
-    # Initialize solver
+    # Initialize solver with time limit
     solver = SolverFactory(solver_name)
+    if time_limit_seconds is not None and time_limit_seconds > 0:
+        _configure_solver_time_limit(solver, solver_name, time_limit_seconds)
     
     # ========== SOLVE MILP ==========
-    print(f"\n[1/2] Solving MILP...")
+    print(f"\n[1/2] Solving MILP (time limit: {time_limit_seconds}s)...")
     mip_model = build_uc_model(data, enable_duals=False)
     
     mip_start = time.perf_counter()
     mip_results = solver.solve(mip_model, tee=False)
     mip_elapsed = time.perf_counter() - mip_start
     
-    mip_objective = value(mip_model.obj)
-    mip_termination = str(mip_results.solver.termination_condition)
+    mip_termination_cond = mip_results.solver.termination_condition
+    mip_timed_out = _is_timeout_termination(mip_termination_cond)
+    
+    # Handle timeout case
+    try:
+        mip_objective = value(mip_model.obj)
+    except Exception:
+        mip_objective = float('inf') if mip_timed_out else float('nan')
+    
+    mip_termination = str(mip_termination_cond)
     mip_status = str(mip_results.solver.status)
     
     print(f"  Status: {mip_status}")
     print(f"  Termination: {mip_termination}")
     print(f"  Objective: {mip_objective:,.2f}")
     print(f"  Solve time: {mip_elapsed:.2f}s")
+    
+    # Handle timeout case - skip variable extraction if no feasible solution
+    if mip_timed_out and mip_objective == float('inf'):
+        print(f"  ⚠ TIMEOUT: No feasible solution found within time limit")
+        print(f"  Scenario classified as: extreme (for benchmark only)")
+        
+        # Return minimal output for timeout case
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_file = output_dir / f"{scenario_id}_complete.json"
+        
+        output = {
+            "scenario_id": scenario_id,
+            "scenario_uuid": data.scenario_id,
+            "feasibility_status": "not feasible in operational time",
+            "scenario_classification": "extreme (for benchmark only)",
+            "time_limit_seconds": time_limit_seconds,
+            "mip_solution": {
+                "objective": None,
+                "termination": mip_termination,
+                "status": mip_status,
+                "solve_seconds": mip_elapsed,
+            },
+            "lp_solution": None,
+            "cost_components": {},
+            "variables": None,
+            "binary_statistics": None,
+        }
+        
+        print(f"\nSaving timeout report to: {output_file}")
+        with open(output_file, 'w') as f:
+            json.dump(output, f, indent=2)
+        
+        return {
+            "scenario_id": scenario_id,
+            "output_file": str(output_file),
+            "mip_objective": None,
+            "mip_time": mip_elapsed,
+            "timed_out": True,
+            "feasibility_status": "not feasible in operational time",
+            "scenario_classification": "extreme (for benchmark only)",
+        }
     
     # Extract all variables from MIP solution
     print(f"\n[2/2] Extracting variables...")

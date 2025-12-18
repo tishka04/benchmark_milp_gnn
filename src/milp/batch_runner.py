@@ -53,7 +53,22 @@ def _serialize_report(report: Dict[str, Any]) -> Dict[str, Any]:
     return serializable
 
 
-def _collect_scenarios(inputs: Iterable[Path]) -> List[Path]:
+def _extract_scenario_number(path: Path) -> int:
+    """Extract scenario number from path like 'scenario_00292.json' -> 292."""
+    suffix = path.stem[len("scenario_"):]
+    try:
+        return int(suffix)
+    except ValueError:
+        return -1
+
+
+def _collect_scenarios(inputs: Iterable[Path], start_from: int = 1) -> List[Path]:
+    """Collect scenarios, optionally filtering to start from a specific number.
+    
+    Args:
+        inputs: Input paths (directories, files, or globs)
+        start_from: Scenario number to start from (e.g., 292 to start from scenario_00292)
+    """
     scenarios: List[Path] = []
     for inp in inputs:
         if inp.is_dir():
@@ -66,6 +81,12 @@ def _collect_scenarios(inputs: Iterable[Path]) -> List[Path]:
         else:
             if inp.suffix.lower() == ".json" and inp.exists():
                 scenarios.append(inp)
+    
+    # Filter scenarios to start from specified number
+    if start_from > 1:
+        scenarios = [s for s in scenarios if _extract_scenario_number(s) >= start_from]
+        scenarios = sorted(scenarios, key=_extract_scenario_number)
+    
     return scenarios
 
 
@@ -206,16 +227,21 @@ def main() -> None:
     parser.add_argument("--fail-fast", action="store_true", help="Stop on first failure")
     parser.add_argument("--tee", action="store_true", help="Stream solver output (per scenario)")
     parser.add_argument("--summary-json", type=Path, help="Optional JSON file for aggregated summary stats")
+    parser.add_argument("--start-from", type=int, default=1, 
+                        help="Scenario number to start from (e.g., 292 to resume from scenario_00292)")
     args = parser.parse_args()
 
     _configure_logging(args.log_file, args.verbose)
 
-    scenarios = _collect_scenarios(args.inputs)
+    scenarios = _collect_scenarios(args.inputs, start_from=args.start_from)
     if not scenarios:
         LOGGER.error("No scenarios found for inputs: %s", ", ".join(str(p) for p in args.inputs))
         raise SystemExit(1)
 
-    LOGGER.info("Found %d scenarios to process", len(scenarios))
+    if args.start_from > 1:
+        LOGGER.info("Resuming from scenario %d - found %d scenarios to process", args.start_from, len(scenarios))
+    else:
+        LOGGER.info("Found %d scenarios to process", len(scenarios))
 
     capture_detail = any([args.reports_dir, args.dispatch_dir, args.hdf_dir, args.plot, args.plots_dir])
     reports_dir = args.reports_dir

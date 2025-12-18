@@ -78,7 +78,7 @@ Storage units (batteries and pumped hydro) incorporate cycle-throughput costs, p
 ### 4.2 Batch solving
 
 ```bash
-python -m src.milp.batch_runner outputs/scenarios_v1 --solver highs --workers 4 --reports-dir outputs/scenarios_v1/reports --dispatch-dir outputs/scenarios_v1/dispatch_batch --plot --plots-dir outputs/scenarios_v1/plots --summary-json outputs/scenarios_v1/batch_summary.json
+python -m src.milp.batch_runner outputs/scenarios_v1 --solver highs --workers 4 --reports-dir outputs/scenarios_v1/reports --dispatch-dir outputs/scenarios_v1/dispatch_batch --plot --plots-dir outputs/scenarios_v1/plots --summary-json outputs/scenarios_v1/batch_summary.json --start-from 1
 ```
 
 Notes:

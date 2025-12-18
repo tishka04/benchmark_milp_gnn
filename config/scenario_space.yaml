@@ -75,8 +75,8 @@ operation_costs:
   nuclear_startup_cost_eur: [15000, 50000]        # Cold start cost per nuclear unit
   demand_response_cost_eur_per_mwh: [80, 500]
   value_of_lost_load_eur_per_mwh: [6000, 12000]
-  renewable_spill_cost_eur_per_mwh: [50, 800]
-  hydro_spill_cost_eur_per_mwh: [250, 750]
+  renewable_spill_cost_eur_per_mwh: [1, 15]
+  hydro_spill_cost_eur_per_mwh: [5, 20]
   overgen_spill_cost_eur_per_mwh: [2000, 8000]
   battery_cycle_cost_eur_per_mwh: [50, 125]
   pumped_cycle_cost_eur_per_mwh: [45, 90]

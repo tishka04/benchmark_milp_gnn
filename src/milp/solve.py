@@ -12,6 +12,38 @@ from pyomo.opt import SolverStatus
 from .model import build_uc_model
 from .scenario_loader import ScenarioData, load_scenario_data
 
+# Default time limit: 2 hours in seconds
+DEFAULT_TIME_LIMIT_SECONDS = 2 * 60 * 60  # 14400 seconds
+
+
+def _configure_solver_time_limit(solver, solver_name: str, time_limit_seconds: float) -> None:
+    """Configure time limit for various solvers."""
+    solver_name_lower = solver_name.lower()
+    
+    if "highs" in solver_name_lower:
+        solver.options["time_limit"] = time_limit_seconds
+    elif "gurobi" in solver_name_lower:
+        solver.options["TimeLimit"] = time_limit_seconds
+    elif "cplex" in solver_name_lower:
+        solver.options["timelimit"] = time_limit_seconds
+    elif "cbc" in solver_name_lower:
+        solver.options["seconds"] = time_limit_seconds
+    elif "glpk" in solver_name_lower:
+        solver.options["tmlim"] = time_limit_seconds
+    else:
+        # Generic attempt - many solvers accept these
+        solver.options["time_limit"] = time_limit_seconds
+        solver.options["TimeLimit"] = time_limit_seconds
+
+
+def _is_timeout_termination(termination_condition: TerminationCondition) -> bool:
+    """Check if termination was due to time limit."""
+    timeout_conditions = {
+        TerminationCondition.maxTimeLimit,
+        TerminationCondition.maxIterations,
+    }
+    return termination_condition in timeout_conditions
+
 
 @dataclass
 class SolveSummary:
@@ -262,9 +294,14 @@ def solve_scenario(
     capture_detail: bool = False,
     export_csv_prefix: Path | None = None,
     export_hdf: Path | None = None,
+    time_limit_seconds: float | None = DEFAULT_TIME_LIMIT_SECONDS,
 ) -> Dict[str, Any]:
     data: ScenarioData = load_scenario_data(Path(scenario_path))
     solver = SolverFactory(solver_name)
+    
+    # Configure time limit if specified
+    if time_limit_seconds is not None and time_limit_seconds > 0:
+        _configure_solver_time_limit(solver, solver_name, time_limit_seconds)
 
     mip_model = build_uc_model(data, enable_duals=False)
     mip_start = time.perf_counter()
@@ -276,17 +313,31 @@ def solve_scenario(
     except (TypeError, ValueError):
         mip_reported_seconds = None
     mip_time_seconds = mip_reported_seconds if mip_reported_seconds and mip_reported_seconds > 0 else mip_elapsed
+    mip_termination = mip_results.solver.termination_condition
+    mip_timed_out = _is_timeout_termination(mip_termination)
+    
+    # Handle timeout case - use infinity for objective if no feasible solution
+    try:
+        mip_objective = value(mip_model.obj)
+    except Exception:
+        mip_objective = float('inf') if mip_timed_out else float('nan')
+    
     mip_summary = SolveSummary(
-        objective=value(mip_model.obj),
-        termination_condition=mip_results.solver.termination_condition,
+        objective=mip_objective,
+        termination_condition=mip_termination,
         solver_status=mip_results.solver.status,
         solve_seconds=mip_time_seconds,
     )
-
-    cost_components = _compute_cost_components(mip_model)
+    
+    # Compute cost components only if we have a valid solution
+    if mip_timed_out and mip_objective == float('inf'):
+        cost_components = {}
+    else:
+        cost_components = _compute_cost_components(mip_model)
 
     detail_payload = None
-    if capture_detail:
+    # Skip detail capture if solver timed out without a feasible solution
+    if capture_detail and not (mip_timed_out and mip_objective == float('inf')):
         periods = list(mip_model.T)
         zones = [str(z) for z in mip_model.Z]
         horizon = len(periods)
@@ -313,6 +364,7 @@ def solve_scenario(
             "hydro_release": {zone: [float(value(mip_model.h_release[zone, t])) for t in periods] for zone in zones},
             "hydro_ror": {zone: [float(value(mip_model.hydro_ror[zone, t])) for t in periods] for zone in zones},
             "hydro_spill": {zone: [float(value(mip_model.h_spill[zone, t])) for t in periods] for zone in zones},
+            "hydro_level": {zone: [float(value(mip_model.h_level[zone, t])) for t in periods] for zone in zones},
             "battery_charge": {zone: [float(value(mip_model.b_charge[zone, t])) for t in periods] for zone in zones},
             "battery_discharge": {zone: [float(value(mip_model.b_discharge[zone, t])) for t in periods] for zone in zones},
             "battery_soc": {zone: [float(value(mip_model.b_soc[zone, t])) for t in periods] for zone in zones},
@@ -403,7 +455,8 @@ def solve_scenario(
     if detail_payload is not None:
         _export_dispatch(detail_payload, export_csv_prefix, export_hdf)
 
-    return {
+    # Build result with timeout classification
+    result = {
         "scenario_id": data.scenario_id,
         "mip": mip_summary,
         "lp": lp_summary,
@@ -413,3 +466,11 @@ def solve_scenario(
         "zones": data.zones,
         "detail": detail_payload,
     }
+    
+    # Add timeout classification if applicable
+    if mip_timed_out:
+        result["feasibility_status"] = "not feasible in operational time"
+        result["scenario_classification"] = "extreme (for benchmark only)"
+        result["time_limit_seconds"] = time_limit_seconds
+    
+    return result
