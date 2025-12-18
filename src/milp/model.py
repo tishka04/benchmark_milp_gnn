@@ -244,12 +244,20 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     
     m.dr_rebound_final_con = Constraint(m.Z, rule=_dr_rebound_final_rule)
     
-    # DR activation binary: if dr_shed > 0, then dr_active = 1
-    def _dr_activation_rule(model, z, t):
-        # dr_shed <= M * dr_active, where M = dr_limit
+    # DR activation binary: dr_shed > 0 iff dr_active = 1
+    # Upper bound: dr_shed <= M * dr_active (can only shed if active)
+    def _dr_activation_upper_rule(model, z, t):
         return model.dr_shed[z, t] <= model.dr_limit[z, t] * model.dr_active[z, t]
     
-    m.dr_activation_con = Constraint(m.Z, m.T, rule=_dr_activation_rule)
+    m.dr_activation_upper_con = Constraint(m.Z, m.T, rule=_dr_activation_upper_rule)
+    
+    # Lower bound: dr_shed >= epsilon * dr_active (must shed at least epsilon if active)
+    # This prevents dr_active = 1 with dr_shed = 0
+    DR_MIN_SHED_MW = 0.1  # Minimum shed when DR is activated
+    def _dr_activation_lower_rule(model, z, t):
+        return model.dr_shed[z, t] >= DR_MIN_SHED_MW * model.dr_active[z, t]
+    
+    m.dr_activation_lower_con = Constraint(m.Z, m.T, rule=_dr_activation_lower_rule)
     
     # Max number of DR events per zone
     def _dr_max_events_rule(model, z):
@@ -505,8 +513,34 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
                 m.u_nuclear[z, t].fix(0.0)
                 m.v_nuclear_startup[z, t].fix(0.0)
         else:
-            for t in data.periods:
+            # Nuclear reactors are initially ON (baseload assumption)
+            t0 = data.periods[0]
+            m.u_nuclear[z, t0].fix(1.0)
+            m.v_nuclear_startup[z, t0].fix(0.0)  # No startup at t=0 since already on
+            # Set initial values for remaining periods (hints for solver)
+            for t in data.periods[1:]:
                 m.u_nuclear[z, t].value = 1.0 
+        
+        # Fix dr_active to 0 for zones/times with no DR capacity
+        for t in data.periods:
+            dr_lim = data.dr_limit.get((z, t), 0.0)
+            if dr_lim <= 1e-6:
+                m.dr_active[z, t].fix(0.0)
+        
+        # Fix b_charge_mode to 0 for zones without battery capacity
+        if data.battery_power.get(z, 0.0) <= 1e-6:
+            for t in data.periods:
+                m.b_charge_mode[z, t].fix(0.0)
+        
+        # Fix pumped_charge_mode to 0 for zones without pumped storage capacity
+        if data.pumped_power.get(z, 0.0) <= 1e-6:
+            for t in data.periods:
+                m.pumped_charge_mode[z, t].fix(0.0)
+
+    # Fix import_mode to 0 if no import capacity
+    if data.import_capacity <= 1e-6:
+        for t in data.periods:
+            m.import_mode[t].fix(0.0)
 
     return m
 

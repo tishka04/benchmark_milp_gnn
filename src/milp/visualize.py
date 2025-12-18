@@ -120,9 +120,9 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
         ("Pumped", pumped_discharge, "#e6ab02"),
     ]
 
-    # Create 4 subplots with different heights
-    fig, axes = plt.subplots(4, 1, figsize=(12, 14), 
-                              gridspec_kw={'height_ratios': [3, 2, 2, 1.5]})
+    # Create 5 subplots with different heights
+    fig, axes = plt.subplots(5, 1, figsize=(12, 16), 
+                              gridspec_kw={'height_ratios': [3, 1.5, 1.5, 1.5, 1.2]})
 
     # === Subplot 1: Generation Dispatch (stacked area) ===
     # Net imports data
@@ -154,47 +154,68 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
     axes[1].set_xlim(time_hours[0], time_hours[-1])
     axes[1].grid(True, alpha=0.3)
 
-    # === Subplot 3: Slack & Adjustments (stacked area) ===
-    slack_components = []
-    slack_labels = []
-    slack_colors = []
+    # === Subplot 3: Spill (solar + wind + hydro + overgen) ===
+    spill_components = []
+    spill_labels = []
+    spill_colors = []
     
-    if demand_response and any(v > 0 for v in demand_response):
-        slack_components.append(demand_response)
-        slack_labels.append("Demand Response")
-        slack_colors.append("#66c2a5")
-    if unserved and any(v > 0 for v in unserved):
-        slack_components.append(unserved)
-        slack_labels.append("Unserved")
-        slack_colors.append("#fc8d62")
     if solar_spill and any(v > 0 for v in solar_spill):
-        slack_components.append(solar_spill)
-        slack_labels.append("Solar Spill")
-        slack_colors.append("#FDB462")
+        spill_components.append(solar_spill)
+        spill_labels.append("Solar Spill")
+        spill_colors.append("#FDB462")
     if wind_spill and any(v > 0 for v in wind_spill):
-        slack_components.append(wind_spill)
-        slack_labels.append("Wind Spill")
-        slack_colors.append("#80B1D3")
+        spill_components.append(wind_spill)
+        spill_labels.append("Wind Spill")
+        spill_colors.append("#80B1D3")
     if hydro_spill and any(v > 0 for v in hydro_spill):
-        slack_components.append(hydro_spill)
-        slack_labels.append("Hydro Spill")
-        slack_colors.append("#8da0cb")
+        spill_components.append(hydro_spill)
+        spill_labels.append("Hydro Spill")
+        spill_colors.append("#8da0cb")
     if overgen and any(v > 0 for v in overgen):
-        slack_components.append(overgen)
-        slack_labels.append("Overgen Spill")
-        slack_colors.append("#e78ac3")
+        spill_components.append(overgen)
+        spill_labels.append("Overgen Spill")
+        spill_colors.append("#e78ac3")
 
-    if slack_components:
-        axes[2].stackplot(time_hours, slack_components, labels=slack_labels, 
-                          colors=slack_colors, alpha=0.85)
-    axes[2].set_ylabel("Energy (MW)")
-    axes[2].set_xlabel("Time (hours)")
-    axes[2].set_title("MILP Oracle - Slack & Adjustments", fontsize=12, fontweight='bold')
+    if spill_components:
+        axes[2].stackplot(time_hours, spill_components, labels=spill_labels, 
+                          colors=spill_colors, alpha=0.85)
+    axes[2].set_ylabel("Power (MW)")
+    axes[2].set_title("MILP Oracle - Spill", fontsize=12, fontweight='bold')
     axes[2].legend(loc="upper right", ncol=2, fontsize=8)
     axes[2].set_xlim(time_hours[0], time_hours[-1])
     axes[2].grid(True, alpha=0.3)
 
-    # === Subplot 4: Binary Commitments (bar chart) ===
+    # === Subplot 4: Demand Adjustments (DR on left axis, Unserved on right axis) ===
+    ax_dr = axes[3]
+    ax_unserved = ax_dr.twinx()  # Secondary Y-axis for unserved
+    
+    lines_dr = []
+    lines_unserved = []
+    
+    # Plot Demand Response on left axis (area fill)
+    if demand_response and any(v > 0 for v in demand_response):
+        ax_dr.fill_between(time_hours, demand_response, alpha=0.7, color="#66c2a5", label="Demand Response")
+        ax_dr.plot(time_hours, demand_response, color="#66c2a5", linewidth=1.5)
+    ax_dr.set_ylabel("Demand Response (MW)", color="#66c2a5")
+    ax_dr.tick_params(axis='y', labelcolor="#66c2a5")
+    
+    # Plot Unserved on right axis (area fill)
+    if unserved and any(v > 0 for v in unserved):
+        ax_unserved.fill_between(time_hours, unserved, alpha=0.7, color="#fc8d62", label="Unserved")
+        ax_unserved.plot(time_hours, unserved, color="#fc8d62", linewidth=1.5)
+    ax_unserved.set_ylabel("Unserved Energy (MW)", color="#fc8d62")
+    ax_unserved.tick_params(axis='y', labelcolor="#fc8d62")
+    
+    ax_dr.set_title("MILP Oracle - Demand Adjustments", fontsize=12, fontweight='bold')
+    ax_dr.set_xlim(time_hours[0], time_hours[-1])
+    ax_dr.grid(True, alpha=0.3)
+    
+    # Combined legend
+    handles_dr, labels_dr = ax_dr.get_legend_handles_labels()
+    handles_uns, labels_uns = ax_unserved.get_legend_handles_labels()
+    ax_dr.legend(handles_dr + handles_uns, labels_dr + labels_uns, loc="upper right", fontsize=8)
+
+    # === Subplot 5: Binary Commitments (bar chart) ===
     bar_width = 0.8 * (time_hours[1] - time_hours[0]) if len(time_hours) > 1 else 0.5
     
     # Stack binary variables for visualization
@@ -239,16 +260,16 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
     if binary_components:
         bottom = [0.0] * len(time_hours)
         for comp, label, color in zip(binary_components, binary_labels, binary_colors):
-            axes[3].bar(time_hours, comp, width=bar_width, bottom=bottom, 
+            axes[4].bar(time_hours, comp, width=bar_width, bottom=bottom, 
                        label=label, color=color, alpha=0.85)
             bottom = [bottom[i] + comp[i] for i in range(len(time_hours))]
     
-    axes[3].set_ylabel("Unit Commitment")
-    axes[3].set_xlabel("Time (hours)")
-    axes[3].set_title("MILP Oracle - Binary Commitments", fontsize=12, fontweight='bold')
-    axes[3].legend(loc="upper right", ncol=4, fontsize=7)
-    axes[3].set_xlim(time_hours[0], time_hours[-1])
-    axes[3].grid(True, alpha=0.3, axis='y')
+    axes[4].set_ylabel("Unit Commitment")
+    axes[4].set_xlabel("Time (hours)")
+    axes[4].set_title("MILP Oracle - Binary Commitments", fontsize=12, fontweight='bold')
+    axes[4].legend(loc="upper right", ncol=4, fontsize=7)
+    axes[4].set_xlim(time_hours[0], time_hours[-1])
+    axes[4].grid(True, alpha=0.3, axis='y')
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=150)
