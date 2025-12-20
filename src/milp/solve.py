@@ -380,8 +380,7 @@ def solve_scenario(
             "pumped_charge_mode": {zone: [float(value(mip_model.pumped_charge_mode[zone, t])) for t in periods] for zone in zones},
             "thermal_commitment": {zone: [float(value(mip_model.u_thermal[zone, t])) for t in periods] for zone in zones},
             "thermal_startup": {zone: [float(value(mip_model.v_thermal_startup[zone, t])) for t in periods] for zone in zones},
-            "nuclear_commitment": {zone: [float(value(mip_model.u_nuclear[zone, t])) for t in periods] for zone in zones},
-            "nuclear_startup": {zone: [float(value(mip_model.v_nuclear_startup[zone, t])) for t in periods] for zone in zones},
+            # Nuclear is always ON (must-run baseload) - no commitment binaries
             "net_import": {"values": [float(value(mip_model.net_import[t])) for t in periods]},
             "net_export": {"values": [float(value(mip_model.net_export[t])) for t in periods]},
             "import_mode": {"values": [float(value(mip_model.import_mode[t])) for t in periods]},

@@ -18,7 +18,7 @@ class WindDefaults:
 @dataclass(frozen=True)
 class NuclearDefaults:
     unit_capacity_mw: float = 900.0
-    min_power_fraction: float = 0.15
+    min_power_fraction: float = 0.20  # 20% minimum when ON (must-run baseload)
     fuel_cost_per_mwh: float = 1.0
 
 @dataclass(frozen=True)

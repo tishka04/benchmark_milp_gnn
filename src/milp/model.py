@@ -105,8 +105,7 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.v_thermal_startup = Var(m.Z, m.T, within=Binary)  # Startup indicator
 
     m.p_nuclear = Var(m.Z, m.T, within=NonNegativeReals)
-    m.u_nuclear = Var(m.Z, m.T, within=Binary)  # Commitment binary for nuclear
-    m.v_nuclear_startup = Var(m.Z, m.T, within=Binary)  # Startup indicator
+    # Nuclear is always ON (must-run baseload) - no commitment binaries needed
 
     m.p_solar = Var(m.Z, m.T, within=NonNegativeReals)
     m.spill_solar = Var(m.Z, m.T, within=NonNegativeReals)
@@ -179,25 +178,32 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
 
     m.thermal_startup_detection = Constraint(m.Z, m.T, rule=_thermal_startup_rule)
 
-    # Nuclear limits with commitment variable
+    # Nuclear limits - always ON (must-run baseload), no commitment binaries
     def _nuclear_cap_rule(model, z, t):
-        return model.p_nuclear[z, t] <= model.nuclear_capacity[z] * model.u_nuclear[z, t]
+        return model.p_nuclear[z, t] <= model.nuclear_capacity[z]
 
     def _nuclear_min_rule(model, z, t):
-        return model.p_nuclear[z, t] >= model.nuclear_min[z] * model.u_nuclear[z, t]
+        # Minimum 20% of capacity when nuclear exists
+        return model.p_nuclear[z, t] >= model.nuclear_min[z]
 
     m.nuclear_capacity_limit = Constraint(m.Z, m.T, rule=_nuclear_cap_rule)
     m.nuclear_min_limit = Constraint(m.Z, m.T, rule=_nuclear_min_rule)
 
-    # Nuclear startup logic
-    def _nuclear_startup_rule(model, z, t):
+    # Nuclear ramp constraints (flexible: 50% of capacity per hour)
+    def _nuclear_ramp_up_rule(model, z, t):
         if t == model.T.first():
-            # Assume nuclear initially on (baseload) - only count startup if going from off to on
-            return model.v_nuclear_startup[z, t] >= model.u_nuclear[z, t] - 1.0
-        else:
-            return model.v_nuclear_startup[z, t] >= model.u_nuclear[z, t] - model.u_nuclear[z, t - 1]
+            return Constraint.Skip  # No ramp constraint at t=0
+        ramp_limit = 0.5 * model.nuclear_capacity[z]  # 50% of capacity per hour
+        return model.p_nuclear[z, t] - model.p_nuclear[z, t - 1] <= ramp_limit
 
-    m.nuclear_startup_detection = Constraint(m.Z, m.T, rule=_nuclear_startup_rule)
+    def _nuclear_ramp_down_rule(model, z, t):
+        if t == model.T.first():
+            return Constraint.Skip
+        ramp_limit = 0.5 * model.nuclear_capacity[z]  # 50% of capacity per hour
+        return model.p_nuclear[z, t - 1] - model.p_nuclear[z, t] <= ramp_limit
+
+    m.nuclear_ramp_up = Constraint(m.Z, m.T, rule=_nuclear_ramp_up_rule)
+    m.nuclear_ramp_down = Constraint(m.Z, m.T, rule=_nuclear_ramp_down_rule)
 
     # Renewable curtailment
     def _solar_balance_rule(model, z, t):
@@ -470,7 +476,6 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
         )
         startup_cost = sum(
             model.thermal_startup_cost[z] * model.v_thermal_startup[z, t]
-            + model.nuclear_startup_cost[z] * model.v_nuclear_startup[z, t]
             for z in model.Z for t in model.T
         )
         # Use tiered DR block costs instead of flat dr_cost
@@ -508,18 +513,11 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
             for t in data.periods:
                 m.u_thermal[z, t].fix(0.0)
                 m.v_thermal_startup[z, t].fix(0.0)
-        if data.nuclear_capacity.get(z, 0.0) <= 1e-6:
+        
+        # Nuclear is always ON - set initial value hint for solver
+        if data.nuclear_capacity.get(z, 0.0) > 1e-6:
             for t in data.periods:
-                m.u_nuclear[z, t].fix(0.0)
-                m.v_nuclear_startup[z, t].fix(0.0)
-        else:
-            # Nuclear reactors are initially ON (baseload assumption)
-            t0 = data.periods[0]
-            m.u_nuclear[z, t0].fix(1.0)
-            m.v_nuclear_startup[z, t0].fix(0.0)  # No startup at t=0 since already on
-            # Set initial values for remaining periods (hints for solver)
-            for t in data.periods[1:]:
-                m.u_nuclear[z, t].value = 1.0 
+                m.p_nuclear[z, t].value = data.nuclear_capacity[z] * 0.8  # Start at 80% capacity
         
         # Fix dr_active to 0 for zones/times with no DR capacity
         for t in data.periods:

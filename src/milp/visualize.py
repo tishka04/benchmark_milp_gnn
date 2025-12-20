@@ -81,7 +81,9 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
     wind = _sum_over_zones(detail["wind"], zones)
     hydro_release = _sum_over_zones(detail["hydro_release"], zones)
     hydro_ror = _sum_over_zones(detail["hydro_ror"], zones)
+    battery_charge = _sum_over_zones(detail.get("battery_charge", {}), zones)
     battery_discharge = _sum_over_zones(detail["battery_discharge"], zones)
+    pumped_charge = _sum_over_zones(detail.get("pumped_charge", {}), zones)
     pumped_discharge = _sum_over_zones(detail["pumped_discharge"], zones)
     demand_total = _sum_over_zones(detail["demand"], zones)
 
@@ -100,13 +102,29 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
 
     # === Binary variables data ===
     thermal_commitment = _sum_over_zones(detail.get("thermal_commitment", {}), zones)
-    nuclear_commitment = _sum_over_zones(detail.get("nuclear_commitment", {}), zones)
     thermal_startup = _sum_over_zones(detail.get("thermal_startup", {}), zones)
-    nuclear_startup = _sum_over_zones(detail.get("nuclear_startup", {}), zones)
+    # Nuclear is always ON (must-run baseload) - no commitment binaries
     battery_charge_mode = _sum_over_zones(detail.get("battery_charge_mode", {}), zones)
     pumped_charge_mode = _sum_over_zones(detail.get("pumped_charge_mode", {}), zones)
     dr_active = _sum_over_zones(detail.get("dr_active", {}), zones)
     import_mode = detail.get("import_mode", {}).get("values", [])
+    net_import_values = detail.get("net_import", {}).get("values", [])
+    net_export_values = detail.get("net_export", {}).get("values", [])
+    # Check for actual underlying activity (not just binary artifacts)
+    has_real_thermal = thermal and any(v > 0.1 for v in thermal)
+    has_real_battery_activity = (
+        (battery_charge and any(v > 0.1 for v in battery_charge)) or
+        (battery_discharge and any(v > 0.1 for v in battery_discharge))
+    )
+    has_real_pumped_activity = (
+        (pumped_charge and any(v > 0.1 for v in pumped_charge)) or
+        (pumped_discharge and any(v > 0.1 for v in pumped_discharge))
+    )
+    has_real_dr = demand_response and any(v > 0.1 for v in demand_response)
+    has_real_import_export = (
+        (net_import_values and any(v > 0.1 for v in net_import_values)) or
+        (net_export_values and any(v > 0.1 for v in net_export_values))
+    )
 
     # Generation dispatch components (stacked area)
     components = [
@@ -223,35 +241,29 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
     binary_labels = []
     binary_colors = []
     
-    if thermal_commitment and any(v > 0 for v in thermal_commitment):
+    # Only show binaries when there's actual underlying activity (not just solver artifacts)
+    if thermal_commitment and any(v > 0 for v in thermal_commitment) and has_real_thermal:
         binary_components.append(thermal_commitment)
         binary_labels.append("Thermal ON")
         binary_colors.append("#d95f02")
-    if nuclear_commitment and any(v > 0 for v in nuclear_commitment):
-        binary_components.append(nuclear_commitment)
-        binary_labels.append("Nuclear ON")
-        binary_colors.append("#7570b3")
-    if thermal_startup and any(v > 0 for v in thermal_startup):
+    # Nuclear is always ON (must-run baseload) - not shown in binary chart
+    if thermal_startup and any(v > 0 for v in thermal_startup) and has_real_thermal:
         binary_components.append(thermal_startup)
         binary_labels.append("Thermal Startup")
         binary_colors.append("#e41a1c")
-    if nuclear_startup and any(v > 0 for v in nuclear_startup):
-        binary_components.append(nuclear_startup)
-        binary_labels.append("Nuclear Startup")
-        binary_colors.append("#984ea3")
-    if battery_charge_mode and any(v > 0 for v in battery_charge_mode):
+    if battery_charge_mode and any(v > 0 for v in battery_charge_mode) and has_real_battery_activity:
         binary_components.append(battery_charge_mode)
         binary_labels.append("Battery Charging")
         binary_colors.append("#e7298a")
-    if pumped_charge_mode and any(v > 0 for v in pumped_charge_mode):
+    if pumped_charge_mode and any(v > 0 for v in pumped_charge_mode) and has_real_pumped_activity:
         binary_components.append(pumped_charge_mode)
         binary_labels.append("Pumped Charging")
         binary_colors.append("#e6ab02")
-    if dr_active and any(v > 0 for v in dr_active):
+    if dr_active and any(v > 0 for v in dr_active) and has_real_dr:
         binary_components.append(dr_active)
         binary_labels.append("DR Active")
         binary_colors.append("#66c2a5")
-    if import_mode and any(v > 0 for v in import_mode):
+    if import_mode and any(v > 0 for v in import_mode) and has_real_import_export:
         binary_components.append(import_mode)
         binary_labels.append("Import Mode")
         binary_colors.append("#377eb8")

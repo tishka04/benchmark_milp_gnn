@@ -56,14 +56,7 @@ def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
             zone: [int(round(value(model.v_thermal_startup[zone, t]))) for t in periods]
             for zone in zones
         },
-        "u_nuclear": {
-            zone: [int(round(value(model.u_nuclear[zone, t]))) for t in periods]
-            for zone in zones
-        },
-        "v_nuclear_startup": {
-            zone: [int(round(value(model.v_nuclear_startup[zone, t]))) for t in periods]
-            for zone in zones
-        },
+        # Nuclear is always ON (must-run baseload) - no commitment binaries
     }
     
     # Continuous dispatch variables
@@ -302,23 +295,14 @@ def solve_and_export_scenario(
         sum(all_vars["binary_variables"]["u_thermal"][z]) 
         for z in all_vars["metadata"]["zones"]
     )
-    n_bins_nuclear = sum(
-        sum(all_vars["binary_variables"]["u_nuclear"][z]) 
-        for z in all_vars["metadata"]["zones"]
-    )
     n_startups_thermal = sum(
         sum(all_vars["binary_variables"]["v_thermal_startup"][z]) 
         for z in all_vars["metadata"]["zones"]
     )
-    n_startups_nuclear = sum(
-        sum(all_vars["binary_variables"]["v_nuclear_startup"][z]) 
-        for z in all_vars["metadata"]["zones"]
-    )
     
     print(f"  Thermal units ON: {n_bins_thermal} / {len(all_vars['metadata']['zones']) * len(all_vars['metadata']['time_steps'])}")
-    print(f"  Nuclear units ON: {n_bins_nuclear} / {len(all_vars['metadata']['zones']) * len(all_vars['metadata']['time_steps'])}")
+    print(f"  Nuclear: always ON (must-run baseload)")
     print(f"  Thermal startups: {n_startups_thermal}")
-    print(f"  Nuclear startups: {n_startups_nuclear}")
     
     # ========== SOLVE LP (optional) ==========
     lp_summary = None
@@ -361,12 +345,11 @@ def solve_and_export_scenario(
         "variables": all_vars,
         "binary_statistics": {
             "thermal_commitment_count": n_bins_thermal,
-            "nuclear_commitment_count": n_bins_nuclear,
             "thermal_startup_count": n_startups_thermal,
-            "nuclear_startup_count": n_startups_nuclear,
+            "nuclear_status": "always_on_must_run",
             "total_binary_decisions": (
                 len(all_vars['metadata']['zones']) * 
-                len(all_vars['metadata']['time_steps']) * 4  # 4 binaries per zone per timestep
+                len(all_vars['metadata']['time_steps']) * 2  # 2 thermal binaries per zone per timestep
             ),
         },
     }
