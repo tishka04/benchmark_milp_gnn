@@ -704,6 +704,54 @@ class TemporalGraphDataset(torch.utils.data.Dataset):
             y = None
             label_mask = None
         
+        # ===== EXTRACT HIERARCHY MAPPINGS =====
+        
+        # 1. Zone → Region mapping (from zone_region_index in graph)
+        if 'zone_region_index' in data_dict:
+            zone_to_region = torch.from_numpy(data_dict['zone_region_index']).long()
+        else:
+            # Fallback: create dummy mapping if not available
+            base_node_types = node_types[:N_base]
+            num_zones = (base_node_types == 2).sum().item()
+            num_regions = max(1, (base_node_types == 1).sum().item())
+            zone_to_region = torch.arange(num_zones) % num_regions
+        
+        # 2. Asset → Zone mapping (from edge structure)
+        base_node_types = node_types[:N_base]
+        asset_mask_base = base_node_types == 3
+        zone_mask_base = base_node_types == 2
+        
+        num_zones = zone_mask_base.sum().item()
+        zone_indices = torch.where(zone_mask_base)[0]
+        
+        # Initialize mapping
+        asset_to_zone = torch.zeros(N_base, dtype=torch.long)
+        
+        # Extract base graph edges (spatial edges, types 0-6)
+        spatial_mask = edge_type < 7
+        spatial_edges = edge_index[:, spatial_mask]
+        
+        # Map temporal edges to base node indices
+        base_edges = spatial_edges % N_base
+        
+        # For each asset, find its parent zone via edges
+        for asset_idx in torch.where(asset_mask_base)[0]:
+            # Find edges where this asset is the source
+            outgoing_mask = base_edges[0] == asset_idx
+            if outgoing_mask.any():
+                targets = base_edges[1, outgoing_mask]
+                # Find which targets are zones
+                zone_targets = targets[zone_mask_base[targets]]
+                if len(zone_targets) > 0:
+                    # Map to zone list index (0 to num_zones-1)
+                    zone_node_id = zone_targets[0].item()
+                    zone_list_idx = (zone_indices == zone_node_id).nonzero(as_tuple=True)[0]
+                    if len(zone_list_idx) > 0:
+                        asset_to_zone[asset_idx] = zone_list_idx[0]
+        
+        # For non-asset nodes, assign to first zone (fallback)
+        asset_to_zone[~asset_mask_base] = 0
+        
         # Create PyG Data object
         data = Data(
             x=x,
@@ -714,6 +762,8 @@ class TemporalGraphDataset(torch.utils.data.Dataset):
             label_mask=label_mask,  # Mask indicating which nodes have valid labels
             N_base=N_base,
             T=T,
+            asset_to_zone=asset_to_zone,        # Hierarchy mapping
+            zone_to_region=zone_to_region,      # Hierarchy mapping
         )
         
         return data
