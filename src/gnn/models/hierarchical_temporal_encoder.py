@@ -228,6 +228,11 @@ class HierarchicalTemporalEncoder(nn.Module):
         h_assets_skip = h_assets.clone()  # Skip connection for decoder
         
         # Pool: Assets → Zones
+        asset_to_zone = hierarchy_mapping["asset_to_zone"]
+        zone_to_region = hierarchy_mapping["zone_to_region"]
+
+        num_zones, num_regions = self._infer_cluster_sizes(asset_to_zone, zone_to_region)
+        
         h_zones = self._pool_by_assignment(h_assets, asset_to_zone, num_zones, T)
         
         # Zone level processing
@@ -317,6 +322,25 @@ class HierarchicalTemporalEncoder(nn.Module):
         else:
             # Return flattened asset embeddings only
             return h_assets_up.view(N_base * T, self.hidden_dim)
+
+    def _infer_cluster_sizes(self, asset_to_zone, zone_to_region):
+        # zone_to_region length defines how many zones exist
+        num_zones = int(zone_to_region.numel())
+        if num_zones == 0:
+            raise RuntimeError("zone_to_region is empty")
+
+        max_a2z = int(asset_to_zone.max().item()) if asset_to_zone.numel() > 0 else -1
+        if max_a2z >= num_zones:
+            raise RuntimeError(
+                f"Inconsistent hierarchy: asset_to_zone max={max_a2z} but zone_to_region has num_zones={num_zones}. "
+                "Zones must be indexed 0..num_zones-1 and zone_to_region must have length=num_zones."
+            )
+
+        num_regions = int(zone_to_region.max().item()) + 1
+        if num_regions <= 0:
+            raise RuntimeError("Invalid num_regions inferred from zone_to_region")
+
+        return num_zones, num_regions
     
     def _pool_by_assignment(self, h, assignment, num_clusters, T):
         """
