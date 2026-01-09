@@ -1,0 +1,317 @@
+\documentclass[11pt,a4paper]{article}
+
+% --------------------------
+% Packages
+% --------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{booktabs}
+
+\geometry{margin=2.2cm}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!45!black,
+  urlcolor=blue!45!black,
+  citecolor=blue!45!black
+}
+
+% --------------------------
+% Styling helpers
+% --------------------------
+\definecolor{myblue}{RGB}{20,70,140}
+\definecolor{mygray}{RGB}{245,247,250}
+
+\newtcolorbox{roadmapbox}[1]{
+  colback=mygray,
+  colframe=myblue,
+  fonttitle=\bfseries,
+  title=#1,
+  arc=2mm,
+  boxrule=0.7pt,
+  left=1.2mm,
+  right=1.2mm,
+  top=1.0mm,
+  bottom=1.0mm
+}
+
+\newcommand{\Goal}{\textbf{Goal.} }
+\newcommand{\Why}{\textbf{Why.} }
+\newcommand{\How}{\textbf{Implementation.} }
+\newcommand{\Checkok}{\textbf{What to measure.} }
+\newcommand{\Pitfalls}{\textbf{Pitfalls.} }
+\newcommand{\Gain}{\textbf{Expected gain.} }
+
+% --------------------------
+% Title
+% --------------------------
+\title{\textbf{EBM + Normalized Langevin + LP Worker}\\
+\large Improvement Roadmap (detailed version)}
+\author{Théotime Coudray}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document summarizes, in a practically motivated priority order, the most promising improvements
+for a surrogate MILP UC/flexibility solving pipeline built on an \emph{Energy-Based Model} (EBM),
+a \emph{Normalized Langevin} sampler, and an \emph{LP worker}.
+The goal is to reduce the \emph{tail} of pathological scenarios (extreme gaps) by improving:
+(i) the temporal expressivity of the energy function, (ii) alignment with the true LP cost, and (iii) robustness
+and operational reliability (diagnostics, guardrails).
+\end{abstract}
+
+\bigskip
+
+\begin{roadmapbox}{Overview: recommended order}
+\begin{enumerate}[leftmargin=*, itemsep=2pt]
+  \item \textbf{Zone-level} embeddings (spatially relevant context)
+  \item Energy \textbf{over zone temporal trajectories} (intertemporal dynamics)
+  \item \textbf{Margin-based} loss (contrastive stabilization / outlier reduction)
+  \item \textbf{Cost-aware} training (alignment with real economic impact)
+  \item Explicit \textbf{soft constraints} as energy terms (physics priors)
+  \item Penalizing \textbf{fragility} (flat minima / stable solutions)
+  \item Energy \textbf{self-diagnostics} (confidence score, fallback)
+  \item \textbf{Causal regularization} (generalization / directional coherence)
+  \item \textbf{Hard negatives} via Normalized Langevin during training (phase 2)
+  \item \textbf{Sampler tuning} (noise, steps, restarts) (practical optimization)
+\end{enumerate}
+\end{roadmapbox}
+
+\section{Preliminaries: what we are trying to fix}
+A standard EBM learns an energy \(E_\theta(u\mid h)\) that should be \emph{low} on observed binary configurations
+\(u\) (commitments/modes) coming from the MILP oracle, and \emph{high} on negative configurations.
+The main risk in UC/flexibility problems is not the mean gap, but the \emph{tail}:
+a handful of scenarios where a small number of badly placed bits in time triggers
+huge costs at the LP worker (VOLL, forced imports, ramp/storage inconsistencies).
+The improvements below primarily aim to:
+\begin{itemize}[leftmargin=*]
+  \item capture intertemporal dependencies (storage, ramping, startups),
+  \item align learning with the true economic impact of decisions,
+  \item make the pipeline robust (uncertainty detection, stable solutions).
+\end{itemize}
+
+% ==============================================================================
+\section{1) Move to zone-level embeddings}
+\begin{roadmapbox}{1. \textbf{Zone-level} embeddings}
+\Goal Provide the EBM with a context \(h\) that preserves local tensions (congestion, VRE, demand, local flexibility).\\
+\Why A ``averaged'' national embedding collapses structure: two scenarios with the same national aggregates can be
+radically different at the zone level (local deficits, limited imports, saturated local storage).
+An EBM conditioned on an overly global context tends to generate ``average'' decisions and misses the corners
+of the feasible polytope.\\
+\How
+\begin{itemize}[leftmargin=*]
+  \item Extract \(h_{z,t}\in\mathbb{R}^{D}\) for each zone \(z\) and time step \(t\) (e.g., via your multiscale encoder).
+  \item In the \texttt{DataLoader}, attach each binary variable \(u_{z,t,\cdot}\) to \emph{its} zone embedding:
+  broadcast \(h_{z,t}\) only to nodes/variables belonging to that zone.
+  \item If \(u\) is ``per zone and time'', you can represent each pair \((z,t)\) as a decision node.
+\end{itemize}
+\Checkok
+\begin{itemize}[leftmargin=*]
+  \item Reduction of extreme gaps (90/95/99th percentiles).
+  \item Oracle cost vs LP-worker cost correlation (log-log).
+  \item LP feasibility rate and sensitivity to ``OOD'' scenarios.
+\end{itemize}
+\Pitfalls
+\begin{itemize}[leftmargin=*]
+  \item Aligning zone/time identifiers between embeddings and binary dictionaries is a major source of bugs.
+  \item If your EBM remains a ``Deep Sets'' model without temporal structure, gains exist but quickly plateau.
+\end{itemize}
+\Gain Better spatial conditioning and fewer locally inconsistent decisions.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{2) Inject temporal dynamics: energy over zone trajectories}
+\begin{roadmapbox}{2. Energy \textbf{over temporal trajectories} (zone)}
+\Goal Make the EBM learn intertemporal strategies (e.g., \emph{discharge now to survive a later peak}).\\
+\Why Pathological scenarios often come from poor \emph{timing}: a correct bit at time \(t\) becomes catastrophic
+at \(t+k\) (SOC, ramp limits, DR availability). An ``instantaneous'' energy summed over independent variables
+cannot represent these dependencies.\\
+\How (simple $\rightarrow$ advanced options)
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Local window} : define energy on \((t-1,t,t+1)\) per zone:
+  \(E=\sum_{z,t} e_\theta(u_{z,t-1:t+1}, h_{z,t-1:t+1})\).
+  \item \textbf{Full trajectory} : \(E=\sum_z E_\theta(u_{z,1:T}, h_{z,1:T})\) where \(E_\theta\) is
+  a small GRU/TCN/light Transformer per zone.
+  \item \textbf{Hierarchy} : add a national term \(E^{\mathrm{nat}}(u, h^{\mathrm{nat}})\) for global decisions
+  (imports, balance constraints), while keeping the zone term.
+\end{enumerate}
+\Checkok
+\begin{itemize}[leftmargin=*]
+  \item Fewer ON/OFF toggles and fewer unnecessary startups.
+  \item Battery/pumped cycling distributions vs oracle (simple statistics).
+  \item ``Best-of-k'' curve: as \(k\) increases, you approach oracle without blowing up.
+\end{itemize}
+\Pitfalls
+\begin{itemize}[leftmargin=*]
+  \item Watch memory if you concatenate zone$\times$time$\times$features naively.
+  \item If you do not control energy scaling, Langevin can diverge (normalization helps).
+\end{itemize}
+\Gain Captures intertemporal dynamics: major reduction of the outlier tail.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{3) Margin-based loss (margin ranking) to stabilize training}
+\begin{roadmapbox}{3. \textbf{Margin-based} loss instead of pure gap}
+\Goal Prevent training from being satisfied with a small mean separation while keeping outliers.\\
+\Why The mean gap \(E_{pos}-E_{neg}\) can be small without guaranteeing robust separation.
+A margin loss enforces a minimum separation \(m\): you do not ``relax'' until
+\(E_{neg}\ge E_{pos}+m\).\\
+\How
+\[
+\mathcal{L}=\max(0,\, m + \mathbb{E}[E_{pos}] - \mathbb{E}[E_{neg}]) + \lambda \, \mathrm{Reg}
+\]
+\begin{itemize}[leftmargin=*]
+  \item Choose \(m\) (e.g., 1.0, 2.0) and possibly a schedule (it can increase with epochs).
+  \item Keep a regularizer on the energy scale (L2 on \(E\) or on weights).
+\end{itemize}
+\Checkok
+\begin{itemize}[leftmargin=*]
+  \item Energy stability (no explosion) and improved separation on validation.
+  \item Reduction of LP-cost outliers.
+\end{itemize}
+\Pitfalls Too large \(m\) can slow learning; too small reduces to pure-gap training.
+\Gain Stabilization and fast reduction of catastrophic cases.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{4) Cost-aware training (align energy with the economic objective)}
+\begin{roadmapbox}{4. \textbf{Cost-aware} training}
+\Goal Ensure costly mistakes are penalized far more than benign mistakes.\\
+\Why In UC/flexibility, a bit on thermal commitment at the right time can cost
+\(\times 10^2\)–\(\times 10^4\) more than a DR bit. Without weighting, the EBM can reduce loss by fixing easy bits
+and leave rare but ruinous mistakes.\\
+\How (pragmatic)
+\begin{itemize}[leftmargin=*]
+  \item Define weights \(w_{i}\) by variable type and timestep.
+  \item Example: \(w\) proportional to \texttt{startup\_cost}, \texttt{VOLL}, or a proxy (shadow price / dual).
+  \item Inject \(w\) into the loss: \(\sum_i w_i \, e_\theta(u_i,h)\) or weight samples/batches.
+\end{itemize}
+\Checkok
+\begin{itemize}[leftmargin=*]
+  \item Lower 99th percentile of gaps.
+  \item Better monotonic relationship between EBM energy and LP cost.
+\end{itemize}
+\Pitfalls Over-aggressive weighting may hurt the mean; the target is the tail.
+\Gain Reduced ``explosive'' scenarios with very high costs.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{5) Explicit soft constraints as energy terms}
+\begin{roadmapbox}{5. Add dedicated \textbf{energy terms} (physics priors)}
+\Goal Avoid forcing the EBM to relearn trivial rules; steer the sampler away from toxic regions.\\
+\Why Some inconsistencies are well known: rapid toggles, simultaneous charge/discharge, DR activated outside windows, etc.
+Penalizing them directly stabilizes sampling and reduces LP failures.\\
+\How
+\begin{itemize}[leftmargin=*]
+  \item Add \(E(u)=E_{\text{data}}(u)+\lambda_1 V_{\text{toggle}}(u)+\lambda_2 V_{\text{stor}}(u)+\cdots\)
+  \item \(V_{\text{toggle}}\): penalty on \(|u_{t}-u_{t-1}|\) for commitments (or on the number of switches).
+  \item \(V_{\text{stor}}\): penalize simultaneous charge and discharge, or overly fast cycles.
+\end{itemize}
+\Checkok
+\begin{itemize}[leftmargin=*]
+  \item Lower LP infeasibility rate.
+  \item Fewer toggles and fewer ``non-physical'' behaviors.
+\end{itemize}
+\Pitfalls Too many soft constraints $\Rightarrow$ overly rigid model; tune \(\lambda\)'s.
+\Gain Very strong ROI against pathological scenarios.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{6) Penalize fragility: prefer ``flat'' minima}
+\begin{roadmapbox}{6. Penalize \textbf{fragility} (robustness)}
+\Goal Favor stable solutions: small perturbations should not make the LP catastrophic.\\
+\Why Narrow minima (energy highly sensitive to one flip) are dangerous:
+they can look good in energy yet be poor in true economic cost.\\
+\How
+\begin{itemize}[leftmargin=*]
+  \item Penalize gradient norm: \(\lambda \lVert \nabla_u E \rVert^2\) (on a continuous relaxation).
+  \item Or penalize variance: evaluate \(E(u+\epsilon)\) for a few perturbations and penalize the variance.
+\end{itemize}
+\Checkok Tail of gaps, stability of best-of-k candidates, sensitivity to random flips.
+\Pitfalls Computational overhead if too many perturbations; keep 2--4 per batch.
+\Gain Strong reduction of extreme failures.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{7) Energy self-diagnostics (confidence score)}
+\begin{roadmapbox}{7. \textbf{Self-diagnostics}: estimate confidence}
+\Goal Know when the pipeline should fallback (multi-restart, partial MILP, etc.).\\
+\Why Even a strong EBM will face OOD cases. A confidence score prevents catastrophic decisions in production.\\
+\How
+\begin{itemize}[leftmargin=*]
+  \item Add an auxiliary head \(c_\phi(h,u)\) predicting local energy variance under perturbations,
+  or a ``margin'' score (\(E_2-E_1\)).
+  \item Define a rule: low confidence $\Rightarrow$ more restarts / partial exact solve.
+\end{itemize}
+\Checkok Calibration: risk-coverage curve (accept fewer cases, but more reliable ones).
+\Pitfalls The head must not learn trivial proxies (e.g., graph size); regularize accordingly.
+\Gain Industrial robustness and controllability.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{8) Causal regularization}
+\begin{roadmapbox}{8. \textbf{Causal} regularization}
+\Goal Improve generalization by enforcing directional dependencies (t $\rightarrow$ t+1).\\
+\Why Some relationships must be directional (SOC, ramps, commitment). Without an inductive bias,
+the EBM may capture brittle correlations.\\
+\How
+\begin{itemize}[leftmargin=*]
+  \item Penalize temporal order violations (e.g., decisions depending on future information).
+  \item Add constraints/regularizers on causal features (state $\rightarrow$ decision).
+\end{itemize}
+\Checkok OOD robustness (extreme climate stress, atypical VRE profiles).
+\Pitfalls Can be hard to define cleanly; start from obvious physical rules.
+\Gain Better generalization (especially out of distribution).
+\end{roadmapbox}
+
+% ==============================================================================
+\section{9) Hard negatives via Normalized Langevin during training (phase 2)}
+\begin{roadmapbox}{9. \textbf{Hard negatives}: Langevin in the training loop}
+\Goal Make the EBM discriminative against realistic, challenging negatives.\\
+\Why Bernoulli negatives are too far; the EBM learns to separate easy noise.
+Langevin provides candidates close to the modes.\\
+\How (careful)
+\begin{itemize}[leftmargin=*]
+  \item Warm-up with simple negatives (epochs 1--K).
+  \item Then, 1 batch out of \(k\): generate \(u_{neg}\) with a \emph{short} Normalized Langevin run (few steps),
+  and use it as negatives.
+\end{itemize}
+\Checkok Energy stability and better performance on outliers.
+\Pitfalls If the sampler is too strong too early: collapse / cheating.
+\Gain Higher precision on difficult cases.
+\end{roadmapbox}
+
+% ==============================================================================
+\section{10) Sampler tuning (noise, steps, restarts)}
+\begin{roadmapbox}{10. \textbf{Sampler tuning}}
+\Goal Improve the speed/quality trade-off and reduce narrow minima.\\
+\Why More iterations is not always better; too much precision can trap you in bad minima.\\
+\How
+\begin{itemize}[leftmargin=*]
+  \item Multi-restart (best-of-k) with few steps rather than one long run.
+  \item Stronger initial noise, smoother annealing.
+  \item ``Block noise'': flips by temporal/zone blocks.
+\end{itemize}
+\Checkok Quality-vs-time curve (latency) and tail of gaps.
+\Pitfalls Too much noise $\Rightarrow$ exploration without convergence; calibrate.
+\Gain Practical improvements without changing the model.
+\end{roadmapbox}
+
+\section{Conclusion}
+The priority is to make the energy function \emph{dynamic} and \emph{cost-aligned}:
+(i) zone embeddings, (ii) energy over zone temporal trajectories, (iii) margin loss,
+(iv) cost-aware training, then robustness and industrialization.
+The objective is not only to improve the median gap, but to cut the tail of catastrophic scenarios
+(e.g., cases similar to scenario 00643).
+
+\end{document}
