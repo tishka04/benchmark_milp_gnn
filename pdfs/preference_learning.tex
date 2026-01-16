@@ -1,0 +1,180 @@
+\documentclass[11pt,a4paper]{article}
+
+% =====================================================================
+% Packages
+% =====================================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e}
+\usepackage{hyperref}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\begin{document}
+
+% =====================================================================
+% Methodology: Conditional Preference-Based Energy Learning
+% using HTE scenario embeddings + EBM + Langevin + Decoder + LP Worker
+% =====================================================================
+
+\subsection{Conditional preference-based energy learning with HTE embeddings and an LP economic oracle}
+\label{sec:method_cond_pref_ebm_hte}
+
+\paragraph{Scenario encoding with a Hierarchical Temporal Encoder (HTE).}
+Each scenario $x$ (multilayer grid graph, exogenous drivers, and time series) is first encoded
+by a \emph{Hierarchical Temporal Encoder} (HTE) into a context representation
+\begin{equation}
+h = \mathrm{HTE}_\phi(x),
+\qquad h \in \mathbb{R}^{d},
+\label{eq:hte_embedding}
+\end{equation}
+where $\phi$ denotes the HTE parameters (trained beforehand or jointly, depending on the
+experimental setting). In practice, $h$ may include multi-scale components (e.g., zone- and
+system-level embeddings) and temporal summaries; throughout this section we use $h$ as a
+generic shorthand for the HTE-provided conditioning signal.
+
+\paragraph{Decision space.}
+The operational decision is represented by a high-dimensional binary vector
+$u \in \{0,1\}^{M}$ collecting unit-commitment (UC) flags, discrete demand-response (DR)
+activations, and discrete storage mode indicators across space and time.
+For sampling, we often operate in a continuous relaxation $\tilde{u}\in(0,1)^M$ (or in logit
+space) and binarize only before the physics-based refinement stage.
+
+\paragraph{Conditional energy-based model (EBM).}
+We learn a \emph{conditional} energy function
+\begin{equation}
+E_\theta(u \mid h) \in \mathbb{R},
+\label{eq:conditional_energy}
+\end{equation}
+where $\theta$ are the EBM parameters and $h$ is the HTE embedding of the scenario.
+The EBM defines an implicit conditional distribution over discrete decisions:
+\begin{equation}
+p_\theta(u \mid h) \propto \exp\!\left(-E_\theta(u \mid h)\right).
+\label{eq:ebm_distribution}
+\end{equation}
+Low-energy configurations are intended to correspond to low-cost operational strategies for
+scenario context $h$.
+
+\paragraph{Implicit policy via normalized Langevin sampling.}
+Given $h$, we generate a set of $K$ candidate configurations by running a stochastic sampler
+targeting~\eqref{eq:ebm_distribution}. Let $\mathcal{S}_\theta$ denote a normalized Langevin
+procedure operating in a relaxed space:
+\begin{equation}
+\{\tilde{u}^{(k)}\}_{k=1}^{K} \sim \mathcal{S}_\theta(h),
+\qquad \tilde{u}^{(k)} \in (0,1)^M,
+\label{eq:langevin_candidates}
+\end{equation}
+and convert relaxed samples into binary decisions
+\begin{equation}
+u^{(k)} = \mathrm{Bin}(\tilde{u}^{(k)}) \in \{0,1\}^{M},
+\label{eq:binarization}
+\end{equation}
+where $\mathrm{Bin}(\cdot)$ is thresholding or Bernoulli sampling.
+
+\paragraph{Hierarchical feasibility decoder and LP worker (economic oracle).}
+Each discrete candidate $u^{(k)}$ is passed through a hierarchical decoder $\mathcal{D}$
+that produces a coherent continuous initialization (dispatch, storage trajectories, DR profiles,
+and flows) consistent with $u^{(k)}$:
+\begin{equation}
+y^{(k)}_{\mathrm{dec}} = \mathcal{D}\!\left(x, u^{(k)}\right).
+\label{eq:decoder}
+\end{equation}
+Then, an LP worker $\mathcal{W}$ \emph{hard-fixes} the discrete decisions $u^{(k)}$ and solves
+a continuous dispatch problem to validate feasibility and compute the realized operational cost:
+\begin{equation}
+(\mathrm{feas}^{(k)},\, y^{(k)}_\star,\, C^{(k)}) =
+\mathcal{W}\!\left(x, u^{(k)}, y^{(k)}_{\mathrm{dec}}\right),
+\label{eq:lp_worker}
+\end{equation}
+where $\mathrm{feas}^{(k)}\in\{0,1\}$ denotes feasibility and $C^{(k)}\in\mathbb{R}_+$
+is the resulting cost (including penalty terms such as VOLL when applicable).
+Crucially, $\mathcal{W}$ is treated as a \emph{non-differentiable} physics-aware oracle:
+it provides exact economic feedback, but gradients are \emph{not} propagated through the LP.
+
+\paragraph{Preference signal induced by realized costs.}
+Among feasible candidates we select the lowest-cost solution
+\begin{equation}
+k^\star \in \arg\min_{k:\,\mathrm{feas}^{(k)}=1} C^{(k)}, 
+\qquad \hat{u} := u^{(k^\star)}.
+\label{eq:best_candidate}
+\end{equation}
+When available, we also obtain a reference solution $u^{+}$ from the MILP oracle (optimal or
+best incumbent under a time limit) with cost $C^{+}$.
+The LP worker thus induces an ordering over decisions:
+\begin{equation}
+u^{(i)} \succ u^{(j)}
+\quad \Longleftrightarrow \quad
+C^{(i)} < C^{(j)}.
+\label{eq:preference_relation}
+\end{equation}
+Learning then aims at shaping the energy landscape so that lower-cost decisions receive
+lower energy under the same conditioning $h$.
+
+\paragraph{Preference-based objective (conditional energy shaping).}
+We train the conditional energy $E_\theta(\cdot\mid h)$ using a margin-ranking loss comparing
+the MILP reference $u^+$ to hard candidates produced by the pipeline. Let $\mathcal{K}$ be a
+set of ``hard negatives'' (e.g., feasible candidates with high realized costs, or a diverse subset).
+We minimize
+\begin{equation}
+\mathcal{L}_{\mathrm{rank}}(\theta)
+=
+\frac{1}{|\mathcal{K}|}\sum_{k\in\mathcal{K}}
+\max\!\left(0,\; m + E_\theta(u^{+}\mid h) - E_\theta(u^{(k)}\mid h)\right),
+\label{eq:rank_loss_hte}
+\end{equation}
+where $m>0$ is a margin. To emphasize rare but catastrophic failures, we optionally use a
+cost-aware weighting based on the realized cost gap:
+\begin{equation}
+w_k
+=
+\mathrm{clip}\!\left(
+\log\!\big(1 + (C^{(k)}-C^{+})_+\big),\; 0,\; w_{\max}
+\right),
+\label{eq:cost_weight}
+\end{equation}
+and define
+\begin{equation}
+\mathcal{L}_{\mathrm{w\text{-}rank}}(\theta)
+=
+\frac{1}{|\mathcal{K}|}\sum_{k\in\mathcal{K}}
+(1+\alpha w_k)\,
+\max\!\left(0,\; m + E_\theta(u^{+}\mid h) - E_\theta(u^{(k)}\mid h)\right),
+\label{eq:weighted_rank_loss_hte}
+\end{equation}
+with $\alpha\ge 0$.
+
+\paragraph{Gradient flow and training protocol.}
+The full pipeline (Langevin sampler $\rightarrow$ decoder $\rightarrow$ LP worker) is used to
+generate economically meaningful hard candidates and costs. Gradients are computed \emph{only}
+through the EBM evaluations $E_\theta(\cdot\mid h)$ in
+Eqs.~\eqref{eq:rank_loss_hte}--\eqref{eq:weighted_rank_loss_hte}.
+In particular, we do not differentiate through the decoder $\mathcal{D}$, the LP worker
+$\mathcal{W}$, nor the MILP oracle. The conditioning by HTE embeddings $h=\mathrm{HTE}_\phi(x)$
+ensures that the learned energy landscape adapts to scenario-specific spatio-temporal patterns
+(demand, VRE, congestion, storage tension), enabling fast inference via sampling while retaining
+physics-aware economic evaluation through the LP worker.
+
+% ---------------------------------------------------------------------
+% Optional: Pseudocode (requires algorithm2e)
+% ---------------------------------------------------------------------
+\begin{algorithm}[t]
+\caption{Conditional preference-based EBM training (HTE-conditioned) with an LP economic oracle}
+\label{alg:cond_pref_ebm_hte}
+\KwIn{Scenario dataset $\{x_n\}$; HTE encoder $\mathrm{HTE}_\phi$; EBM $E_\theta$}
+\KwIn{Sampler $\mathcal{S}_\theta$; decoder $\mathcal{D}$; LP worker $\mathcal{W}$}
+\KwIn{Hyperparameters: $K$ candidates, margin $m$, weighting $\alpha$}
+\For{each minibatch of scenarios $x$}{
+    Compute conditioning embeddings $h \leftarrow \mathrm{HTE}_\phi(x)$\;
+    Sample $\{\tilde{u}^{(k)}\}_{k=1}^K \sim \mathcal{S}_\theta(h)$\;
+    Binarize $u^{(k)} \leftarrow \mathrm{Bin}(\tilde{u}^{(k)})$\;
+    \For{$k=1$ \KwTo $K$}{
+        $y^{(k)}_{\mathrm{dec}} \leftarrow \mathcal{D}(x, u^{(k)})$\;
+        $(\mathrm{feas}^{(k)}, C^{(k)}) \leftarrow \mathcal{W}(x, u^{(k)}, y^{(k)}_{\mathrm{dec}})$\;
+    }
+    Select a hard-negative set $\mathcal{K}$ from feasible candidates (e.g., high-cost feasible)\;
+    Retrieve MILP reference $(u^+, C^+)$ for these scenarios when available\;
+    Compute $\mathcal{L}_{\mathrm{w\text{-}rank}}$ using energies $E_\theta(\cdot\mid h)$ only\;
+    Update $\theta$ by backpropagation through $E_\theta$ (no gradients through $\mathcal{D}$ or $\mathcal{W}$)\;
+}
+\end{algorithm}

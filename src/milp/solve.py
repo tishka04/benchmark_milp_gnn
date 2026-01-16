@@ -13,7 +13,7 @@ from .model import build_uc_model
 from .scenario_loader import ScenarioData, load_scenario_data
 
 # Default time limit: 2 hours in seconds
-DEFAULT_TIME_LIMIT_SECONDS = 2 * 60 * 60  # 14400 seconds
+DEFAULT_TIME_LIMIT_SECONDS = 60 * 10 # 10 minutes
 
 
 def _configure_solver_time_limit(solver, solver_name: str, time_limit_seconds: float) -> None:

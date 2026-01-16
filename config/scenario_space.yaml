@@ -3,27 +3,27 @@ global:
   seed: 1234
   horizon_hours: 24
   dt_minutes: 60
-  target_scenarios: 3000
+  target_scenarios: 100
   max_scenarios_per_hour_per_core: 3   # calibration locale
   cpu_cores: 12
   max_compute_hours: 168
 
 structure:
-  regions: [2, 13]
-  zones_per_region: [2, 13]
+  regions: [2, 20]
+  zones_per_region: [2, 20]
   intertie_density: [0.2, 0.6]
-  neighbor_nations: [1, 5]
+  neighbor_nations: [1, 8]
 
 assets:
   thermal_per_zone: [0, 2]
-  solar_per_zone: [0, 5]
-  wind_per_zone: [0, 4]
-  battery_per_zone: [0, 2]
-  dr_per_zone: [0, 3]
+  solar_per_zone: [0, 6]
+  wind_per_zone: [0, 5]
+  battery_per_zone: [0, 3]
+  dr_per_zone: [0, 4]
   nuclear_per_region: [0, 2]
-  hydro_reservoir_per_region: [0, 4]
-  hydro_ror_per_zone: [0, 3]
-  hydro_pumped_per_region: [0, 2]
+  hydro_reservoir_per_region: [0, 8]
+  hydro_ror_per_zone: [0, 1]
+  hydro_pumped_per_region: [0, 5]
 
 unit_capacities:
   thermal_unit_mw: [100, 450]
@@ -43,7 +43,7 @@ transport_capacities:
 
 economics_policy:
   co2_price_eur_per_t: [35, 250]
-  price_cap_eur_per_mwh: [500, 3000]
+  price_cap_eur_per_mwh: [50, 3000]
   cross_border_policy: ["allow", "cap", "block"]
   import_export_caps_factor: [0.4, 1.6]
 
@@ -83,12 +83,12 @@ operation_costs:
 
 exogenous:
   weather_profiles: ["calm_winter", "stormy_winter", "sunny_summer", "overcast_summer", "mixed"]
-  weather_spread_intensity: [0.5, 1.5]
+  weather_spread_intensity: [0.5, 1.8]
   demand_profiles: ["wkday_peak", "wkend_flat", "cold_snap", "heatwave", "shoulder"]
-  demand_scale_factor: [0.65, 1.35]
+  demand_scale_factor: [0.65, 1.55]
   inflow_factor: [0.4, 1.7]
   zone_profile_variants:
-    evening_peak: 0.28
+    evening_peak: 0.30
     double_peak: 0.16
     office_peak: 0.20
     industrial: 0.14

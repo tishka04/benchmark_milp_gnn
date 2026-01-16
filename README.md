@@ -48,7 +48,7 @@ Keep everything relative to the project root (`benchmark/` in this checkout). Al
 The quickest way to sample a new batch is the convenience wrapper:
 
 ```bash
-python -m src.generator.run_generator
+python -m src.generator.run_generator -o outputs/scenarios_eval_stress
 ```
 
 This reads `config/scenario_space.yaml` and writes JSON payloads plus a `manifest.json` under `outputs/scenarios_v1/`. You can customise behaviour by editing the YAML (e.g., horizon length, asset ranges) or by importing `generate_scenarios` from `src.generator.generator_v1` in your own script.
@@ -63,7 +63,7 @@ Useful tips:
 ### 4.1 Single scenario
 
 ```bash
-python -m src.milp.run_milp outputs/scenarios_v1/scenario_00001.json --solver highs --tee --save-json outputs/scenarios_v1/reports/scenario_00001.json --plot --plot-dir outputs/scenarios_v1/plots
+python -m src.milp.run_milp outputs/scenarios_v2/scenario_00001.json --solver highs --tee --save-json outputs/scenarios_v2/reports/scenario_00001.json --plot --plot-dir outputs/scenarios_v2/plots
 ```
 
 Flags of interest:
@@ -78,7 +78,7 @@ Storage units (batteries and pumped hydro) incorporate cycle-throughput costs, p
 ### 4.2 Batch solving
 
 ```bash
-python -m src.milp.batch_runner outputs/scenarios_v1 --solver highs --workers 4 --reports-dir outputs/scenarios_v1/reports --dispatch-dir outputs/scenarios_v1/dispatch_batch --plot --plots-dir outputs/scenarios_v1/plots --summary-json outputs/scenarios_v1/batch_summary.json --start-from 1
+python -m src.milp.batch_runner outputs/scenarios_eval_stress --solver highs --workers 4 --reports-dir outputs/scenarios_eval_stress/reports --dispatch-dir outputs/scenarios_eval_stress/dispatch_batch --plot --plots-dir outputs/scenarios_eval_stress/plots --summary-json outputs/scenarios_eval_stress/batch_summary.json --start-from 1
 ```
 
 Notes:
@@ -111,7 +111,7 @@ The exporter expects the report to include the `detail` payload (produced automa
 To convert an entire directory of scenario/report pairs in one shot:
 
 ```bash
-python -m src.gnn.build_graph_dataset outputs/scenarios_v1 outputs/scenarios_v1/reports outputs/datasets/graphs
+python -m src.gnn.build_hetero_graph_dataset outputs/scenarios_eval_stress outputs/scenarios_eval_stress/reports outputs/graphs/hetero_temporal_eval_stress --temporal --temporal-mode supra --temporal-edges soc,ramp,dr --time-enc sinusoidal --input-only
 ```
 
 The command above mirrors scenario/report stems into `outputs/datasets/graphs`, emitting one compressed NPZ per solved case.

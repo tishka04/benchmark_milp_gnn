@@ -506,7 +506,7 @@ def load_scenario_data(path: Path) -> ScenarioData:
         len(zones_per_region) + max(1, graph["neighbor_nations"])
     )
     import_cost = econ["price_cap"] * 0.9
-    export_cost = import_cost * 0.2
+    export_cost = -import_cost 
     variable_spill_cost = costs["renewable_spill_cost_eur_per_mwh"]
     hydro_spill_cost_value = costs["hydro_spill_cost_eur_per_mwh"]
     overgen_spill_penalty = costs["overgen_spill_cost_eur_per_mwh"]

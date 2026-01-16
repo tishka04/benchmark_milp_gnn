@@ -349,7 +349,7 @@ class LPWorkerTwoStage:
             'p_thermal', 'p_nuclear', 'p_solar', 'p_wind',
             'b_charge', 'b_discharge', 'b_soc',
             'pumped_charge', 'pumped_discharge', 'pumped_level',
-            'h_release', 'h_level', 'dr_shed',
+            'h_release', 'h_level', 'h_spill', 'dr_shed',
             'unserved', 'spill_solar', 'spill_wind', 'overgen_spill',
             'u_thermal',
         ]
@@ -357,6 +357,10 @@ class LPWorkerTwoStage:
         for name in var_names:
             if hasattr(model, name):
                 solution[name] = extract_2d(getattr(model, name))
+        
+        # Also extract hydro_ror parameter (fixed input, not a variable)
+        if hasattr(model, 'hydro_ror'):
+            solution['hydro_ror'] = extract_2d(model.hydro_ror)
         
         return solution
 

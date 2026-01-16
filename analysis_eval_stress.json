@@ -1,0 +1,233 @@
+{
+  "general": {
+    "total_reports": 100,
+    "reports_analyzed": 100,
+    "parse_errors": 0
+  },
+  "termination": {
+    "optimal": 89,
+    "infeasible": 0,
+    "timeout": 11,
+    "other": 0,
+    "breakdown": {
+      "optimal": 89,
+      "maxtimelimit": 11
+    }
+  },
+  "solve_times": {
+    "mip": {
+      "count": 89,
+      "min_seconds": 1.720372499898076,
+      "max_seconds": 417.08011889993213,
+      "mean_seconds": 38.93985085841791,
+      "median_seconds": 18.880142000038177,
+      "std_seconds": 60.93786717042394,
+      "p90_seconds": 89.5003021999728,
+      "p95_seconds": 141.20913950004615,
+      "p99_seconds": 417.08011889993213,
+      "total_seconds": 3465.6467263991944
+    },
+    "lp": {
+      "count": 100,
+      "min_seconds": 0.8728531999513507,
+      "max_seconds": 12.316695699933916,
+      "mean_seconds": 6.1308692200062795,
+      "median_seconds": 5.821243199985474,
+      "std_seconds": 3.1063089177747716,
+      "p90_seconds": 10.946198799880221,
+      "p95_seconds": 11.568538299994543,
+      "p99_seconds": 12.316695699933916,
+      "total_seconds": 613.086922000628
+    }
+  },
+  "mip_lp_gap_percent": {
+    "min": -1.3975025714803192e-13,
+    "max": 97.35064401033704,
+    "mean": 48.74175011967865,
+    "median": 49.18058155056795
+  },
+  "objectives": {
+    "min": -96488606.86302157,
+    "max": 451206642.8379349,
+    "mean": 12091289.448117556,
+    "median": -19468068.214236047
+  },
+  "generation_mix": {
+    "with_nuclear": 98,
+    "without_nuclear": 2,
+    "with_thermal": 52,
+    "with_unserved": 43,
+    "with_dr": 93,
+    "with_solar_spill": 100,
+    "with_wind_spill": 100,
+    "with_imports": 3,
+    "with_exports": 0
+  },
+  "cost_stats": {
+    "thermal_fuel": {
+      "min_eur": -1.6788063130717466e-11,
+      "max_eur": 14325268.057467628,
+      "mean_eur": 1398156.6733064149,
+      "median_eur": 99077.97726698878,
+      "total_eur": 139815667.33064148,
+      "scenarios_with_nonzero": 52
+    },
+    "nuclear_fuel": {
+      "min_eur": 0.0,
+      "max_eur": 2345775.066821173,
+      "mean_eur": 951207.76932247,
+      "median_eur": 878992.8050048233,
+      "total_eur": 95120776.93224698,
+      "scenarios_with_nonzero": 98
+    },
+    "demand_response": {
+      "min_eur": -5.715477991709863e-10,
+      "max_eur": 834253.6835693041,
+      "mean_eur": 80436.0025132838,
+      "median_eur": 17237.615370585125,
+      "total_eur": 8043600.251328381,
+      "scenarios_with_nonzero": 93
+    },
+    "unserved_energy": {
+      "min_eur": 0.0,
+      "max_eur": 477843635.9227907,
+      "mean_eur": 39919889.86599335,
+      "median_eur": 0.0,
+      "total_eur": 3991988986.5993347,
+      "scenarios_with_nonzero": 43
+    },
+    "solar_spill": {
+      "min_eur": 1232.703845452117,
+      "max_eur": 1319320.5675521677,
+      "mean_eur": 258760.2104428049,
+      "median_eur": 156239.29417549935,
+      "total_eur": 25876021.04428049,
+      "scenarios_with_nonzero": 100
+    },
+    "wind_spill": {
+      "min_eur": 2976.6873118908934,
+      "max_eur": 2182244.0074596247,
+      "mean_eur": 338216.84027478565,
+      "median_eur": 186535.39563960256,
+      "total_eur": 33821684.02747856,
+      "scenarios_with_nonzero": 100
+    },
+    "hydro_spill": {
+      "min_eur": 0.0,
+      "max_eur": 118456.49792252439,
+      "mean_eur": 5265.396449966191,
+      "median_eur": 0.0,
+      "total_eur": 526539.6449966191,
+      "scenarios_with_nonzero": 12
+    },
+    "overgen_spill": {
+      "min_eur": -2.5623162335820773e-11,
+      "max_eur": 425976.47915675194,
+      "mean_eur": 4259.76479156752,
+      "median_eur": 0.0,
+      "total_eur": 425976.47915675194,
+      "scenarios_with_nonzero": 1
+    },
+    "imports": {
+      "min_eur": -8.318620731092014e-08,
+      "max_eur": 1893737.6274485658,
+      "mean_eur": 43747.74067682593,
+      "median_eur": 0.0,
+      "total_eur": 4374774.067682593,
+      "scenarios_with_nonzero": 3
+    },
+    "exports": {
+      "min_eur": -98381103.45668359,
+      "max_eur": -776594.2769766035,
+      "mean_eur": -36294511.101562805,
+      "median_eur": -30859896.185127508,
+      "total_eur": -3629451110.15628,
+      "scenarios_with_nonzero": 0
+    },
+    "battery_cycle": {
+      "min_eur": 1469.536663680336,
+      "max_eur": 3564897.6245265487,
+      "mean_eur": 500901.767816942,
+      "median_eur": 204585.21813141575,
+      "total_eur": 49589275.01387726,
+      "scenarios_with_nonzero": 99
+    },
+    "pumped_cycle": {
+      "min_eur": 1604.778636256652,
+      "max_eur": 381443.9132117541,
+      "mean_eur": 70886.8498914324,
+      "median_eur": 29908.52588919358,
+      "total_eur": 6521590.19001178,
+      "scenarios_with_nonzero": 92
+    }
+  },
+  "problem_scenarios": {
+    "infeasible": [],
+    "timeout": [
+      "scenario_00003",
+      "scenario_00009",
+      "scenario_00010",
+      "scenario_00015",
+      "scenario_00016",
+      "scenario_00037",
+      "scenario_00049",
+      "scenario_00055",
+      "scenario_00070",
+      "scenario_00083",
+      "scenario_00099"
+    ],
+    "high_unserved": [
+      "scenario_00005 (99.4%)",
+      "scenario_00012 (105.9%)",
+      "scenario_00019 (169.5%)",
+      "scenario_00024 (107.8%)",
+      "scenario_00029 (97.8%)",
+      "scenario_00034 (107.3%)",
+      "scenario_00036 (106.5%)",
+      "scenario_00039 (101.8%)",
+      "scenario_00045 (118.1%)",
+      "scenario_00052 (101.8%)",
+      "scenario_00059 (100.0%)",
+      "scenario_00062 (261.7%)",
+      "scenario_00071 (173.7%)",
+      "scenario_00075 (115.3%)",
+      "scenario_00078 (111.6%)",
+      "scenario_00080 (93.7%)",
+      "scenario_00082 (236.3%)",
+      "scenario_00084 (2295.0%)",
+      "scenario_00089 (123.1%)",
+      "scenario_00091 (350.8%)"
+    ],
+    "slow": [
+      "scenario_00001 (65.0s)",
+      "scenario_00003 (3981.1s)",
+      "scenario_00005 (74.4s)",
+      "scenario_00006 (62.8s)",
+      "scenario_00009 (3862.1s)",
+      "scenario_00010 (3857.9s)",
+      "scenario_00011 (76.5s)",
+      "scenario_00015 (3679.7s)",
+      "scenario_00016 (607.4s)",
+      "scenario_00035 (90.9s)",
+      "scenario_00037 (608.4s)",
+      "scenario_00043 (182.5s)",
+      "scenario_00049 (607.2s)",
+      "scenario_00055 (607.0s)",
+      "scenario_00061 (86.9s)",
+      "scenario_00063 (93.8s)",
+      "scenario_00065 (285.1s)",
+      "scenario_00066 (417.1s)",
+      "scenario_00068 (141.2s)",
+      "scenario_00070 (607.8s)",
+      "scenario_00072 (85.3s)",
+      "scenario_00079 (185.2s)",
+      "scenario_00080 (118.3s)",
+      "scenario_00083 (606.0s)",
+      "scenario_00085 (87.5s)",
+      "scenario_00088 (89.5s)",
+      "scenario_00090 (66.6s)",
+      "scenario_00092 (69.0s)",
+      "scenario_00099 (604.8s)"
+    ]
+  }
+}
