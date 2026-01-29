@@ -1,0 +1,201 @@
+% ============================================================
+% LaTeX note: Maximizing scenario diversity for MILP-solved dataset
+% (with preamble, prioritized adjustments)
+% ============================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% --------------------------
+% Packages
+% --------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+
+\usepackage{geometry}
+\geometry{margin=2.2cm}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!45!black,
+  citecolor=blue!45!black,
+  urlcolor=blue!45!black
+}
+
+\usepackage{tcolorbox}
+\tcbset{
+  colback=gray!4,
+  colframe=black!25,
+  boxrule=0.6pt,
+  arc=2pt,
+  left=6pt,
+  right=6pt,
+  top=4pt,
+  bottom=4pt
+}
+
+% --------------------------
+% Title
+% --------------------------
+\title{Maximizing Diversity in Synthetic Flexibility Scenario Generation (MILP-Solved Dataset)}
+\author{Th\'eotime Coudray}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Objective}
+We aim to generate a dataset of $N=5000$ synthetic flexibility scenarios, each solved by a MILP oracle.
+The primary goal is to \textbf{maximize scenario diversity} along (i) physical stress drivers,
+(ii) flexibility degrees-of-freedom, and (iii) combinatorial hardness, while staying within
+a feasible compute budget.
+
+\section{Prioritized Adjustments (Most Critical $\rightarrow$ Least Critical)}
+
+\subsection{(P1) Fix the diversity acceptance logic (critical bug)}
+The current online ``greedy cover'' acceptance test incorrectly uses the \emph{maximum} distance
+to the already accepted set:
+\[
+\texttt{reject if } \max_i d(x,x_i) < \delta.
+\]
+This criterion accepts many near-duplicates as long as the candidate is far from \emph{one} element.
+To enforce a true minimum separation, the rule must instead reject when the \emph{minimum} distance
+to the accepted set is below the threshold:
+\[
+\boxed{
+\texttt{reject if } \min_i d(x,x_i) < \delta.
+}
+\]
+\begin{tcolorbox}[title=Implementation change]
+Replace:
+\begin{verbatim}
+if max(dists) < min_pairwise_distance:
+    continue
+\end{verbatim}
+with:
+\begin{verbatim}
+if min(dists) < min_pairwise_distance:
+    continue
+\end{verbatim}
+\end{tcolorbox}
+
+\subsection{(P2) Make the diversity vector align with the intended ``cover\_metric''}
+The YAML configuration contains a \texttt{cover\_metric} list that conceptually specifies which
+dimensions must be covered, but the code currently ignores it and relies on a fixed
+\texttt{scenario\_meta\_vector}. This creates a mismatch between the intended diversity objectives
+and what is actually enforced.
+
+\begin{tcolorbox}[title=Action]
+Either (i) make \texttt{scenario\_meta\_vector} driven by \texttt{cover\_metric}, or (ii) enrich the
+vector to include all dimensions that matter for stress, flexibility, hardness, and policy.
+\end{tcolorbox}
+
+\subsection{(P3) Enrich the diversity vector with \emph{stress}, \emph{flexibility}, and \emph{hardness} drivers}
+To maximize \emph{useful} diversity for MILP training data, the diversity embedding should cover four axes:
+
+\paragraph{A. Topology / size (hardness proxies).}
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item $|\mathcal{R}|$ (regions), $|\mathcal{Z}|$ (zones)
+  \item mean and std of zones-per-region
+  \item intertie density, neighbor nations
+  \item (optional) estimated number of lines $|\mathcal{L}|$ if available at generation time
+\end{itemize}
+
+\paragraph{B. Asset mix (degrees-of-freedom).}
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item totals: thermal, nuclear, solar, wind, battery, pumped, hydro reservoir, DR
+  \item densities: thermal per zone, DR per zone, storage per zone
+  \item ratios: VRE/dispatchable, storage power / peak demand, DR headroom proxy
+\end{itemize}
+
+\paragraph{C. Tech scalers that change MILP difficulty.}
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item thermal ramp (\texttt{thermal\_ramp\_pct})
+  \item storage nature (\texttt{battery\_e\_to\_p\_hours}, round-trip efficiency)
+  \item feasibility tightness (\texttt{battery\_final\_soc\_tolerance}, \texttt{pumped\_final\_level\_tolerance})
+  \item DR structure (max shed share, duration, max events, min duration, ramp limit factor)
+\end{itemize}
+
+\paragraph{D. Exogenous \& policy drivers.}
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item demand profile (one-hot), weather profile (one-hot) and intensity
+  \item demand scale factor, inflow factor
+  \item cross-border policy (one-hot), import/export caps factor
+  \item CO$_2$ price, price cap
+\end{itemize}
+
+\subsection{(P4) Preserve multi-region weather diversity (avoid ``dominant profile'' collapse)}
+The current implementation samples regional weather profiles, but then collapses them into a single
+dominant national profile. This destroys an important diversity axis (spatial heterogeneity).
+
+\begin{tcolorbox}[title=Recommended summary statistics for regional weather]
+Include at least one of:
+\begin{itemize}[leftmargin=*, itemsep=2pt]
+  \item histogram of profiles across regions (one-hot counts normalized by $|\mathcal{R}|$),
+  \item entropy of the region profile distribution,
+  \item min/mean/max of regional spread intensity.
+\end{itemize}
+\end{tcolorbox}
+
+\subsection{(P5) Switch from online accept/reject to ``pool + selection'' (k-center / farthest-point)}
+Online rejection tends to \emph{stall} when the admissible space becomes narrow under the budget guard.
+A robust alternative is:
+\begin{enumerate}[leftmargin=*, itemsep=3pt]
+  \item generate a large candidate pool (e.g., $50k$--$200k$) passing only the budget guard;
+  \item compute diversity vectors for all candidates;
+  \item select $k=5000$ scenarios with a greedy farthest-point (k-center) algorithm:
+  \[
+  x_{t+1} = \arg\max_{x\in\mathcal{P}} \min_{x'\in\mathcal{S}_t} d(x,x'),
+  \]
+  where $\mathcal{P}$ is the pool and $\mathcal{S}_t$ is the selected set.
+\end{enumerate}
+
+\subsection{(P6) Add stratification/quotas to avoid over-representing easy scenarios}
+Even with distance-based selection, the dataset may over-sample ``easy'' scenarios because they are more
+frequent under the budget guard. Introduce bins and quotas, e.g.:
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item topology bins: $|\mathcal{Z}|$ quartiles (small/medium/large/very large),
+  \item stress bins: demand scale quintiles,
+  \item categorical bins: (weather profile, demand profile), cross-border policy,
+  \item flexibility bins: storage power quartiles, thermal ramp quartiles,
+  \item hardness bins: estimated binary count quartiles.
+\end{itemize}
+Then allocate $5000$ scenarios across bins (uniformly or with designed weights).
+
+\subsection{(P7) Calibrate the budget guard to keep the ``hard'' tail (controlled)}
+For $N=5000$ diverse MILP-solved scenarios, a strict solve-time rejection threshold can eliminate the
+high-criticality tail. A practical compromise is to maintain multiple solve-time tiers:
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item 70\% of scenarios with estimated time $<2$ hours,
+  \item 25\% with $2$--$4$ hours,
+  \item 5\% with $4$--$6$ hours.
+\end{itemize}
+This preserves rare high-hardness cases while keeping compute bounded.
+
+\subsection{(P8) Use space-filling designs (Latin Hypercube / Sobol) for continuous parameters}
+Uniform random sampling clusters in high dimension. For continuous parameters that drive stress and difficulty
+(e.g., demand scale, inflow factor, CO$_2$ price, intertie density, ramp pct, storage E/P, import caps factor),
+use a space-filling design:
+\begin{itemize}[leftmargin=*, itemsep=3pt]
+  \item Latin Hypercube Sampling (LHS), or
+  \item Sobol sequences,
+\end{itemize}
+then map samples to the parameter ranges. This yields much more uniform coverage for $N=5000$.
+
+\section{Recommended Minimal Implementation Plan}
+\begin{tcolorbox}[title=High-ROI Plan (do these first)]
+\begin{enumerate}[leftmargin=*, itemsep=3pt]
+  \item (P1) Fix the min-distance acceptance bug.
+  \item (P3+P4) Expand the diversity vector (especially regional weather heterogeneity + key techno scalers).
+  \item (P5) Switch to pool + greedy k-center selection for $k=5000$.
+  \item (P6) Add stratification/quotas across stress/hardness/flexibility bins.
+  \item (P8) Replace uniform random with LHS/Sobol for main continuous drivers.
+\end{enumerate}
+\end{tcolorbox}
+
+\end{document}

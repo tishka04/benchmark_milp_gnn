@@ -1,0 +1,180 @@
+# scenario_space_hard.yaml
+# Configuration optimisée pour générer 20 scénarios EXTRÊMEMENT difficiles pour un MILP classique
+# Facteurs de difficulté exploités:
+#   - Taille massive (variables binaires élevées via UC thermique/nucléaire)
+#   - Couplage temporel fort (stockage, rampes serrées, DR complexe)
+#   - Contraintes serrées (demande élevée, faible marge)
+#   - Grande connectivité (densité élevée, beaucoup de nations voisines)
+#   - Symétrie (beaucoup d'unités similaires par zone)
+
+global:
+  seed: 42
+  horizon_hours: 24
+  dt_minutes: 60
+  target_scenarios: 20
+  max_scenarios_per_hour_per_core: 0.5   # Ces scénarios prendront du temps
+  cpu_cores: 12
+  max_compute_hours: 336                  # 2 semaines de budget calcul
+
+structure:
+  # Grande topologie = plus de variables et contraintes
+  regions: [12, 20]
+  zones_per_region: [10, 20]
+  # Haute densité = couplage spatial fort, plus de contraintes de flux
+  intertie_density: [0.5, 0.8]
+  # Beaucoup de voisins = plus de variables d'import/export
+  neighbor_nations: [5, 8]
+
+assets:
+  # Beaucoup d'unités thermiques = beaucoup de variables binaires (on/off, startup)
+  thermal_per_zone: [2, 3]
+  solar_per_zone: [2, 3]
+  wind_per_zone: [1, 2]
+  # Beaucoup de batteries = couplage temporel fort
+  battery_per_zone: [2, 3]
+  # DR complexe = contraintes combinatoires supplémentaires
+  dr_per_zone: [2, 4]
+  # Nucléaire = grosses unités avec contraintes UC strictes
+  nuclear_per_region: [1, 2]
+  # Hydro réservoir = couplage temporel fort sur tout l'horizon
+  hydro_reservoir_per_region: [4, 8]
+  hydro_ror_per_zone: [0, 1]
+  # Pompage-turbinage = double couplage (charge/décharge)
+  hydro_pumped_per_region: [3, 5]
+
+unit_capacities:
+  # Grosses unités thermiques = décisions binaires à fort impact
+  thermal_unit_mw: [300, 450]
+  nuclear_unit_mw: [1200, 1600]
+  solar_unit_mw: [50, 300]
+  wind_unit_mw: [100, 400]
+  # Gros stockage = plus de couplage temporel
+  battery_power_unit_mw: [60, 100]
+  hydro_reservoir_power_unit_mw: [300, 400]
+  hydro_reservoir_energy_hours: [8.0, 10.0]
+  hydro_ror_unit_mw: [60, 100]
+  pumped_power_unit_mw: [250, 400]
+  pumped_energy_hours: [10.0, 12.0]
+
+transport_capacities:
+  # Capacités de transmission élevées mais pas illimitées = congestion fréquente
+  transmission_base_mw: [1500, 3000]
+  import_export_base_mw: [2000, 4000]
+
+economics_policy:
+  # Prix CO2 élevé = merit order bouleversé, plus d'alternatives à explorer
+  co2_price_eur_per_t: [150, 250]
+  # Price cap élevé = VOLL peut être atteint, solutions limites
+  price_cap_eur_per_mwh: [50, 3000]
+  # Politique restrictive = contraintes supplémentaires actives
+  cross_border_policy: ["cap", "block"]
+  import_export_caps_factor: [0.4, 0.8]
+
+techno_params_scalers:
+  # Coûts marginaux variés = less degeneracy mais plus d'exploration
+  thermal_marg_cost: [4, 10]
+  # Rampes souples = permettre au thermique de réagir
+  thermal_ramp_pct: [0.6, 0.95]
+  # Efficacité batterie moyenne = cycles coûteux, arbitrage serré
+  battery_roundtrip_eff: [0.8, 0.88]
+  # Gros stockage énergie = horizon complet couplé
+  battery_e_to_p_hours: [4.0, 6.0]
+  # DR agressif = beaucoup de flexibilité mais contraintes combinatoires
+  dr_max_shed_share: [0.15, 0.3]
+  dr_duration_hours: [3, 6]
+  # Beaucoup de blocs DR = plus de variables continues et contraintes
+  dr_num_blocks: [3, 4]
+  # Rebound serré = contraintes de fin d'horizon actives
+  dr_rebound_decay: [0.03, 0.08]
+  dr_rebound_tolerance: [0.1, 1.0]
+  # Limites d'événements DR = contraintes combinatoires (comptage)
+  dr_max_events: [3, 6]
+  dr_min_duration: [2, 3]
+  dr_ramp_limit_factor: [0.25, 0.5]
+  # Hydro efficace mais contraint
+  hydro_reservoir_head_eff: [0.80, 0.90]
+  # SOC initial/final serré = moins de liberté pour le solveur
+  battery_initial_soc_fraction: [0.45, 0.55]
+  battery_final_soc_tolerance: [0.05, 0.10]
+  battery_self_discharge_per_hour: [0.001, 0.002]
+  pumped_initial_level_fraction: [0.45, 0.55]
+  pumped_final_level_tolerance: [0.05, 0.10]
+  pumped_self_discharge_per_hour: [0.0003, 0.0008]
+
+operation_costs:
+  # Coûts thermiques élevés = plus de switching, UC actif
+  thermal_fuel_eur_per_mwh: [65, 85]
+  nuclear_fuel_eur_per_mwh: [20, 28]
+  # Coûts de démarrage TRÈS élevés = décisions binaires cruciales
+  thermal_startup_cost_eur: [5000, 8000]
+  nuclear_startup_cost_eur: [15000, 40000]
+  # DR coûteux = utilisé en dernier recours, solutions limites
+  demand_response_cost_eur_per_mwh: [120, 200]
+  # VOLL très élevé = éviter à tout prix, contraintes actives
+  value_of_lost_load_eur_per_mwh: [10000, 30000]
+  # Spill coûteux = forcer l'utilisation des ENR, moins de liberté
+  renewable_spill_cost_eur_per_mwh: [8, 15]
+  hydro_spill_cost_eur_per_mwh: [12, 20]
+  overgen_spill_cost_eur_per_mwh: [200, 500]
+  # Cycles stockage coûteux = arbitrage fin nécessaire
+  battery_cycle_cost_eur_per_mwh: [80, 125]
+  pumped_cycle_cost_eur_per_mwh: [60, 90]
+
+exogenous:
+  # Profils météo extrêmes = stress système, contraintes actives
+  weather_profiles: ["stormy_winter", "calm_winter", "overcast_summer"]
+  # Grande variabilité spatiale = moins de mutualisation
+  weather_spread_intensity: [1.2, 1.8]
+  # Demande extrême = stress système maximal
+  demand_profiles: ["cold_snap", "heatwave"]
+  # Demande TRÈS élevée = système à la limite, peu de marge
+  demand_scale_factor: [1.25, 1.55]
+  # Apports hydro faibles = moins de flexibilité gratuite
+  inflow_factor: [0.4, 0.8]
+  zone_profile_variants:
+    evening_peak: 0.25
+    double_peak: 0.25
+    office_peak: 0.15
+    industrial: 0.15
+    night_shift: 0.10
+    residential_morning: 0.10
+  # Profils très différenciés = moins de symétrie, mais plus de contraintes locales
+  zone_profile_mix_weight: [0.6, 0.8]
+  zone_profile_phase_shift_hours: [-2.5, 2.5]
+  zone_profile_noise_std: [0.04, 0.06]
+  zone_profile_curvature_exp: [1.0, 1.18]
+
+diversity:
+  selection_method: "greedy_cover"
+  cover_metric: [
+    # Maximiser la diversité des sources de difficulté
+    "regions",
+    "weather_profiles",
+    "demand_profiles",
+    "demand_scale_factor",
+    "inflow_factor",
+    "intertie_density",
+    "cross_border_policy",
+    "thermal_ramp_pct",
+    "battery_e_to_p_hours",
+    "co2_price_eur_per_t",
+    "dr_max_events"
+  ]
+  # Distance élevée = scénarios très différents
+  min_pairwise_distance: 0.45
+
+budget_guard:
+  # Limites TRÈS élevées = accepter les gros problèmes
+  max_vars_per_scenario: 500000
+  max_cons_per_scenario: 750000
+  max_binary_vars_per_scenario: 80000
+  # Gap serré = forcer le solveur à prouver l'optimalité
+  mip_gap_target: [0.5, 1.0]
+  time_estimator:
+    base_intercept_sec: 300
+    per_1k_vars_sec: 15
+    per_1k_cons_sec: 20
+    per_1k_binary_sec: 80
+    branching_penalty: 1.5
+  # Accepter des scénarios longs
+  reject_if_est_cpu_hours_gt: 8

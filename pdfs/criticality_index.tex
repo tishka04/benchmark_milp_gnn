@@ -1,0 +1,376 @@
+% ============================================================
+% Preamble for Scenario Criticality Indicator Section
+% ============================================================
+
+\documentclass[11pt,a4paper]{article}
+
+% ------------------------------------------------------------
+% Encoding and language
+% ------------------------------------------------------------
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}   % remove if using lualatex/xelatex
+\usepackage[english]{babel}
+
+% ------------------------------------------------------------
+% Geometry and layout
+% ------------------------------------------------------------
+\usepackage{geometry}
+\geometry{margin=2.2cm}
+
+% ------------------------------------------------------------
+% Mathematics and symbols
+% ------------------------------------------------------------
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{bm}               % bold math symbols
+
+% ------------------------------------------------------------
+% Tables and lists
+% ------------------------------------------------------------
+\usepackage{booktabs}         % professional tables
+\usepackage{enumitem}         % custom enumerate/itemize
+
+% ------------------------------------------------------------
+% Colors and boxes
+% ------------------------------------------------------------
+\usepackage{xcolor}
+\definecolor{lightgray}{gray}{0.96}
+
+\usepackage{tcolorbox}
+\tcbset{
+  colback=lightgray,
+  colframe=black!30,
+  boxrule=0.6pt,
+  arc=2pt,
+  left=6pt,
+  right=6pt,
+  top=4pt,
+  bottom=4pt
+}
+
+% ------------------------------------------------------------
+% Hyperlinks (recommended)
+% ------------------------------------------------------------
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black
+}
+
+% ------------------------------------------------------------
+% Figures (if needed later)
+% ------------------------------------------------------------
+\usepackage{graphicx}
+
+% ------------------------------------------------------------
+% Floating control (optional but useful)
+% ------------------------------------------------------------
+\usepackage{float}
+
+% ------------------------------------------------------------
+% Micro-typography (recommended for final submission)
+% ------------------------------------------------------------
+\usepackage{microtype}
+
+% ------------------------------------------------------------
+% Title info (example)
+% ------------------------------------------------------------
+\title{Scenario Criticality Metrics for Large-Scale Power System Flexibility Analysis}
+\author{Th\'eotime Coudray}
+\date{\today}
+
+% ============================================================
+% Document start
+% ============================================================
+\begin{document}
+\maketitle
+
+
+% ============================================================
+% Criticality indicator: Physical Stress + Combinatorial Hardness
+% (22 components, grouped by category)
+% ============================================================
+
+\subsection{Scenario Criticality Indicator}
+
+We define an \emph{ex ante} scenario criticality indicator by decomposing difficulty into:
+(i) a \textbf{physical stress} component capturing techno-operational tension, and
+(ii) a \textbf{combinatorial hardness} component capturing structural MILP difficulty.
+All metrics are computable from scenario inputs prior to solving.
+
+\begin{tcolorbox}[colback=gray!4,colframe=black!25,title=Final Form]
+\begin{equation}
+\label{eq:criticality_final}
+\boxed{
+\mathrm{Crit}(s)
+=
+\alpha \,\mathrm{Stress}(s)
++
+(1-\alpha)\,\mathrm{Hard}(s)
+}
+\qquad \text{with } \alpha \in [0,1].
+\end{equation}
+\end{tcolorbox}
+
+\paragraph{Notation.}
+Let $t\in\mathcal{T}$ denote time steps, $z\in\mathcal{Z}$ zones, $\ell\in\mathcal{L}$ transmission lines.
+Demand is $D(t)$ and residual demand is $D_{\mathrm{res}}(t)=D(t)-P^{\mathrm{VRE}}_{\mathrm{avail}}(t)$.
+Peak zonal demand is $D^{\mathrm{peak}}_z=\max_{t} D_z(t)$.
+Installed/available capacities are denoted $P^{(\cdot)}$ (power) and $E^{(\cdot)}$ (energy).
+
+\subsubsection{A. Physical Stress Index $\mathrm{Stress}(s)$}
+
+\paragraph{A.1 Variability and intermittence (exogenous drivers).}
+\begin{enumerate}[label=\textbf{A\arabic*.}, leftmargin=*, itemsep=4pt]
+  \item \textbf{VRE penetration ratio}
+  \begin{equation}
+  \label{eq:stress_vre_pen}
+  \mathrm{VREPen}(s)
+  =
+  \frac{\sum_{t\in\mathcal{T}} P^{\mathrm{VRE}}_{\mathrm{avail}}(t)}
+       {\sum_{t\in\mathcal{T}} D(t)}.
+  \end{equation}
+
+  \item \textbf{Net (residual) demand volatility}
+  \begin{equation}
+  \label{eq:stress_net_vol}
+  \mathrm{Vol}_{\mathrm{res}}(s)
+  =
+  \mathrm{std}_{t\in\mathcal{T}}\!\left(D_{\mathrm{res}}(t)\right).
+  \end{equation}
+
+  \item \textbf{Peak-to-valley ratio of residual load}
+  \begin{equation}
+  \label{eq:stress_ptv}
+  \mathrm{PTV}_{\mathrm{res}}(s)
+  =
+  \frac{\max_{t\in\mathcal{T}} D_{\mathrm{res}}(t)}
+       {\min_{t\in\mathcal{T}} D_{\mathrm{res}}(t)}.
+  \end{equation}
+
+  \item \textbf{Short-term variability index (first differences)}
+  \begin{equation}
+  \label{eq:stress_short_var}
+  \mathrm{STVar}(s)
+  =
+  \mathrm{std}_{t\in\mathcal{T}\setminus\{t_0\}}
+  \!\left(D_{\mathrm{res}}(t)-D_{\mathrm{res}}(t-1)\right).
+  \end{equation}
+\end{enumerate}
+
+\paragraph{A.2 Load level and adequacy margins.}
+\begin{enumerate}[label=\textbf{A\arabic*.}, leftmargin=*, resume, itemsep=4pt]
+  \item \textbf{Demand scale factor}
+  \begin{equation}
+  \label{eq:stress_demand_scale}
+  \mathrm{DScale}(s)
+  =
+  \frac{\sum_{t\in\mathcal{T}} D(t)}
+       {\sum_{t\in\mathcal{T}} D_{\mathrm{baseline}}(t)}.
+  \end{equation}
+
+  \item \textbf{Peak load to firm capacity ratio}
+  \begin{equation}
+  \label{eq:stress_peak_firm}
+  \mathrm{PeakFirm}(s)
+  =
+  \frac{\max_{t\in\mathcal{T}} D(t)}
+       {P^{\mathrm{firm}}_{\mathrm{avail}}}.
+  \end{equation}
+\end{enumerate}
+
+\paragraph{A.3 Flexibility resource adequacy (inverse/headroom).}
+\begin{enumerate}[label=\textbf{A\arabic*.}, leftmargin=*, resume, itemsep=4pt]
+  \item \textbf{Storage power adequacy (inverse)}
+  \begin{equation}
+  \label{eq:stress_stor_power_inv}
+  \mathrm{InvStorP}(s)
+  =
+  1 - \frac{P^{\mathrm{stor}}_{\max}}
+           {\max_{t\in\mathcal{T}} D_{\mathrm{res}}(t)}.
+  \end{equation}
+
+  \item \textbf{Storage energy adequacy (inverse)}
+  \begin{equation}
+  \label{eq:stress_stor_energy_inv}
+  \mathrm{InvStorE}(s)
+  =
+  1 - \frac{E^{\mathrm{stor}}_{\max}}
+           {\sum_{t\in\mathcal{T}} \left|D^{+}_{\mathrm{res}}(t)\right|},
+  \qquad
+  D^{+}_{\mathrm{res}}(t)=\max\{D_{\mathrm{res}}(t),0\}.
+  \end{equation}
+
+  \item \textbf{Thermal flexibility ratio (inverse)}
+  \begin{equation}
+  \label{eq:stress_thermal_flex_inv}
+  \mathrm{InvThFlex}(s)
+  =
+  1 - \frac{\sum P^{\mathrm{th}}_{\mathrm{flex}}}
+           {\max_{t\in\mathcal{T}} D_{\mathrm{res}}(t)}.
+  \end{equation}
+
+  \item \textbf{Demand-response headroom (inverse)}
+  \begin{equation}
+  \label{eq:stress_dr_headroom_inv}
+  \mathrm{InvDR}(s)
+  =
+  1 - \frac{\sum_{t\in\mathcal{T}} DR^{\max}(t)}
+           {\sum_{t\in\mathcal{T}} D(t)}.
+  \end{equation}
+\end{enumerate}
+
+\paragraph{A.4 Spatial tension (physical).}
+\begin{enumerate}[label=\textbf{A\arabic*.}, leftmargin=*, resume, itemsep=4pt]
+  \item \textbf{Import/export reliance}
+  \begin{equation}
+  \label{eq:stress_trade_reliance}
+  \mathrm{TradeRel}(s)
+  =
+  \frac{\sum_{t\in\mathcal{T}} | \mathrm{Import}(t) |}
+       {\sum_{t\in\mathcal{T}} D(t)}.
+  \end{equation}
+
+  \item \textbf{Congestion exposure proxy (inverse)}
+  \begin{equation}
+  \label{eq:stress_cong_proxy}
+  \mathrm{InvCong}(s)
+  =
+  1 - \frac{\sum_{\ell\in\mathcal{L}} F^{\max}_{\ell}}
+           {\sum_{z\in\mathcal{Z}} D^{\mathrm{peak}}_{z}}.
+  \end{equation}
+\end{enumerate}
+
+\subsubsection{B. Combinatorial Hardness Index $\mathrm{Hard}(s)$}
+
+\paragraph{B.1 Problem size (scaling).}
+\begin{enumerate}[label=\textbf{B\arabic*.}, leftmargin=*, itemsep=4pt]
+  \item \textbf{Number of zones}
+  \begin{equation}
+  \label{eq:hard_nzones}
+  \mathrm{NZones}(s)=|\mathcal{Z}|.
+  \end{equation}
+
+  \item \textbf{Horizon length}
+  \begin{equation}
+  \label{eq:hard_horizon}
+  \mathrm{Horizon}(s)=|\mathcal{T}|.
+  \end{equation}
+
+  \item \textbf{Estimated number of binary variables}
+  \begin{equation}
+  \label{eq:hard_bin_est}
+  \mathrm{BinEst}(s)
+  \approx
+  |\mathcal{T}|\cdot\Big(N^{\mathrm{th}} + N^{\mathrm{nuc}} + N^{\mathrm{DRflags}}\Big).
+  \end{equation}
+\end{enumerate}
+
+\paragraph{B.2 Structural non-convexity.}
+\begin{enumerate}[label=\textbf{B\arabic*.}, leftmargin=*, resume, itemsep=4pt]
+  \item \textbf{Thermal unit density}
+  \begin{equation}
+  \label{eq:hard_th_density}
+  \mathrm{ThDens}(s)
+  =
+  \frac{N^{\mathrm{th}}}{|\mathcal{Z}|}.
+  \end{equation}
+
+  \item \textbf{Tight minimum-generation ratio}
+  \begin{equation}
+  \label{eq:hard_mingen}
+  \mathrm{MinGenTight}(s)
+  =
+  \frac{P^{\mathrm{th}}_{\min}}{P^{\mathrm{th}}_{\max}}.
+  \end{equation}
+
+  \item \textbf{Startup cost intensity}
+  \begin{equation}
+  \label{eq:hard_startup_intensity}
+  \mathrm{StartInt}(s)
+  =
+  \frac{\sum C^{\mathrm{startup}}}{\sum C^{\mathrm{var}}}.
+  \end{equation}
+\end{enumerate}
+
+\paragraph{B.3 Temporal coupling (intertemporal hardness).}
+\begin{enumerate}[label=\textbf{B\arabic*.}, leftmargin=*, resume, itemsep=4pt]
+  \item \textbf{Ramping tightness index}
+  \begin{equation}
+  \label{eq:hard_ramp_tight}
+  \mathrm{RampTight}(s)
+  =
+  \frac{\sum P^{\mathrm{th}}_{\max}}{\sum R^{\mathrm{th}}}.
+  \end{equation}
+
+  \item \textbf{Storage SOC tightness proxy}
+  \begin{equation}
+  \label{eq:hard_soc_tight}
+  \mathrm{SOCTight}(s)
+  =
+  \left(\frac{E^{\mathrm{stor}}_{\max}}{P^{\mathrm{stor}}_{\max}}\right)
+  \cdot
+  \left( \frac{1}{\tau_{\mathrm{SOC}}} \right),
+  \end{equation}
+  where $\tau_{\mathrm{SOC}}$ is the final SOC tolerance (smaller $\Rightarrow$ tighter).
+\end{enumerate}
+
+\paragraph{B.4 Spatial coupling (network-induced hardness).}
+\begin{enumerate}[label=\textbf{B\arabic*.}, leftmargin=*, resume, itemsep=4pt]
+  \item \textbf{Interconnection density}
+  \begin{equation}
+  \label{eq:hard_interconn_density}
+  \mathrm{InterDens}(s)
+  =
+  \frac{|\mathcal{L}|}{|\mathcal{Z}|}.
+  \end{equation}
+
+  \item \textbf{Network heterogeneity index}
+  \begin{equation}
+  \label{eq:hard_net_hetero}
+  \mathrm{NetHet}(s)
+  =
+  \mathrm{Var}\big(\{F^{\max}_{\ell}\}_{\ell\in\mathcal{L}}\big)
+  \;\;\text{or}\;\;
+  \mathrm{Var}\big(\{\deg(z)\}_{z\in\mathcal{Z}}\big).
+  \end{equation}
+\end{enumerate}
+
+\subsubsection{Normalization and Aggregation}
+
+Each metric above is normalized to $[0,1]$ using either (i) dataset-based min--max scaling, or
+(ii) generator-bound scaling (preferred for stability), then combined as weighted sums:
+\begin{equation}
+\label{eq:stress_agg}
+\mathrm{Stress}(s)=\sum_{i=1}^{12} w^{(S)}_i \,\tilde{x}^{(S)}_i(s),
+\qquad
+\mathrm{Hard}(s)=\sum_{j=1}^{10} w^{(H)}_j \,\tilde{x}^{(H)}_j(s),
+\end{equation}
+with $\sum_i w^{(S)}_i = 1$, $\sum_j w^{(H)}_j = 1$.
+
+% ------------------------------------------------------------
+% Optional: compact table listing all 22 components (no formulas)
+% ------------------------------------------------------------
+\begin{table}[h]
+\centering
+\caption{Components of the scenario criticality indicator (22 metrics).}
+\label{tab:criticality_components}
+\begin{tabular}{ll}
+\toprule
+\textbf{Category} & \textbf{Metric} \\
+\midrule
+A.1 Variability & (A1) VRE penetration; (A2) residual volatility; (A3) residual peak-to-valley; (A4) short-term variability \\
+A.2 Load/Margins & (A5) demand scale factor; (A6) peak-to-firm capacity ratio \\
+A.3 Flexibility & (A7) inverse storage power adequacy; (A8) inverse storage energy adequacy; (A9) inverse thermal flexibility; (A10) inverse DR headroom \\
+A.4 Spatial tension & (A11) trade reliance; (A12) inverse congestion exposure proxy \\
+B.1 Size & (B1) number of zones; (B2) horizon length; (B3) estimated binary count \\
+B.2 Non-convexity & (B4) thermal density; (B5) min-gen tightness; (B6) startup cost intensity \\
+B.3 Temporal coupling & (B7) ramping tightness; (B8) SOC tightness proxy \\
+B.4 Spatial coupling & (B9) interconnection density; (B10) network heterogeneity index \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\end{document}
