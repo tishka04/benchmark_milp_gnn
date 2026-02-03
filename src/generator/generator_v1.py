@@ -771,7 +771,7 @@ def generate_scenarios(space_path: str, out_dir: str):
             vec = scenario_meta_vector(cfg, space)
             if meta_vectors:
                 dists = [normalized_distance(vec, existing, mins, maxs) for existing in meta_vectors]
-                if max(dists) < space["diversity"]["min_pairwise_distance"]:
+                if min(dists) < space["diversity"]["min_pairwise_distance"]:
                     continue
             meta_vectors.append(vec)
 

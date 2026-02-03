@@ -3,7 +3,7 @@ global:
   seed: 1234
   horizon_hours: 24
   dt_minutes: 60
-  target_scenarios: 100
+  target_scenarios: 5000
   max_scenarios_per_hour_per_core: 3   # calibration locale
   cpu_cores: 12
   max_compute_hours: 168
@@ -100,28 +100,96 @@ exogenous:
   zone_profile_curvature_exp: [0.9, 1.18]
 
 diversity:
-  selection_method: "greedy_cover"
-  cover_metric: [
-    # 0. Topologie 
-    "regions",
-
-    # 1. Stress Exogène (Le plus important)
-    "weather_profiles",       # Change la corrélation vent/solaire/demande
-    "demand_scale_factor",    # Change la marge de réserve système
-    "inflow_factor",          # Change la disponibilité hydro
-
-    # 2. Contrainte Réseau
-    "intertie_density",       # Change la congestion (Îlot vs Plaque de cuivre)
-    "cross_border_policy",    # Change la sécurité d'approvisionnement externe
-
-    # 3. Flexibilité Technique
-    "thermal_ramp_pct",       # Change la réactivité du thermique
-    "battery_e_to_p_hours",   # Change la nature du stockage (Puissance vs Énergie)
-
-    # 4. Signal Économique
-    "co2_price_eur_per_t"     # Change le merit order
-  ]
+  # V1: greedy_cover (online accept/reject)
+  # V2: pool_k_center (generate pool, then select with farthest-point)
+  selection_method: "pool_k_center"
+  
+  # V1 setting: minimum pairwise distance for greedy cover
   min_pairwise_distance: 0.35
+  
+  # V2 settings: pool + k-center selection
+  pool_multiplier: 20           # Generate 20x target candidates before selection
+  use_lhs: true                 # Latin Hypercube Sampling for continuous params
+  use_stratification: true      # Stratified selection with quotas
+  
+  # Enriched cover metric (used by V2 diversity vector)
+  cover_metric: [
+    # A. Topology / size (hardness proxies)
+    "regions",
+    "zones",
+    "zones_per_region_mean",
+    "zones_per_region_std",
+    "intertie_density",
+    "neighbor_nations",
+
+    # B. Asset mix (degrees-of-freedom)
+    "thermal_total",
+    "nuclear_total",
+    "solar_total",
+    "wind_total",
+    "battery_total",
+    "pumped_total",
+    "hydro_reservoir_total",
+    "dr_total",
+    "thermal_per_zone",
+    "dr_per_zone",
+    "storage_per_zone",
+    "vre_dispatchable_ratio",
+    "storage_demand_ratio",
+    "dr_headroom_ratio",
+
+    # C. Tech scalers (MILP difficulty)
+    "thermal_ramp_pct",
+    "battery_e_to_p_hours",
+    "battery_roundtrip_eff",
+    "battery_final_soc_tolerance",
+    "pumped_final_level_tolerance",
+    "dr_max_shed_share",
+    "dr_duration_hours",
+    "dr_max_events",
+    "dr_min_duration",
+    "dr_ramp_limit_factor",
+
+    # D. Exogenous & policy drivers
+    "demand_profile",           # one-hot
+    "weather_profile",          # one-hot (dominant)
+    "demand_scale_factor",
+    "inflow_factor",
+    "weather_spread_intensity",
+    "cross_border_policy",      # one-hot
+    "import_export_caps_factor",
+    "co2_price_eur_per_t",
+    "price_cap_eur_per_mwh",
+
+    # E. Regional weather heterogeneity (P4)
+    "weather_profile_histogram",  # normalized per-region
+    "weather_entropy",
+    "spread_min",
+    "spread_mean",
+    "spread_max"
+  ]
+  
+  # Stratification bins for balanced sampling (P6)
+  stratification:
+    topology_bins: ["small", "medium", "large", "very_large"]
+    stress_bins: ["low", "medium_low", "medium", "medium_high", "high"]
+    flexibility_bins: ["low", "medium", "high", "very_high"]
+    hardness_bins: ["easy", "medium", "hard", "very_hard"]
+    # Bin thresholds
+    topology_zone_thresholds: [50, 120, 250]
+    hardness_binary_thresholds: [5000, 12000, 18000]
+  
+  # LHS continuous parameters (P8)
+  lhs_params: [
+    "demand_scale_factor",
+    "inflow_factor",
+    "co2_price_eur_per_t",
+    "intertie_density",
+    "thermal_ramp_pct",
+    "battery_e_to_p_hours",
+    "import_export_caps_factor",
+    "weather_spread_intensity"
+  ]
 
 budget_guard:
   max_vars_per_scenario: 150000

@@ -48,7 +48,7 @@ Keep everything relative to the project root (`benchmark/` in this checkout). Al
 The quickest way to sample a new batch is the convenience wrapper:
 
 ```bash
-python -m src.generator.run_generator -o outputs/scenarios_eval_stress
+python -m src.generator.run_generator -v v2 -o outputs/scenarios_v3
 ```
 
 This reads `config/scenario_space.yaml` and writes JSON payloads plus a `manifest.json` under `outputs/scenarios_v1/`. You can customise behaviour by editing the YAML (e.g., horizon length, asset ranges) or by importing `generate_scenarios` from `src.generator.generator_v1` in your own script.
@@ -57,6 +57,20 @@ Useful tips:
 - Re-run the generator with a different `outputs/<folder>` to keep multiple corpora side-by-side.
 - Set `scenario_space.global.target` to control how many scenarios to keep.
 - Inspect scenarios files with `python -m src.generator.inspect_scenarios outputs/scenarios_v1`.
+
+
+## Criticality-based Clustering analysis using HDBSCAN 
+```bash
+python -m src.analysis.criticality_index outputs/scenarios_v3 -a 0.6 --percentile-low 10 --percentile-high 90"
+```
+
+```bash
+python -m src.analysis.criticality_clustering outputs/scenarios_v3/criticality_results.json --min-cluster-size 30 --cluster-epsilon 0.5 --n-components 11
+```
+
+```bash
+python -m src.analysis.visualize_clusters outputs/scenarios_v3/criticality_results.json -o outputs/scenarios_v3/clusters_viz.png
+```
 
 ## 4. Solve scenarios with the MILP
 
