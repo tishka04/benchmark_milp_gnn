@@ -1,0 +1,248 @@
+\documentclass[11pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{geometry}
+\geometry{margin=1.5cm}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, shadows, calc, fit, backgrounds}
+\usepackage{xcolor}
+
+% Define custom colors
+\definecolor{scenarioBlue}{RGB}{52, 152, 219}
+\definecolor{milpRed}{RGB}{231, 76, 60}
+\definecolor{graphGreen}{RGB}{46, 204, 113}
+\definecolor{encoderPurple}{RGB}{155, 89, 182}
+\definecolor{ebmOrange}{RGB}{243, 156, 18}
+\definecolor{samplerTeal}{RGB}{26, 188, 156}
+\definecolor{decoderPink}{RGB}{233, 30, 99}
+\definecolor{lpworkerBrown}{RGB}{121, 85, 72}
+\definecolor{evalGray}{RGB}{96, 125, 139}
+\definecolor{bgLight}{RGB}{248, 249, 250}
+
+\title{Methodology Flow Diagram:\\
+GNN-Accelerated MILP for Power System Flexibility Optimization}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\begin{center}
+\begin{tikzpicture}[
+    % Node styles
+    block/.style={
+        rectangle,
+        rounded corners=6pt,
+        minimum width=3.8cm,
+        minimum height=1.2cm,
+        text centered,
+        text width=3.6cm,
+        font=\scriptsize\bfseries,
+        draw=#1!80!black,
+        fill=#1!20,
+        line width=1pt,
+        drop shadow={shadow xshift=0.5pt, shadow yshift=-0.5pt, opacity=0.2}
+    },
+    % Arrow style
+    arrow/.style={
+        ->,
+        >=Stealth,
+        line width=1.2pt,
+        draw=#1!70!black
+    },
+    % Data flow annotation style
+    annot/.style={
+        font=\tiny\itshape,
+        text=#1!70!black,
+        align=center
+    },
+    % Group box style
+    groupbox/.style={
+        draw=#1!60!black,
+        fill=#1!5,
+        rounded corners=8pt,
+        line width=0.8pt,
+        dashed
+    }
+]
+
+% ============================================
+% ROW 1: DATA GENERATION
+% ============================================
+% Scenario Generator
+\node[block=scenarioBlue] (generator) {
+    \textbf{1. Scenario Generator}\\
+    \tiny Techno, economic, meteo sampling to max diversity
+};
+
+% MILP Solver (right of generator)
+\node[block=milpRed, right=0.8cm of generator] (milp) {
+    \textbf{2. MILP Solver}\\
+    \tiny Dispatchable Generation, Storage, DR, Exchanges
+};
+
+% ============================================
+% ROW 2: REPRESENTATION LEARNING
+% ============================================
+% Graph Construction
+\node[block=graphGreen, below=1.2cm of generator] (graphs) {
+    \textbf{3. Graph Builder}\\
+    \tiny Heterogeneous Multilayer Temporal Graphs
+};
+
+% Hierarchical Encoder
+\node[block=encoderPurple, right=0.8cm of graphs] (encoder) {
+    \textbf{4. Hierarchical Temporal Encoder}\\
+    \tiny $\mathcal{G}_t$ $\rightarrow$ $h \in \mathbb{R}^{128}$
+};
+
+% ============================================
+% ROW 3: ENERGY-BASED LEARNING
+% ============================================
+% EBM Training
+\node[block=ebmOrange, below=1.2cm of encoder] (ebm) {
+    \textbf{5. Graph EBM}\\[2pt]
+    \begin{tikzpicture}[scale=0.35]
+        \draw[ebmOrange!80!black, line width=0.6pt] plot[smooth, tension=0.8] 
+            coordinates {(0,0.8) (0.5,0.3) (1,0.7) (1.5,0.1) (2,0.5) (2.5,0.2) (3,0.6)};
+        \fill[ebmOrange!80!black] (1.5,0.1) circle (2pt);
+    \end{tikzpicture}\\[-2pt]
+    \tiny $E_\theta(u \mid h)$
+};
+
+% Langevin Sampler
+\node[block=samplerTeal, left=0.8cm of ebm] (sampler) {
+    \textbf{6. Langevin Sampler}\\
+    \tiny SGLD dynamics $\rightarrow$ $\hat{u}$
+};
+
+% ============================================
+% ROW 4: SOLUTION RECONSTRUCTION
+% ============================================
+% Feasibility Decoder
+\node[block=decoderPink, below=1.2cm of sampler] (decoder) {
+    \textbf{7. Feasibility Decoder}\\
+    \tiny Heuristic repair
+};
+
+% LP Worker
+\node[block=lpworkerBrown, right=0.8cm of decoder] (lpworker) {
+    \textbf{8. LP Worker}\\
+    \tiny Continuous dispatch
+};
+
+% ============================================
+% ROW 5: EVALUATION
+% ============================================
+% Evaluation (centered)
+\node[block=evalGray, below=1.2cm of decoder, xshift=2.3cm] (eval) {
+    \textbf{9. Evaluation}\\
+    \tiny $\mathcal{S}_{\text{simple}}, \mathcal{S}_{\text{medium}}, \mathcal{S}_{\text{hard}}$: Time, Gap, Feasibility
+};
+
+% ============================================
+% ARROWS - Main Flow
+% ============================================
+
+% Generator -> MILP
+\draw[arrow=scenarioBlue] (generator.east) -- (milp.west)
+    node[annot=scenarioBlue, midway, above] {$\mathcal{S}$};
+
+% Generator -> Graphs
+\draw[arrow=scenarioBlue] (generator.south) -- (graphs.north)
+    node[annot=scenarioBlue, midway, left] {params};
+
+% MILP -> Graph EBM (optimal solutions)
+\draw[arrow=milpRed] (milp.east) -- ++(0.7,0cm) |- (ebm.east)
+    node[annot=milpRed, pos=0.25, right] {$u^*$};
+
+% Graphs -> Encoder
+\draw[arrow=graphGreen] (graphs.east) -- (encoder.west)
+    node[annot=graphGreen, midway, above] {$\mathcal{G}_t$};
+
+% Encoder -> EBM
+\draw[arrow=encoderPurple] (encoder.south) -- ++(0,-0.4cm) -| (ebm.north)
+    node[annot=encoderPurple, pos=0.25, right] {$h$};
+
+% EBM -> Sampler
+\draw[arrow=ebmOrange] (ebm.west) -- (sampler.east)
+    node[annot=ebmOrange, midway, above] {$E_\theta$};
+
+% Sampler -> Decoder
+\draw[arrow=samplerTeal] (sampler.south) -- ++(0,-0.4cm) -| (decoder.north)
+    node[annot=samplerTeal, pos=0.25, right] {$\hat{u}$};
+
+% Decoder -> LP Worker
+\draw[arrow=decoderPink] (decoder.east) -- (lpworker.west)
+    node[annot=decoderPink, midway, above] {$\tilde{u}$};
+
+% LP Worker -> Eval
+\draw[arrow=lpworkerBrown] (lpworker.south) -- ++(0,-0.4cm) |- (eval.east)
+    node[annot=lpworkerBrown, pos=0.25, right] {$\hat{x}$};
+
+
+% ============================================
+% PHASE LABELS (Background boxes)
+% ============================================
+\begin{scope}[on background layer]
+    % Data Generation phase
+    \node[groupbox=scenarioBlue, fit=(generator)(milp), inner sep=8pt, 
+          label={[font=\scriptsize\bfseries, scenarioBlue!80!black]above:Data Generation}] {};
+    
+    % Representation Learning phase
+    \node[groupbox=encoderPurple, fit=(graphs)(encoder), inner sep=8pt,
+          label={[font=\scriptsize\bfseries, encoderPurple!80!black]above:Representation Learning}] {};
+    
+    % Energy-Based Learning phase
+    \node[groupbox=ebmOrange, fit=(ebm)(sampler), inner sep=8pt,
+          label={[font=\scriptsize\bfseries, ebmOrange!80!black]above:Energy-Based Learning}] {};
+    
+    % Solution Reconstruction phase
+    \node[groupbox=decoderPink, fit=(decoder)(lpworker), inner sep=8pt,
+          label={[font=\scriptsize\bfseries, decoderPink!80!black]above:Solution Reconstruction}] {};
+    
+    % Evaluation phase
+    \node[groupbox=evalGray, fit=(eval), inner sep=8pt,
+          label={[font=\scriptsize\bfseries, evalGray!80!black]above:Benchmarking}] {};
+\end{scope}
+
+% ============================================
+% LEGEND
+% ============================================
+\node[below=0.8cm of eval, xshift=0cm] (legend) {
+    \scriptsize\textbf{Legend:} $\mathcal{S}$=scenarios \quad $u$=binary \quad $h$=embedding \quad $\mathcal{G}$=graphs \quad ${x}$=continuous
+};
+
+\end{tikzpicture}
+
+\vspace{0.3cm}
+\textbf{Figure 1.} Flow chart of the proposed hybrid MILP-GNN-EBM framework.
+\end{center}
+
+% ============================================
+% METHODOLOGY SUMMARY TABLE
+% ============================================
+\vspace{0.5cm}
+\begin{center}
+\small
+\begin{tabular}{|c|l|l|l|}
+\hline
+\textbf{\#} & \textbf{Component} & \textbf{Input} & \textbf{Output} \\
+\hline
+1 & Scenario Generator & Parameter distributions & Diverse scenarios $\mathcal{S}$ \\
+2 & MILP Solver & Scenarios $\mathcal{S}$ & Optimal decisions $u^*$ and $x^*$\\
+3 & Graph Builder & Scenarios $\mathcal{S}$ & Hetero. temporal graphs $\mathcal{G}_t$ \\
+4 & Hierarchical Encoder & Graphs $\mathcal{G}_t$ & Embeddings $h \in \mathbb{R}^{128}$ \\
+5 & Graph EBM & $(u^*, h)$ pairs & Energy function $E_\theta(u \mid h)$ \\
+6 & Langevin Sampler & $E_\theta$ & Candidate binaries $\hat{u}$ \\
+7 & Feasibility Decoder & $\hat{u}$ & Feasible binaries $\tilde{u}$ \\
+8 & LP Worker & $\tilde{u}$ & Continuous dispatch $x^*$ \\
+9 & Evaluation & Pipeline vs MILP outputs & Time, Gap, Feasibility metrics \\
+\hline
+\end{tabular}
+\end{center}
+
+\end{document}

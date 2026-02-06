@@ -92,7 +92,7 @@ Storage units (batteries and pumped hydro) incorporate cycle-throughput costs, p
 ### 4.2 Batch solving
 
 ```bash
-python -m src.milp.batch_runner outputs/scenarios_eval_hard --solver highs --workers 4 --reports-dir outputs/scenarios_eval_hard/reports --dispatch-dir outputs/scenarios_eval_hard/dispatch_batch --plot --plots-dir outputs/scenarios_eval_hard/plots --summary-json outputs/scenarios_eval_hard/batch_summary.json --start-from 1
+python -m src.milp.batch_runner outputs/scenarios_v3 --solver highs --workers 4 --reports-dir outputs/scenarios_v3/reports --dispatch-dir outputs/scenarios_v3/dispatch_batch --plot --plots-dir outputs/scenarios_v3/plots --summary-json outputs/scenarios_v3/batch_summary.json --start-from 1
 ```
 
 Notes:
@@ -125,7 +125,7 @@ The exporter expects the report to include the `detail` payload (produced automa
 To convert an entire directory of scenario/report pairs in one shot:
 
 ```bash
-python -m src.gnn.build_hetero_graph_dataset outputs/scenarios_eval_hard outputs/scenarios_eval_hard/reports outputs/graphs/hetero_temporal_eval_hard --temporal --temporal-mode supra --temporal-edges soc,ramp,dr --time-enc sinusoidal --input-only
+python -m src.gnn.build_hetero_graph_dataset outputs/scenarios_v3 outputs/graphs/hetero_temporal_v3 --temporal
 ```
 
 The command above mirrors scenario/report stems into `outputs/datasets/graphs`, emitting one compressed NPZ per solved case.

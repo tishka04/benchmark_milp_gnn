@@ -1,6 +1,6 @@
 """
 Batch builder for heterogeneous multi-level graph datasets.
-Mirrors the functionality of build_graph_dataset.py but for hetero graphs.
+Builds graphs from scenario characteristics only (no MILP output required).
 """
 
 from __future__ import annotations
@@ -21,30 +21,13 @@ from src.gnn.hetero_graph_dataset import (
 from src.milp.scenario_loader import load_scenario_data
 
 
-def _load_json(path: Path) -> Dict:
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def find_matching_pairs(
-    scenario_dir: Path,
-    reports_dir: Path,
-) -> List[tuple[Path, Path]]:
-    """Find scenario/report pairs with matching stems."""
-    scenario_files = {p.stem: p for p in scenario_dir.glob("scenario_*.json")}
-    report_files = {p.stem: p for p in reports_dir.glob("scenario_*.json")}
-    
-    matching_stems = set(scenario_files.keys()) & set(report_files.keys())
-    pairs = [
-        (scenario_files[stem], report_files[stem])
-        for stem in sorted(matching_stems)
-    ]
-    
-    return pairs
+def find_scenario_files(scenario_dir: Path) -> List[Path]:
+    """Find all scenario JSON files in directory."""
+    return sorted(scenario_dir.glob("scenario_*.json"))
 
 
 def convert_batch(
     scenario_dir: Path,
-    reports_dir: Path,
     output_dir: Path,
     *,
     resume: bool = False,
@@ -55,19 +38,16 @@ def convert_batch(
     temporal_edges: str = "soc,ramp,dr",
     time_enc: str = "sinusoidal",
     target_horizon: int = 0,
-    use_solution_features: bool = True,
 ) -> Dict:
-    """Convert all scenario/report pairs to heterogeneous graphs."""
+    """Convert all scenarios to heterogeneous graphs (no MILP output required)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    pairs = find_matching_pairs(scenario_dir, reports_dir)
-    if not pairs:
-        print(f"No matching scenario/report pairs found in:")
-        print(f"  Scenarios: {scenario_dir}")
-        print(f"  Reports: {reports_dir}")
+    scenario_files = find_scenario_files(scenario_dir)
+    if not scenario_files:
+        print(f"No scenario files found in: {scenario_dir}")
         sys.exit(1)
     
-    print(f"Found {len(pairs)} scenario/report pairs")
+    print(f"Found {len(scenario_files)} scenario files")
     
     index_entries = []
     stats = {
@@ -78,7 +58,7 @@ def convert_batch(
         "total_edges": 0,
     }
     
-    for scenario_path, report_path in tqdm(pairs, desc="Converting"):
+    for scenario_path in tqdm(scenario_files, desc="Converting"):
         stem = scenario_path.stem
         output_path = output_dir / f"{stem}.npz"
         
@@ -86,14 +66,11 @@ def convert_batch(
             stats["skipped"] += 1
             # Still add to index
             try:
-                report = _load_json(report_path)
                 scenario_data = load_scenario_data(scenario_path)
                 index_entries.append({
                     "graph_file": str(output_path),
                     "scenario_file": str(scenario_path),
-                    "report_file": str(report_path),
-                    "scenario_id": report.get("scenario_id", scenario_data.scenario_id),
-                    "objective": report.get("mip", {}).get("objective", float("nan")),
+                    "scenario_id": scenario_data.scenario_id,
                 })
             except Exception:
                 pass
@@ -101,23 +78,20 @@ def convert_batch(
         
         try:
             scenario_data = load_scenario_data(scenario_path)
-            report = _load_json(report_path)
             
             # Build temporal or static graph
             if temporal:
                 record = build_hetero_temporal_record(
                     scenario_data,
-                    report,
                     mode=temporal_mode,
                     time_window=window,
                     stride=stride,
                     temporal_edges=tuple(temporal_edges.split(",")),
                     time_encoding=time_enc,
                     target_horizon=target_horizon,
-                    use_solution_features=use_solution_features,
                 )
             else:
-                record = build_hetero_graph_record(scenario_data, report, use_solution_features)
+                record = build_hetero_graph_record(scenario_data)
             
             # Handle sequence mode (list of graphs)
             if temporal and temporal_mode == "sequence":
@@ -129,9 +103,7 @@ def convert_batch(
                     index_entries.append({
                         "graph_file": str(snapshot_path),
                         "scenario_file": str(scenario_path),
-                        "report_file": str(report_path),
-                        "scenario_id": report.get("scenario_id", scenario_data.scenario_id),
-                        "objective": report.get("mip", {}).get("objective", float("nan")),
+                        "scenario_id": scenario_data.scenario_id,
                         "num_nodes": int(len(graph["node_types"])),
                         "num_edges": int(graph["edge_index"].shape[1]),
                         "mode": "sequence",
@@ -152,9 +124,7 @@ def convert_batch(
                 index_entries.append({
                     "graph_file": str(output_path),
                     "scenario_file": str(scenario_path),
-                    "report_file": str(report_path),
-                    "scenario_id": report.get("scenario_id", scenario_data.scenario_id),
-                    "objective": report.get("mip", {}).get("objective", float("nan")),
+                    "scenario_id": scenario_data.scenario_id,
                     "num_nodes": int(len(record["node_types"])),
                     "num_edges": int(record["edge_index"].shape[1]),
                     "mode": temporal_mode if temporal else "static",
@@ -202,17 +172,12 @@ def convert_batch(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert MILP scenarios to heterogeneous multi-level graphs (batch)."
+        description="Convert scenarios to heterogeneous multi-level graphs (no MILP output required)."
     )
     parser.add_argument(
         "scenario_dir",
         type=Path,
         help="Directory containing scenario JSON files",
-    )
-    parser.add_argument(
-        "reports_dir",
-        type=Path,
-        help="Directory containing report JSON files (with detail)",
     )
     parser.add_argument(
         "output_dir",
@@ -267,17 +232,11 @@ def main() -> None:
         default=0,
         help="Prediction horizon (0 = same-step labels, >0 = predict future steps)",
     )
-    parser.add_argument(
-        "--input-only",
-        action="store_true",
-        help="Use ONLY input features (demand, renewable forecasts). Excludes MILP solution data to prevent leakage. Use this for clean generalization experiments.",
-    )
     
     args = parser.parse_args()
     
     convert_batch(
         args.scenario_dir,
-        args.reports_dir,
         args.output_dir,
         resume=args.resume,
         temporal=args.temporal,
@@ -287,7 +246,6 @@ def main() -> None:
         temporal_edges=args.temporal_edges,
         time_enc=args.time_enc,
         target_horizon=args.target_horizon,
-        use_solution_features=not args.input_only,  # Invert: --input-only means no solution features
     )
 
 
