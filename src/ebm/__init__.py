@@ -22,6 +22,22 @@ except ImportError:
     ThrmlConditionalSampler = None
     HybridThrmlGibbsSampler = None
 
+# V3: Graph EBM with temporal zonal dynamics
+try:
+    from .config_v3 import EBMv3Config
+    from .model_v3 import TrajectoryZonalEBM
+    from .sampler_v3 import NormalizedTemporalLangevinSampler
+    from .dataset_v3 import ScenarioReportDataset, temporal_collate_fn, build_dataloaders
+    from .loss_v3 import ContrastiveDivergenceLoss, PreferenceLoss, CombinedLoss
+    from .feasibility import (
+        ScenarioPhysics, FeasiblePlan, HierarchicalFeasibilityDecoder,
+        load_physics_from_scenario,
+    )
+    from .train_v3 import run_gold_pretraining, run_silver_finetuning, run_full_pipeline
+    V3_AVAILABLE = True
+except ImportError as _v3_err:
+    V3_AVAILABLE = False
+
 __all__ = [
     'EnergyModel',
     'StructuredEnergyModel',
@@ -35,4 +51,22 @@ __all__ = [
     'ThrmlConditionalSampler',
     'HybridThrmlGibbsSampler',
     'THRML_AVAILABLE',
+    # V3
+    'EBMv3Config',
+    'TrajectoryZonalEBM',
+    'NormalizedTemporalLangevinSampler',
+    'ScenarioReportDataset',
+    'temporal_collate_fn',
+    'build_dataloaders',
+    'ContrastiveDivergenceLoss',
+    'PreferenceLoss',
+    'CombinedLoss',
+    'ScenarioPhysics',
+    'FeasiblePlan',
+    'HierarchicalFeasibilityDecoder',
+    'load_physics_from_scenario',
+    'run_gold_pretraining',
+    'run_silver_finetuning',
+    'run_full_pipeline',
+    'V3_AVAILABLE',
 ]

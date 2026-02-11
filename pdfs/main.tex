@@ -106,7 +106,7 @@ Our main contributions are:
 \begin{enumerate}[label=\textbf{C\arabic*}, leftmargin=*, itemsep=2pt]
   \item \textbf{A flexibility scenario generator with diversity maximisation and complexity indexing.} We sample a wide range of techno-economic parameters to maximise scenario diversity and compute a scenario-specific complexity indicator that ranks instances by expected difficulty.
   \item \textbf{A multi-layer MILP oracle for coordinated flexibility.} We formulate and solve a high-fidelity MILP that coordinates multi-scale flexibility resources under network and inter-temporal constraints, producing auditable primal schedules (and optional dual signals).
-  \item \textbf{A projection of solved instances to hierarchical multi-layer temporal graphs.} Each scenario is encoded as a heterogeneous temporal graph that mirrors the nested physical/aggregation structure (assets $\to$ zones $\to$ regions $\to$ system) while preserving time-coupled constraints.
+  \item \textbf{A projection of scenario instances to hierarchical multi-layer temporal graphs.} Each scenario is encoded as a heterogeneous temporal graph that mirrors the nested physical/aggregation structure (assets $\to$ zones $\to$ regions $\to$ system) while preserving time-coupled constraints.
   \item \textbf{A topology-consistent GNN encoder for scenario embeddings.} We learn a GNN encoder that captures scenario structure and maps each instance into an embedding space that preserves the hierarchical, multi-layer, and temporal organisation of the system.
   \item \textbf{A graph EBM sampler with feasibility-preserving decoding.} Conditioned on scenario embeddings, an EBM learns an energy landscape over binary decisions and enables fast sampling; a lightweight decoder repairs residual violations, and a conditional LP worker recovers continuous dispatch.
   \item \textbf{An evaluation protocol for large-scale scenario exploration.} We quantify speed, feasibility, and optimality across scenario families of increasing complexity, testing how performance evolves as the exploration ``complexity knob'' is increased.
@@ -631,7 +631,7 @@ The model enforces nine families of constraints whose full mathematical formulat
     Mirrors the battery formulation with its own mode binary, round-trip efficiencies, self-discharge retention, and final level bounds.
 
   \item \textbf{Transmission and cross-border exchanges.}
-    Line flows are bounded by thermal capacity (bidirectional). Cross-border import and export are mutually exclusive via the mode binary~$\sigma^{\mathrm{imp}}_t$ and bounded by aggregate interconnection capacity.
+    Line flows are bounded by capacity (bidirectional). Cross-border import and export are mutually exclusive via the mode binary~$\sigma^{\mathrm{imp}}_t$ and bounded by aggregate interconnection capacity.
 
   \item \textbf{Nodal power balance.}
     At every zone and time step, total generation plus demand response, unserved energy, and net inflows must equal demand plus storage charging, outflows, and over-generation spillage. Cross-border exchanges enter the balance at a single designated anchor zone.
@@ -676,6 +676,95 @@ illustrates the full MILP oracle outputs for the representative critical scenari
 \end{figure}
 
 
+
+
+% ============================================================
+% SECTION 3: GRAPH REPRESENTATION AND HTE MODEL
+% ============================================================
+
+\section{Representation learning}
+\label{sec:graph_encoder}
+
+A key design choice of the proposed pipeline is to \emph{not} flatten each scenario into a fixed-length feature vector. Doing so would destroy the spatial topology, discard the variable-size structure (the number of zones, regions, and assets changes from one scenario to the next), and ignore the relational constraints that are the very source of MILP complexity. Instead, we project every scenario onto a \emph{multi-layer heterogeneous temporal graph} and learn an encoder that produces compact embeddings while respecting the containment hierarchy and temporal couplings.
+
+This section gives the motivation and high-level design of the two components: graph construction (Section~\ref{sec:graph_projection}) and the Hierarchical Temporal Encoder (Section~\ref{sec:hte}). Formal definitions, complete edge-type catalogues, and architectural equations are collected in Appendix~\ref{app:graph_hte_details}.
+
+
+% ============================================================
+% SECTION 3.1: GRAPH PROJECTION
+% ============================================================
+
+\subsection{Projection onto Multi-Layer Heterogeneous Temporal Graphs}
+\label{sec:graph_projection}
+
+\subsubsection{Why a graph?}
+
+Energy system scenarios are naturally hierarchical: a single nation contains several regions, each region groups multiple load zones, and each zone owns a portfolio of generation and storage assets. These relationships---together with the transmission network that connects zones and the weather patterns that drive renewable output---are most faithfully captured by a graph whose structure mirrors the physical system. A graph representation offers three advantages over tabular alternatives:
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Variable size.} The number of zones, assets, and inter-ties varies across scenarios. A graph accommodates this naturally, whereas a flat vector requires padding or truncation that introduces artefacts.
+  \item \textbf{Explicit topology.} Containment (nation $\to$ region $\to$ zone $\to$ asset), transmission lines, and weather influence are encoded as typed edges, giving the downstream encoder direct access to the relational structure that governs MILP feasibility.
+  \item \textbf{Temporal coupling.} By replicating the spatial graph at every time step and adding inter-temporal edges (state-of-charge continuity, ramping limits, demand-response cooldowns), the graph encodes the same coupling constraints that make the MILP difficult to solve.
+\end{enumerate}
+
+\subsubsection{Graph structure at a glance}
+
+Each scenario is mapped to a heterogeneous attributed graph $\mathcal{G}(s)$ with five node types and eleven edge types (seven spatial, four temporal). The construction is fully determined by the scenario specification and requires no MILP solution, so the same builder can be used at inference time for unseen scenarios.
+
+\paragraph{Nodes.}
+The graph contains one \emph{nation} node (system-wide aggregates), one \emph{region} node per geographical region, one \emph{zone} node per load zone, one \emph{asset} node per active technology instance, and one \emph{weather} node per region. Asset nodes are attached to the appropriate spatial level: zonal technologies (thermal, solar, wind, battery, run-of-river hydro, demand response) are children of their parent zone, while large-scale resources defined at the regional level (nuclear, reservoir hydro, pumped hydro) are children of their parent region. An asset node is only created when the corresponding capacity is strictly positive, so the graph size varies across scenarios (from ${\sim}\,30$ to ${\sim}\,850$ base nodes in the benchmark).
+
+\paragraph{Spatial edges.}
+Containment edges form a strict tree (nation $\to$ regions $\to$ zones $\to$ zonal assets, plus region $\to$ regional assets). Weather-influence edges connect each weather cell to the zones and renewable assets in its region. Bidirectional transmission edges link zones that share a power line, carrying the line's thermal capacity and electrical distance as attributes.
+
+\paragraph{Temporal extension (supra-graph).}
+To capture inter-temporal MILP constraints, each base node is replicated at every time step~$t \in \{0,\dots,T{-}1\}$, and directed temporal edges are added between consecutive copies of the same asset: \emph{SOC edges} for storage assets, \emph{ramp edges} for thermal and nuclear generators, and \emph{cooldown edges} for demand-response units. The result is a \emph{supra-graph} whose size scales as $N_{\mathrm{base}} \times T$ (up to ${\sim}\,12\,000$ nodes for the largest scenarios). Sinusoidal positional encodings are concatenated to node features to provide periodicity-aware time information.
+
+The complete schema---node feature dimensions, all eleven edge types, and temporal edge construction rules---is given in Appendix~\ref{app:graph_schema}, together with illustrative figures of the spatial (Figure~\ref{fig:graph_spatial}) and temporal (Figure~\ref{fig:graph_temporal}) graph structures.
+
+
+% ============================================================
+% SECTION 3.2: HIERARCHICAL TEMPORAL ENCODER
+% ============================================================
+
+\subsection{Hierarchical Temporal Encoder}
+\label{sec:hte}
+
+\subsubsection{Why not a standard graph neural network?}
+
+The supra-graph constructed above can contain up to ${\sim}\,12\,000$ nodes. Applying a standard dense-attention graph Transformer to such inputs would require $\mathcal{O}(N^2 T^2)$ memory---prohibitive even on modern GPUs. At the same time, a shallow message-passing network that treats all nodes uniformly would fail to distinguish between local asset-level interactions (e.g., a battery's SOC evolution within a single zone) and global system-level patterns (e.g., the national demand--supply balance over a day). The encoder must therefore be \emph{hierarchy-aware}: it should aggregate local information upward, reason about temporal dynamics at the system level, and then distribute this global context back to the fine-grained nodes that need it.
+
+\subsubsection{Three-phase architecture}
+
+We introduce a \emph{Hierarchical Temporal Encoder} (HTE) that factorises computation into three phases, mirroring the natural information flow in power system operations:
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Bottom-up spatial encoding.} Information flows upward through the containment hierarchy: asset-level representations are aggregated into zones, zones into regions, and regions into a single nation-level summary. At each level, graph attention layers~\citep{brody_how_2022} allow neighbouring nodes to exchange information (e.g., assets sharing a zone, zones connected by transmission lines) before pooling. Skip connections preserve local detail at every level for later use.
+
+  \item \textbf{Temporal Transformer at the nation level.} Once the entire system state has been compressed into a single node per time step, a standard Transformer encoder~\citep{vaswani2017attention} captures temporal dependencies across the horizon. Because the sequence length equals the number of time steps ($T = 24$ in the benchmark), dense self-attention is computationally negligible, yet it has access to the full spatial context at each step.
+
+  \item \textbf{Top-down decoding.} The temporally enriched nation representation is broadcast back through the hierarchy: first to regions, then to zones, then to assets. At each level, the broadcast signal is combined with the skip connection saved during the bottom-up phase, so that the final embeddings fuse global temporal context with local spatial detail.
+\end{enumerate}
+
+The output is a set of temporal embedding vectors at every hierarchical level---assets, zones, regions, and nation---each of dimension $D = 128$. The zone-level embeddings are the primary conditioning signal consumed by the downstream EBM (Section~4), while the asset-level embeddings drive the self-supervised training objective.
+
+This design reduces peak GPU memory from $>$40\,GB (dense graph Transformer) to ${\sim}\,3$--$8$\,GB, making training feasible on a single GPU. The full model has ${\sim}\,3.2$~million parameters (${\sim}\,13$\,MB).
+
+\subsubsection{Self-supervised training}
+\label{sec:hte_training}
+
+A distinguishing feature of the HTE is that it is trained \emph{without any MILP solution labels}. The training signal comes entirely from the structure of the scenario graphs themselves, through a contrastive learning objective.
+
+\paragraph{Intuition.}
+The key idea is that the embedding of a given asset at time~$t$ should be similar to the embedding of \emph{the same asset a few time steps later} (a ``positive pair''), and dissimilar to embeddings of \emph{unrelated assets at random times} (``negative pairs''). This encourages the encoder to learn representations that capture the temporal dynamics of the system---ramping patterns, charge/discharge cycles, demand response activations---without needing to see any optimal dispatch solution.
+
+\paragraph{Multi-lag design.}
+Rather than using a single lag (e.g., $t \to t{+}1$), we form positive pairs at three lags: $\tau \in \{1, 4, 8\}$ hours. This ensures the encoder captures dynamics at multiple time scales: short-range (hourly ramping and SOC transitions), medium-range (intra-day patterns), and longer-range (diurnal cycles). The loss is the InfoNCE objective~\citep{oord2018representation}, a standard contrastive loss widely used in self-supervised representation learning. Because training uses the asset level---the finest granularity---the loss implicitly shapes all coarser levels through the pooling and skip-connection pathways.
+
+\paragraph{Training setup.}
+The model is trained on 4\,000 scenario graphs (with 1\,000 held out for validation) using the AdamW optimiser~\citep{loshchilov2019decoupled} with cosine learning-rate annealing and early stopping. Because graph sizes vary widely ($N_{\mathrm{base}} \in [33, 851]$), only one graph fits in GPU memory at a time; gradient accumulation over 8~steps provides an effective batch size of~8. On a single NVIDIA H100 GPU, training converges in ${\sim}\,80$ epochs (${\sim}\,8$~hours); generating embeddings for all $5\,000$ scenarios takes an additional hour.
+
+The complete architectural equations, layer-by-layer specifications, and the full hyperparameter table are provided in Appendix~\ref{app:hte_details}, along with an architecture diagram (Figure~\ref{fig:hte_architecture}).
 
 
 \bibliographystyle{plainnat}  
@@ -1103,7 +1192,7 @@ Final level bounds $\underline{E}^{\mathrm{phs,fin}}_z \leq e^{\mathrm{phs}}_{z,
 
 \subsection{Transmission network and cross-border exchanges}
 
-Power flows on each line are bounded by thermal capacity (bidirectional):
+Power flows on each line are bounded by capacity (bidirectional):
 \begin{equation}
 -\overline{F}_\ell \leq f_{\ell,t} \leq \overline{F}_\ell, \quad \forall\, \ell \in \mathcal{L},\, t \in \mathcal{T}.
 \label{eq:transmission}
@@ -1134,5 +1223,367 @@ At every zone and time step, supply must equal demand:
 \end{equation}
 where $D_{z,t}$ is the exogenous demand, $p^{\mathrm{ror}}_{z,t}$ is the must-take run-of-river hydro, $\mathcal{L}^{\mathrm{to}}_z$ and $\mathcal{L}^{\mathrm{from}}_z$ are lines arriving at and departing from zone~$z$, and $z_0$ is the designated anchor zone for cross-border exchanges.
 
+
+% ============================================================
+% APPENDIX C: GRAPH SCHEMA AND HTE ARCHITECTURE DETAILS
+% ============================================================
+
+\section{Graph schema and encoder architecture details}
+\label{app:graph_hte_details}
+
+This appendix provides the formal definitions, complete edge-type catalogue, and architectural equations summarised in Section~\ref{sec:graph_encoder}.
+
+\subsection{Graph definition}
+\label{app:graph_schema}
+
+Each scenario~$s$ is represented as a heterogeneous attributed graph
+$\mathcal{G}(s) = (\mathcal{V}, \mathcal{E}, \phi_V, \phi_E, \mathbf{X}, \mathbf{A})$,
+where $\mathcal{V}$ is the node set, $\mathcal{E} \subseteq \mathcal{V} \times \mathcal{V}$ the edge set, $\phi_V : \mathcal{V} \to \mathcal{C}_V$ assigns each node to one of five types, $\phi_E : \mathcal{E} \to \mathcal{C}_E$ assigns each edge to one of eleven types, and $\mathbf{X}$, $\mathbf{A}$ collect typed node and edge feature vectors respectively.
+
+\paragraph{Node types.}
+\emph{Nation} ($|\mathcal{V}_{\mathrm{nat}}|{=}1$, $\mathbb{R}^{10}$): system-wide aggregates.
+\emph{Region} ($|\mathcal{V}_{\mathrm{reg}}|{=}|\mathcal{R}|$, $\mathbb{R}^{10}$): regional capacities, weather metadata.
+\emph{Zone} ($|\mathcal{V}_{\mathrm{zon}}|{=}|\mathcal{Z}|$, $\mathbb{R}^{10}$): per-zone capacity, demand.
+\emph{Asset} (variable count, $\mathbb{R}^{8}$): rated capacity, marginal cost, ramp rate, storage parameters, parent index; created only when capacity $>0$.
+\emph{Weather} ($|\mathcal{V}_{\mathrm{wth}}|{=}|\mathcal{R}|$, $\mathbb{R}^{5}$): spread intensity, profile encoding.
+All vectors are zero-padded to $d_{\max}$ before batching.
+
+\paragraph{Spatial edges (7 types).}
+Containment: nation$\to$region, region$\to$zone, zone$\to$zonal asset, region$\to$regional asset.
+Weather influence: weather$\to$zone, weather$\to$renewable asset.
+Transmission: zone$\leftrightarrow$zone (bidirectional, attributes: capacity, distance).
+
+\paragraph{Temporal extension.}
+Each base node is replicated $T$ times; features are augmented with a sinusoidal positional encoding ($x^{\mathrm{supra}}_{(v,t)} = [x_v(t) \| \tau(t)]$).
+Spatial edges are replicated at each time step. Four temporal edge families are added: SOC edges for storage (type~8), ramp edges for thermal/nuclear (type~9), DR cooldown edges (type~10), and temporal self-loops for stateful assets (type~7).
+
+Table~\ref{tab:graph_schema} summarises the complete schema.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{clcl}
+\toprule
+\textbf{ID} & \textbf{Type} & \textbf{$\dim$} & \textbf{Description} \\
+\midrule
+\multicolumn{4}{l}{\textit{Node types}} \\
+0 & Nation & 10 & System-wide aggregates \\
+1 & Region & 10 & Regional capacity \& weather \\
+2 & Zone & 10 & Zonal capacity \& demand \\
+3 & Asset & 8 & Per-technology techno-economic \\
+4 & Weather & 5 & Meteorological cell \\
+\midrule
+\multicolumn{4}{l}{\textit{Spatial edge types}} \\
+0 & Nation $\to$ Region & 1 & Containment \\
+1 & Region $\to$ Zone & 1 & Containment \\
+2 & Zone $\to$ Asset & 1 & Ownership (zonal assets) \\
+3 & Region $\to$ Asset & 1 & Ownership (regional assets) \\
+4 & Weather $\to$ Zone & 1 & Meteorological influence \\
+5 & Weather $\to$ Asset & 1 & Direct renewable influence \\
+6 & Zone $\leftrightarrow$ Zone & 2 & Transmission (capacity, distance) \\
+\midrule
+\multicolumn{4}{l}{\textit{Temporal edge types (supra-graph only)}} \\
+7 & Asset $\to$ Asset (self) & 1 & Temporal state marker \\
+8 & Asset$_t$ $\to$ Asset$_{t+1}$ & 1 & SOC continuity \\
+9 & Asset$_t$ $\to$ Asset$_{t+1}$ & 1 & Ramping limit (rate as attr.) \\
+10 & Asset$_t$ $\to$ Asset$_{t+\delta}$ & 1 & DR cooldown ($\delta$ as attr.) \\
+\bottomrule
+\end{tabular}
+\caption{Complete schema of the multi-layer heterogeneous temporal graph.}
+\label{tab:graph_schema}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.85\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    nation/.style={circle, draw=scenarioBlue!80!black, fill=scenarioBlue!25, minimum size=1.1cm, line width=1pt, font=\scriptsize\bfseries},
+    region/.style={circle, draw=encoderPurple!80!black, fill=encoderPurple!20, minimum size=0.9cm, line width=0.8pt, font=\scriptsize\bfseries},
+    zone/.style={circle, draw=graphGreen!80!black, fill=graphGreen!20, minimum size=0.8cm, line width=0.8pt, font=\scriptsize},
+    asset/.style={circle, draw=ebmOrange!80!black, fill=ebmOrange!15, minimum size=0.55cm, line width=0.6pt, font=\tiny},
+    weather/.style={diamond, draw=samplerTeal!80!black, fill=samplerTeal!15, minimum size=0.7cm, line width=0.6pt, font=\tiny},
+    contain/.style={->, >=Stealth, draw=gray!70, line width=0.8pt},
+    trans/.style={<->, >=Stealth, draw=milpRed!70, line width=1pt, dashed},
+    weath/.style={->, >=Stealth, draw=samplerTeal!50, line width=0.6pt, dotted},
+    layerlabel/.style={font=\footnotesize\bfseries, text=gray!70!black},
+]
+\node[nation] (N) at (2.5, 6) {Nat};
+\node[region] (R1) at (0.5, 4) {$r_1$};
+\node[region] (R2) at (4.5, 4) {$r_2$};
+\node[zone] (Z1) at (-0.8, 2) {$z_1$};
+\node[zone] (Z2) at (1.8, 2) {$z_2$};
+\node[zone] (Z3) at (3.5, 2) {$z_3$};
+\node[zone] (Z4) at (5.8, 2) {$z_4$};
+\node[asset] (A1th) at (-2.0, 0.3) {Th};
+\node[asset] (A1sol) at (-1.1, 0.3) {Sol};
+\node[asset] (A1bat) at (-0.2, 0.3) {Bat};
+\node[asset] (A2th) at (1.1, 0.3) {Th};
+\node[asset] (A2wnd) at (1.9, 0.3) {Wnd};
+\node[asset] (A2dr) at (2.7, 0.3) {DR};
+\node[asset] (A1nuc) at (-0.5, 3) {Nuc};
+\node[asset] (A3th) at (3.5, 0.3) {Th};
+\node[asset] (A2phs) at (5.5, 3) {PHS};
+\node[asset] (A4sol) at (5.3, 0.3) {Sol};
+\node[asset] (A4wnd) at (6.3, 0.3) {Wnd};
+\node[weather] (W1) at (-1.5, 4) {$w_1$};
+\node[weather] (W2) at (6.5, 4) {$w_2$};
+\draw[contain] (N) -- (R1); \draw[contain] (N) -- (R2);
+\draw[contain] (R1) -- (Z1); \draw[contain] (R1) -- (Z2);
+\draw[contain] (R2) -- (Z3); \draw[contain] (R2) -- (Z4);
+\draw[contain] (Z1) -- (A1th); \draw[contain] (Z1) -- (A1sol); \draw[contain] (Z1) -- (A1bat);
+\draw[contain] (Z2) -- (A2th); \draw[contain] (Z2) -- (A2wnd); \draw[contain] (Z2) -- (A2dr);
+\draw[contain] (R1) -- (A1nuc); \draw[contain] (R2) -- (A2phs);
+\draw[contain] (Z3) -- (A3th); \draw[contain] (Z4) -- (A4sol); \draw[contain] (Z4) -- (A4wnd);
+\draw[trans] (Z1) -- (Z2) node[midway, above, font=\tiny, text=milpRed!80!black] {$\overline{F}$};
+\draw[trans] (Z2) -- (Z3); \draw[trans] (Z3) -- (Z4);
+\draw[weath] (W1) -- (Z1); \draw[weath] (W1) -- (Z2); \draw[weath] (W1) to[bend left=15] (A1sol);
+\draw[weath] (W2) -- (Z3); \draw[weath] (W2) -- (Z4); \draw[weath] (W2) to[bend right=15] (A4sol); \draw[weath] (W2) to[bend right=10] (A4wnd);
+\node[layerlabel, anchor=west] at (7.3, 6) {Layer 0: Nation};
+\node[layerlabel, anchor=west] at (7.3, 4) {Layer 1: Regions};
+\node[layerlabel, anchor=west] at (7.3, 3) {\scriptsize Regional assets};
+\node[layerlabel, anchor=west] at (7.3, 2) {Layer 2: Zones};
+\node[layerlabel, anchor=west] at (7.3, 0.3) {\scriptsize Zonal assets};
+\draw[gray!30, dashed] (-2.5, 5) -- (7, 5);
+\draw[gray!30, dashed] (-2.5, 3) -- (7, 3);
+\draw[gray!30, dashed] (-2.5, 1) -- (7, 1);
+\node[anchor=north west] at (-2.5, -0.7) {
+\begin{tabular}{@{}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{}}
+\tikz\draw[contain] (0,0) -- (0.5,0); & \scriptsize Containment &
+\tikz\draw[trans] (0,0) -- (0.5,0); & \scriptsize Transmission &
+\tikz\draw[weath] (0,0) -- (0.5,0); & \scriptsize Weather influence \\
+\end{tabular}
+};
+\end{tikzpicture}
+}
+\caption{Spatial structure of the multi-layer heterogeneous graph at a single time step. The containment hierarchy (nation $\to$ regions $\to$ zones) forms a tree; assets attach at the appropriate level---regional assets (nuclear, pumped hydro) are children of regions, while zonal assets (thermal, solar, wind, battery, DR) are children of zones. Bidirectional transmission edges connect zones, and weather influence edges reach zones and renewable assets.}
+\label{fig:graph_spatial}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.85\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    zone/.style={circle, draw=graphGreen!80!black, fill=graphGreen!20, minimum size=0.8cm, line width=0.8pt, font=\scriptsize},
+    asset/.style={circle, draw=ebmOrange!80!black, fill=ebmOrange!15, minimum size=0.55cm, line width=0.6pt, font=\tiny},
+    contain/.style={->, >=Stealth, draw=gray!70, line width=0.8pt},
+    temporal/.style={->, >=Stealth, draw=ebmOrange!70, line width=1pt},
+    layerlabel/.style={font=\footnotesize\bfseries, text=gray!70!black},
+    timelabel/.style={font=\scriptsize\itshape, text=gray!60!black},
+]
+\draw[->, gray!50, line width=0.8pt] (0, -0.5) -- (14, -0.5) node[right, font=\scriptsize] {$t$};
+\node[timelabel] at (1.5, -0.9) {$t{=}0$};
+\node[timelabel] at (4.5, -0.9) {$t{=}1$};
+\node[timelabel] at (7.5, -0.9) {$t{=}2$};
+\node[timelabel] at (11, -0.9) {$\cdots$};
+\node[zone, minimum size=0.7cm] (Z1t0) at (1.5, 5.5) {$z_1$};
+\node[asset, minimum size=0.55cm] (Batt0) at (0.5, 3.5) {Bat};
+\node[asset, minimum size=0.55cm] (Tht0) at (2.5, 2.5) {Th};
+\node[asset, minimum size=0.55cm] (DRt0) at (1.5, 1.5) {DR};
+\draw[contain] (Z1t0) -- (Batt0); \draw[contain] (Z1t0) -- (Tht0); \draw[contain] (Z1t0) -- (DRt0);
+\node[zone, minimum size=0.7cm] (Z1t1) at (4.5, 5.5) {$z_1$};
+\node[asset, minimum size=0.55cm] (Batt1) at (3.5, 3.5) {Bat};
+\node[asset, minimum size=0.55cm] (Tht1) at (5.5, 2.5) {Th};
+\node[asset, minimum size=0.55cm] (DRt1) at (4.5, 1.5) {DR};
+\draw[contain] (Z1t1) -- (Batt1); \draw[contain] (Z1t1) -- (Tht1); \draw[contain] (Z1t1) -- (DRt1);
+\node[zone, minimum size=0.7cm] (Z1t2) at (7.5, 5.5) {$z_1$};
+\node[asset, minimum size=0.55cm] (Batt2) at (6.5, 3.5) {Bat};
+\node[asset, minimum size=0.55cm] (Tht2) at (8.5, 2.5) {Th};
+\node[asset, minimum size=0.55cm] (DRt2) at (7.5, 1.5) {DR};
+\draw[contain] (Z1t2) -- (Batt2); \draw[contain] (Z1t2) -- (Tht2); \draw[contain] (Z1t2) -- (DRt2);
+\draw[temporal] (Batt0) -- (Batt1) node[midway, above, font=\tiny, text=ebmOrange!80!black] {SOC};
+\draw[temporal] (Batt1) -- (Batt2);
+\draw[temporal, draw=milpRed!60] (Tht0) -- (Tht1) node[midway, above, font=\tiny, text=milpRed!70!black] {Ramp};
+\draw[temporal, draw=milpRed!60] (Tht1) -- (Tht2);
+\draw[temporal, draw=encoderPurple!60] (DRt0) -- (DRt1) node[midway, above, font=\tiny, text=encoderPurple!70!black] {CD};
+\draw[temporal, draw=encoderPurple!60] (DRt0) to[bend right=25] (DRt2);
+\draw[temporal, draw=encoderPurple!60] (DRt1) -- (DRt2);
+\node at (10, 5.5) {\Large$\cdots$};
+\node at (9.5, 3.5) {\Large$\cdots$};
+\node at (10.5, 3.5) {\Large$\cdots$};
+\node at (10, 1.5) {\Large$\cdots$};
+\node[layerlabel, anchor=west] at (11.5, 4.2) {\scriptsize SOC ($t{\to}t{+}1$)};
+\node[layerlabel, anchor=west, text=milpRed!70!black] at (11.5, 3.5) {\scriptsize Ramp ($t{\to}t{+}1$)};
+\node[layerlabel, anchor=west, text=encoderPurple!70!black] at (11.5, 2.8) {\scriptsize DR ($t{\to}t{+}\delta$)};
+\node[anchor=north west] at (0, -1.5) {
+\begin{tabular}{@{}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{}}
+\tikz\draw[contain] (0,0) -- (0.5,0); & \scriptsize Containment &
+\tikz\draw[temporal] (0,0) -- (0.5,0); & \scriptsize Temporal (SOC) &
+\tikz\draw[temporal, draw=milpRed!60] (0,0) -- (0.5,0); & \scriptsize Temporal (Ramp) \\
+& & \tikz\draw[temporal, draw=encoderPurple!60] (0,0) -- (0.5,0); & \scriptsize Temporal (DR) & & \\
+\end{tabular}
+};
+\end{tikzpicture}
+}
+\caption{Temporal extension of the heterogeneous graph into a supra-graph, illustrated for a single zone~$z_1$ with three asset types. Each base node is replicated at every time step. Inter-temporal edges encode MILP coupling constraints: SOC continuity on storage assets (battery), ramping limits on thermal generators, and multi-step demand-response cooldown edges ($\delta \in \{1, \dots, \Delta_{\mathrm{cd}}\}$).}
+\label{fig:graph_temporal}
+\end{figure}
+
+\subsection{Hierarchical Temporal Encoder: architecture and training details}
+\label{app:hte_details}
+
+\subsubsection*{Input projection}
+
+Each supra-node feature vector $x^{\mathrm{supra}}_{(v,t)} \in \mathbb{R}^{d_{\max} + F_t}$ is projected to hidden dimension $D$:
+\begin{equation}
+h^{(0)}_{v,t} = W_{\mathrm{in}}\, x^{\mathrm{supra}}_{(v,t)} + b_{\mathrm{in}}, \qquad W_{\mathrm{in}} \in \mathbb{R}^{D \times (d_{\max}+F_t)}.
+\end{equation}
+The result is reshaped into $H^{(0)} \in \mathbb{R}^{N_{\mathrm{base}} \times T \times D}$.
+
+\subsubsection*{Phase~1: Bottom-up spatial encoding}
+
+At each level $\ell \in \{\text{asset}, \text{zone}, \text{region}\}$, $L_s$ GATv2 layers~\citep{brody_how_2022} ($H$ heads, $D/H$ dim per head, no concatenation) update representations via:
+\begin{equation}
+\tilde{h}^{(l)} = \mathrm{GATv2}\!\bigl(h^{(l-1)},\, \mathcal{E}_\ell\bigr), \quad
+h^{(l)} = h^{(l-1)} + \mathrm{Dropout}\!\bigl(\mathrm{GELU}\!\bigl(\mathrm{LayerNorm}(\tilde{h}^{(l)})\bigr)\bigr).
+\label{eq:gat_block}
+\end{equation}
+Edge sets $\mathcal{E}_\ell$: full supra-graph at asset level, intra-region FC at zone level, all-to-all at region level. After each block, a skip connection is saved and mean-pooling aggregates to the next coarser level:
+\begin{equation}
+h^{\mathrm{pool}}_{c,t} = \frac{1}{|\pi^{-1}(c)|} \sum_{v \in \pi^{-1}(c)} h^{(L_s)}_{v,t}.
+\label{eq:pool}
+\end{equation}
+A final mean over regions yields $H_{\mathrm{nat}} \in \mathbb{R}^{1 \times T \times D}$.
+
+\subsubsection*{Phase~2: Temporal Transformer}
+
+A Transformer encoder~\citep{vaswani2017attention} ($L_t$ layers, $H$ heads, FFN width $4D$, sinusoidal positional encoding):
+\begin{equation}
+H^{\mathrm{temp}}_{\mathrm{nat}} = \mathrm{TransformerEncoder}\!\bigl(\mathrm{PosEnc}(H_{\mathrm{nat}})\bigr) \in \mathbb{R}^{1 \times T \times D}.
+\label{eq:temporal_transformer}
+\end{equation}
+
+\subsubsection*{Phase~3: Top-down decoding}
+
+Skip connections and GATv2 decoders propagate the nation representation back:
+\begin{align}
+H^{\mathrm{dec}}_{\mathrm{reg}} &= \mathrm{GATv2}_{\mathrm{reg}}^{\mathrm{dec}}\!\Bigl(\mathrm{broadcast}(H^{\mathrm{temp}}_{\mathrm{nat}}) + H^{\mathrm{skip}}_{\mathrm{reg}}\Bigr), \label{eq:topdown_reg} \\
+H^{\mathrm{dec}}_{\mathrm{zon}} &= \mathrm{GATv2}_{\mathrm{zon}}^{\mathrm{dec}}\!\Bigl(\mathrm{unpool}_{\pi_{\mathrm{z \to r}}}(H^{\mathrm{dec}}_{\mathrm{reg}}) + H^{\mathrm{skip}}_{\mathrm{zon}}\Bigr), \label{eq:topdown_zon} \\
+H^{\mathrm{dec}}_{\mathrm{ast}} &= \mathrm{GATv2}_{\mathrm{ast}}^{\mathrm{dec}}\!\Bigl(\mathrm{unpool}_{\pi_{\mathrm{a \to z}}}(H^{\mathrm{dec}}_{\mathrm{zon}}) + H^{\mathrm{skip}}_{\mathrm{ast}}\Bigr), \label{eq:topdown_ast}
+\end{align}
+where $h^{\mathrm{unpool}}_{v,t} = h^{\mathrm{dec}}_{\pi(v),t}$ indexes into the parent embedding.
+
+\subsubsection*{Output}
+
+\begin{equation}
+\mathrm{HTE}(s) = \bigl\{
+  H_{\mathrm{ast}} \!\in\! \mathbb{R}^{N_a \times T \times D},\;
+  H_{\mathrm{zon}} \!\in\! \mathbb{R}^{N_z \times T \times D},\;
+  H_{\mathrm{reg}} \!\in\! \mathbb{R}^{N_r \times T \times D},\;
+  H_{\mathrm{nat}} \!\in\! \mathbb{R}^{T \times D}
+\bigr\}.
+\label{eq:hte_output}
+\end{equation}
+
+\subsubsection*{Multi-lag InfoNCE loss}
+
+Anchor--positive pairs at lags $\Lambda = \{1, 4, 8\}$ on $\ell_2$-normalised asset embeddings:
+\begin{equation}
+\mathcal{L}_{\mathrm{NCE}} = -\frac{1}{|\mathcal{P}|} \sum_{(a,p) \in \mathcal{P}} \log \frac{\exp(\mathrm{sim}(a, p) / \kappa)}{\exp(\mathrm{sim}(a, p) / \kappa) + \sum_{j=1}^{M_{\mathrm{neg}}} \exp(\mathrm{sim}(a, n_j) / \kappa)},
+\label{eq:infonce}
+\end{equation}
+where $\mathrm{sim}(a, b) = a^\top b / (\|a\|\|b\|)$ and $\kappa$ is a temperature parameter.
+
+\subsubsection*{Hyperparameters}
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Category} & \textbf{Hyperparameter} & \textbf{Value} \\
+\midrule
+\multirow{4}{*}{Architecture}
+  & Hidden dimension $D$ & 128 \\
+  & Spatial GATv2 layers $L_s$ (per level) & 2 \\
+  & Temporal Transformer layers $L_t$ & 4 \\
+  & Attention heads $H$ & 8 \\
+\midrule
+\multirow{3}{*}{Loss}
+  & Positive lags $\Lambda$ & $\{1, 4, 8\}$ \\
+  & Temperature $\kappa$ (train / val) & 0.10 / 0.20 \\
+  & Negative sample ratio & 0.25 / 0.10 \\
+\midrule
+\multirow{5}{*}{Optimisation}
+  & Optimiser & AdamW \\
+  & Learning rate (initial / max) & $1.5 \times 10^{-4}$ / $1.8 \times 10^{-4}$ \\
+  & LR schedule & Cosine + 10-epoch warmup \\
+  & Gradient accumulation & 8 steps \\
+  & Early stopping patience & 10 epochs \\
+\bottomrule
+\end{tabular}
+\caption{Hyperparameter configuration for the Hierarchical Temporal Encoder.}
+\label{tab:hte_hyperparams}
+\end{table}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.95\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    block/.style={rectangle, rounded corners=4pt, draw=#1!80!black, fill=#1!15, minimum height=0.9cm, text width=2.8cm, align=center, font=\scriptsize\bfseries, line width=0.8pt},
+    pool/.style={trapezium, trapezium angle=75, draw=gray!70, fill=gray!10, minimum height=0.5cm, font=\tiny, align=center, line width=0.6pt, inner sep=2pt},
+    unpool/.style={trapezium, trapezium angle=75, trapezium stretches body, draw=gray!70, fill=gray!10, minimum height=0.5cm, font=\tiny, align=center, line width=0.6pt, inner sep=2pt, shape border rotate=180},
+    skip/.style={->, >=Stealth, draw=graphGreen!60, line width=0.8pt, dashed},
+    flow/.style={->, >=Stealth, draw=gray!80, line width=1pt},
+    phaselabel/.style={font=\footnotesize\bfseries, text=gray!60!black},
+    dimlab/.style={font=\tiny\itshape, text=gray!50!black},
+]
+% PHASE 1
+\node[phaselabel] at (0, 8.2) {Phase 1: Bottom-Up Encoder};
+\node[block=gray, text width=3cm] (input) at (0, 6.2) {Input Projection\\$\mathbb{R}^{d_{\max}+F_t} \to \mathbb{R}^D$};
+\node[block=ebmOrange] (asset_gat) at (0, 4.8) {Asset GATv2\\$\times L_s$ layers};
+\node[dimlab, right=0.3cm of asset_gat] {$[N_a, T, D]$};
+\node[pool] (pool_az) at (0, 3.7) {\scriptsize scatter\_mean};
+\node[block=graphGreen] (zone_gat) at (0, 2.6) {Zone GATv2\\$\times L_s$ layers};
+\node[dimlab, right=0.3cm of zone_gat] {$[N_z, T, D]$};
+\node[pool] (pool_zr) at (0, 1.5) {\scriptsize scatter\_mean};
+\node[block=encoderPurple] (region_gat) at (0, 0.4) {Region GATv2\\$\times L_s$ layers};
+\node[dimlab, right=0.3cm of region_gat] {$[N_r, T, D]$};
+\node[pool] (pool_rn) at (0, -0.7) {\scriptsize mean};
+\draw[flow] (input) -- (asset_gat);
+\draw[flow] (asset_gat) -- (pool_az);
+\draw[flow] (pool_az) -- (zone_gat);
+\draw[flow] (zone_gat) -- (pool_zr);
+\draw[flow] (pool_zr) -- (region_gat);
+\draw[flow] (region_gat) -- (pool_rn);
+% PHASE 2
+\node[phaselabel] at (5.5, 8.2) {Phase 2: Temporal};
+\node[block=scenarioBlue, text width=3.2cm] (temporal) at (5.5, -0.7) {Temporal Transformer\\$L_t$ layers, $[1, T, D]$};
+\draw[flow] (pool_rn) -- (temporal);
+% PHASE 3
+\node[phaselabel] at (11, 8.2) {Phase 3: Top-Down Decoder};
+\node[block=scenarioBlue, text width=2.8cm] (nat_out) at (11, -0.7) {Nation $[T, D]$};
+\draw[flow] (temporal) -- (nat_out);
+\node[unpool] (unpool_nr) at (11, 0.4) {\scriptsize broadcast};
+\node[block=encoderPurple] (region_dec) at (11, 1.4) {Region GATv2\\decoder};
+\node[dimlab, left=0.3cm of region_dec] {$[N_r, T, D]$};
+\node[unpool] (unpool_rz) at (11, 2.4) {\scriptsize unpool};
+\node[block=graphGreen] (zone_dec) at (11, 3.4) {Zone GATv2\\decoder};
+\node[dimlab, left=0.3cm of zone_dec] {$[N_z, T, D]$};
+\node[unpool] (unpool_za) at (11, 4.4) {\scriptsize unpool};
+\node[block=ebmOrange] (asset_dec) at (11, 5.4) {Asset GATv2\\decoder};
+\node[dimlab, left=0.3cm of asset_dec] {$[N_a, T, D]$};
+\draw[flow] (nat_out.north) -- (unpool_nr.south);
+\draw[flow] (unpool_nr) -- (region_dec);
+\draw[flow] (region_dec) -- (unpool_rz);
+\draw[flow] (unpool_rz) -- (zone_dec);
+\draw[flow] (zone_dec) -- (unpool_za);
+\draw[flow] (unpool_za) -- (asset_dec);
+% SKIP CONNECTIONS
+\draw[skip] (asset_gat.east) -- ++(1.2,0) |- ([yshift=3pt]asset_dec.west) node[pos=0.25, above, font=\tiny, text=graphGreen!70!black] {skip};
+\draw[skip] (zone_gat.east) -- ++(2.0,0) |- ([yshift=3pt]zone_dec.west) node[pos=0.25, above, font=\tiny, text=graphGreen!70!black] {skip};
+\draw[skip] (region_gat.east) -- ++(2.8,0) |- ([yshift=3pt]region_dec.west) node[pos=0.25, above, font=\tiny, text=graphGreen!70!black] {skip};
+% OUTPUT
+\node[block=milpRed, text width=3.2cm, minimum height=1.2cm] (output) at (11, 6.8) {Multi-scale embeddings\\$\{H_{\mathrm{ast}}, H_{\mathrm{zon}}, H_{\mathrm{reg}}, H_{\mathrm{nat}}\}$};
+\draw[flow, dashed, draw=gray!50] (asset_dec.east) -- ++(0.6,0) |- ([yshift=-4pt]output.east);
+\draw[flow, dashed, draw=gray!50] (zone_dec.east) -- ++(0.7,0) |- ([yshift=-4pt]output.east);
+\draw[flow, dashed, draw=gray!50] (region_dec.east) -- ++(0.8,0) |- ([yshift=-4pt]output.east);
+\end{tikzpicture}
+}
+\caption{Architecture of the Hierarchical Temporal Encoder (HTE). \textbf{Phase~1} (left): bottom-up spatial encoding with GATv2 convolutions, interspersed with mean-pooling steps following the containment hierarchy. \textbf{Phase~2} (centre): dense Transformer encoder on the nation-level sequence ($1 \times T$ tokens). \textbf{Phase~3} (right): top-down decoding via unpooling and GATv2 decoders, with skip connections (dashed green) preserving local spatial detail.}
+\label{fig:hte_architecture}
+\end{figure}
 
 \end{document}
