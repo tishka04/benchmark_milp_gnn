@@ -717,16 +717,35 @@ class CachedLPOracle(LPOracle):
             solver = SolverFactory(self.config.solver_name)
             solver.options['time_limit'] = self.config.time_limit_hard_fix
             
+            # Solve without auto-loading, then manually load solution
+            feasible = False
+            obj_value = self.config.infeasible_cost
             results = solver.solve(model, tee=False, load_solutions=False)
-            
             tc = results.solver.termination_condition
             feasible = tc in (TerminationCondition.optimal, TerminationCondition.feasible)
-            
-            if feasible and len(results.solution) > 0:
-                model.solutions.load_from(results)
-                obj_value = value(model.obj)
-            else:
-                obj_value = self.config.infeasible_cost
+            if feasible:
+                loaded = False
+                if not loaded and hasattr(solver, 'load_vars'):
+                    try:
+                        solver.load_vars()
+                        loaded = True
+                    except Exception:
+                        pass
+                if not loaded:
+                    try:
+                        if hasattr(results, 'solution_loader') and results.solution_loader is not None:
+                            results.solution_loader.load_vars()
+                            loaded = True
+                    except Exception:
+                        pass
+                if not loaded and len(results.solution) > 0:
+                    try:
+                        model.solutions.load_from(results)
+                        loaded = True
+                    except Exception:
+                        pass
+                if loaded:
+                    obj_value = value(model.obj)
             
             return OracleResult(
                 scenario_id=scenario_id,

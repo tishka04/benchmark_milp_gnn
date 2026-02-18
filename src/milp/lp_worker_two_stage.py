@@ -136,13 +136,14 @@ class LPWorkerTwoStage:
         if self.solver is None or not self.solver.available():
             raise RuntimeError("No LP/MILP solver available")
         
-        print(f"✓ LPWorkerTwoStage initialized")
-        print(f"  Solver: {self.solver_name}")
-        print(f"  Slack tolerance: {slack_tol_mwh} MWh (dt={dt_hours}h)")
-        print(f"  Deviation penalty (λ): {deviation_penalty}")
-        print(f"  Flip budgets: K=20→{flip_budget_20}, K=100→{flip_budget_100}, full_soft→{flip_budget_full_soft}")
-        print(f"  Time limits: TL1={time_limit_hard_fix}s, TL2={time_limit_repair_20}s, "
-              f"TL3={time_limit_repair_100}s, TL4={time_limit_full_soft}s")
+        if self.verbose:
+            print(f"✓ LPWorkerTwoStage initialized")
+            print(f"  Solver: {self.solver_name}")
+            print(f"  Slack tolerance: {slack_tol_mwh} MWh (dt={dt_hours}h)")
+            print(f"  Deviation penalty (λ): {deviation_penalty}")
+            print(f"  Flip budgets: K=20→{flip_budget_20}, K=100→{flip_budget_100}, full_soft→{flip_budget_full_soft}")
+            print(f"  Time limits: TL1={time_limit_hard_fix}s, TL2={time_limit_repair_20}s, "
+                  f"TL3={time_limit_repair_100}s, TL4={time_limit_full_soft}s")
 
     def _find_scenario_path(self, scenario_id: str) -> Optional[str]:
         """Find the scenario JSON file path."""
@@ -248,11 +249,9 @@ class LPWorkerTwoStage:
                     if not model.dr_active[z, t].is_fixed():
                         model.dr_active[z, t].fix(val)
         
-        # Fix import mode if exists
-        if hasattr(model, 'import_mode'):
-            for t in model.T:
-                if not model.import_mode[t].is_fixed():
-                    model.import_mode[t].fix(1.0)
+        # NOTE: import_mode is intentionally NOT fixed here.
+        # It gets relaxed by TransformationFactory('core.relax_integer_vars')
+        # so the LP solver can freely optimize import vs export decisions.
 
     def _count_unfixed_binaries(self, model) -> int:
         """
@@ -671,9 +670,6 @@ class LPWorkerTwoStage:
 
         if self.solver_name == 'appsi_highs':
             self.solver.config.time_limit = float(time_limit)
-            # ⚠️ important : éviter l’exception côté APPSI
-            self.solver.config.load_solution = False
-
         elif 'highs' in self.solver_name.lower():
             self.solver.options['time_limit'] = float(time_limit)
         elif 'glpk' in self.solver_name.lower():
@@ -681,19 +677,41 @@ class LPWorkerTwoStage:
         elif 'cbc' in self.solver_name.lower():
             self.solver.options['seconds'] = float(time_limit)
 
+        # Solve without auto-loading to avoid APPSI exceptions during load
         results = self.solver.solve(model, tee=self.verbose, load_solutions=False)
         elapsed = time.time() - start
 
         tc = results.solver.termination_condition
         ok = tc in (TerminationCondition.optimal,
                     TerminationCondition.feasible,
-                TerminationCondition.maxTimeLimit)
+                    TerminationCondition.maxTimeLimit)
 
         has_solution = False
-        if ok and len(results.solution) > 0:
-            # ✅ charge seulement si une solution existe
-            model.solutions.load_from(results)
-            has_solution = True
+        if ok:
+            # Load solution into model — try methods from most to least reliable
+            # Method 1: APPSI persistent solver load_vars (native, loads primals)
+            if not has_solution and hasattr(self.solver, 'load_vars'):
+                try:
+                    self.solver.load_vars()
+                    has_solution = True
+                except Exception:
+                    pass
+            # Method 2: Results solution_loader (pyomo ≥ 6.7)
+            if not has_solution:
+                try:
+                    if hasattr(results, 'solution_loader') and results.solution_loader is not None:
+                        results.solution_loader.load_vars()
+                        has_solution = True
+                except Exception:
+                    pass
+            # Method 3: Legacy Pyomo solution loader
+            if not has_solution:
+                try:
+                    if len(results.solution) > 0:
+                        model.solutions.load_from(results)
+                        has_solution = True
+                except Exception:
+                    pass
 
         return results, elapsed, has_solution
 
