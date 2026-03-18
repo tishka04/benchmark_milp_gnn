@@ -1,0 +1,373 @@
+\documentclass{article}
+
+% Encoding & fonts
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+
+\usepackage{graphicx}
+\usepackage{enumitem} 
+\usepackage{float}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage[a4paper,margin=3cm]{geometry}
+\usepackage{xcolor}
+
+% ==== BIBLIO: BibTeX + natbib (auteur-année) ====
+\usepackage[round,authoryear]{natbib}
+\let\parencite\citep
+\usepackage[hidelinks]{hyperref}
+
+
+\title{Coordinating Multilayer Power System Flexibility:\\
+A Hybrid MILP--GNN--EBM Framework for Large-Scale Scenario Exploration}
+\author{Théotime Coudray* \\ Stéphane Goutte*\\[2pt]
+\normalsize *Université de Versailles Saint-Quentin-en-Yvelines (UVSQ), UMI SOURCE}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Power-system flexibility studies increasingly demand \emph{scenario exploration} rather than single-shot optimisation. Mixed-integer linear programming (MILP) provides rigorous answers, but repeated solves become prohibitive as scenario volume and complexity grow. We propose a hybrid \textbf{MILP--GNN--EBM} methodology for near-real-time exploration. A multi-layer MILP oracle is solved on a diversity-maximising scenario set to generate optimal labels. Each instance is represented as a heterogeneous temporal graph and processed by a topology-consistent graph neural network (GNN) producing compact embeddings. Conditioned on these embeddings, an energy-based model (EBM) learns an energy landscape over binary decisions and enables fast sampling via Langevin dynamics. A feasibility decoder and conditional LP worker recover complete dispatch plans. Evaluation across 300 out-of-sample scenarios shows that the pipeline's advantage scales positively with scenario difficulty (Spearman $\rho = +0.30$, $p < 10^{-7}$), achieving median speedups of $11.5\times$ on the hardest instances while guaranteeing 100\% feasibility.
+\end{abstract}
+
+\noindent\textbf{Keywords:} Power System; Multi-Scale Modelling; MILP; Graph Neural Networks; Energy-Based Models; Scenario Exploration.
+
+\section{Introduction}
+
+Power systems are undergoing a profound transformation, driven by VRE integration, electrification, and distributed energy resources. This pushes operators to mobilize flexibility across \emph{multiple spatial layers} and \emph{multiple temporal scales}, while guaranteeing feasibility under network, market, and security constraints.
+
+A central challenge is that stakeholders increasingly ask \emph{interactive what-if questions} requiring thousands of scenarios. The bottleneck is enabling \emph{near-real-time scenario exploration} where users can increase complexity and still obtain fast, credible answers. MILP provides rigorous solutions \parencite{conejo_investment_2016} but becomes prohibitive with scale. GNNs deliver fast predictions but can violate hard constraints.
+
+This paper proposes a hybrid \textbf{MILP--GNN--EBM methodology}: the MILP produces ground truth, the GNN compresses scenarios, the EBM explores binary decisions, and the decoder+LP stages restore feasibility and compute dispatch.
+
+\subsection{Literature Review}
+
+MILP remains the workhorse for scheduling and planning \parencite{conejo_investment_2016}. Stochastic and multi-stage formulations require decomposition to remain tractable \parencite{micheli_two-stage_2023}. Multi-level formulations capture strategic interactions \parencite{hobbs_strategic_2000,pozo_three-level_2013,xia_scalable_2025}, while holarchic designs mitigate variable growth \parencite{marquant_holarchic_2017,yokoyama_hierarchical_2021}. The tension persists: high-fidelity MILPs are auditable but expensive for scenario sweeps.
+
+GNNs have been explored as topology-aware surrogates: emulating load-flow \parencite{donon_graph_2019}, approximating OPF \parencite{owerko_optimal_2019}, incorporating feasibility for contingencies \parencite{liu_topology-aware_2023}, providing warm-starts \parencite{deihim_initial_2024}, and supporting risk assessment \parencite{zhang_graph_2024}. Hybrid strategies combine GNNs with LP relaxations \parencite{yang_stable_2025,park_confidence-aware_2023}.
+
+On the generative side, EBMs cast combinatorial objectives as energies for stable training \parencite{sun_annealed_2022,goshvadi_discs_2023,mancilla_non-convex_2026}. Differentiable layers enforce constraints end-to-end \parencite{zeng_glinsat_2024}, and bipartite graph representations enable GNN branching policies \parencite{gasse_exact_2019}.
+
+\subsection{Research Gap and Research Statement}
+
+\begin{enumerate}[label=\textbf{(\arabic*)}, leftmargin=*, itemsep=2pt]
+  \item \emph{Scenario exploration at scale is still solver-bound} \parencite{micheli_two-stage_2023,marquant_holarchic_2017}.
+  \item \emph{Surrogates rarely deliver end-to-end feasibility across layers} \parencite{liu_topology-aware_2023,zhang_graph_2024}.
+  \item \emph{Limited support for controlled exploration under increasing complexity} \parencite{sun_annealed_2022}.
+  \item \emph{Weak coupling between economic signals and learned inference} \parencite{hobbs_strategic_2000,xia_scalable_2025}.
+  \item \emph{No methodology for interactive what-if analysis with a complexity knob} \parencite{deihim_initial_2024,talebi_graph_2025}.
+\end{enumerate}
+
+\paragraph{}
+The central research question is:
+\emph{Can a hybrid MILP--GNN--EBM methodology enable near-real-time exploration of multi-scale flexibility scenarios---and remain effective as scenarios become increasingly complex?}
+
+\subsection{Contributions}
+\begin{enumerate}[label=\textbf{C\arabic*}, leftmargin=*, itemsep=2pt]
+  \item A flexibility scenario generator with diversity maximisation and complexity indexing.
+  \item A multi-layer MILP oracle for coordinated flexibility.
+  \item A projection of scenarios to hierarchical multi-layer temporal graphs.
+  \item A topology-consistent GNN encoder for scenario embeddings.
+  \item A graph EBM sampler with feasibility-preserving decoding.
+  \item An evaluation protocol for large-scale scenario exploration.
+\end{enumerate}
+
+
+\section{Methodology Overview and Training Data Generation}
+
+The pipeline comprises nine modules (Table~\ref{tab:pipeline_modules}): scenario generation, MILP solving, graph construction, hierarchical encoding, EBM training, Langevin sampling, feasibility decoding, LP dispatch recovery, and evaluation.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{clll}
+\toprule
+\textbf{\#} & \textbf{Component} & \textbf{Input} & \textbf{Output} \\
+\midrule
+1 & Scenario Generator & Parameter distributions & Diverse scenarios $\mathcal{S}$ \\
+2 & MILP Solver & Scenarios $\mathcal{S}$ & Optimal decisions $(u^*, x^*)$ \\
+3 & Graph Builder & Scenarios $\mathcal{S}$ & Heterogeneous temporal graphs $\mathcal{G}_t$ \\
+4 & Hierarchical Encoder & Graphs $\mathcal{G}_t$ & Embeddings $h \in \mathbb{R}^{128}$ \\
+5 & Graph EBM & $(u^*, h)$ pairs & Energy function $E_\theta(u \mid h)$ \\
+6 & Langevin Sampler & $E_\theta$ & Candidate binaries $\hat{u}$ \\
+7 & Feasibility Decoder & $\hat{u}$ & Feasible binaries $\tilde{u}$ \\
+8 & LP Worker & $\tilde{u}$ & Continuous dispatch $\hat{x}$ \\
+9 & Evaluation & Pipeline vs MILP & Time, gap, feasibility \\
+\bottomrule
+\end{tabular}
+\caption{Module summary of the hybrid MILP--GNN--EBM framework.}
+\label{tab:pipeline_modules}
+\end{table}
+
+\subsection{Scenario Generator}
+\label{sec:scenario_generator}
+
+Each scenario $s = (\mathcal{G}, \mathcal{A}, \pi, \tau, c, \xi)$ encodes network graph, asset specification, economic policy, technical scalers, costs, and exogenous drivers. The spatial hierarchy follows \emph{assets $\to$ zones $\to$ regions $\to$ nation}. Asset counts, economic policy (CO$_2$ price, cross-border policy), technical scalers (ramp rates, storage E/P ratio, DR parameters), and exogenous drivers (weather profiles, demand, hydro inflows) are sampled per scenario.
+
+\subsubsection{Diversity Maximization}
+
+Latin Hypercube Sampling ensures uniform marginal coverage of continuous parameters. A greedy $k$-center selection from a large candidate pool maximises pairwise separation:
+\begin{equation}
+s_{t+1} = \arg\max_{s \in \mathcal{P}} \min_{s' \in \mathcal{S}_t} d\bigl(v(s), v(s')\bigr),
+\end{equation}
+where $v(s) \in \mathbb{R}^d$ is a normalised diversity vector. Stratification across stress and hardness bins prevents over-representation of mild instances.
+
+\subsubsection{Scenario Criticality Indicator}
+\label{sec:criticality}
+
+A composite ex-ante criticality indicator:
+\begin{equation}
+\mathrm{Crit}(s) = \alpha \, \mathrm{Stress}(s) + (1-\alpha) \, \mathrm{Hard}(s), \quad \alpha \in [0,1],
+\end{equation}
+combines a \textbf{physical stress index} (12 metrics: variability, load level, flexibility margins, spatial tension) and a \textbf{combinatorial hardness index} (10 metrics: problem size, non-convexity, temporal/spatial coupling). This enables stratified sampling and post-hoc analysis.
+
+\subsection{Multi-Layer MILP Oracle}
+\label{sec:milp_oracle}
+
+For each scenario, a multi-period unit-commitment MILP coordinates flexibility resources. \textbf{Binary variables} $u$ encode commitment/activation decisions: thermal commitment $u^{\mathrm{th}}_{z,t}$, startup $v^{\mathrm{th}}_{z,t}$, DR activation $\delta^{\mathrm{dr}}_{z,t}$, battery mode $\sigma^{\mathrm{bat}}_{z,t}$, pumped-hydro mode $\sigma^{\mathrm{phs}}_{z,t}$, and import mode $\sigma^{\mathrm{imp}}_{t}$. \textbf{Continuous variables} $x$ cover dispatch levels, storage states, flows, and curtailment.
+
+The objective minimizes total operating cost:
+\begin{equation}
+\min_{u,x} \; C^{\mathrm{gen}} + C^{\mathrm{su}} + C^{\mathrm{dr}} + C^{\mathrm{uns}} + C^{\mathrm{spl}} + C^{\mathrm{sto}} + C^{\mathrm{imp}} + C^{\mathrm{ovg}},
+\end{equation}
+covering generation, startup, DR, unserved energy, curtailment, storage cycling, trade, and overgeneration costs. Nine constraint families enforce thermal commitment logic with ramp limits, nuclear baseload modulation, renewable curtailment, multi-tier DR with rebound dynamics, battery and pumped-hydro storage with SOC tracking, reservoir hydro, transmission limits, and nodal power balance.
+
+Binary variables for inactive assets are pre-fixed, reducing effective binary count by 30--60\%. Instances solved within the time limit yield \emph{gold labels}; time-outs produce \emph{silver labels}. Model size ranges from $\sim$45\,000 variables for simple scenarios to $\sim$139\,000 for critical ones.
+
+
+\section{Representation Learning}
+\label{sec:graph_encoder}
+
+Rather than flattening scenarios into fixed-length vectors (destroying topology and variable-size structure), we project each onto a \emph{multi-layer heterogeneous temporal graph} and learn an encoder producing compact embeddings.
+
+\subsection{Multi-Layer Heterogeneous Temporal Graphs}
+\label{sec:graph_projection}
+
+Each scenario maps to a graph $\mathcal{G}(s)$ with five node types (nation, region, zone, asset, weather) and eleven edge types (seven spatial, four temporal). Assets attach at the appropriate level: zonal technologies (thermal, solar, wind, battery, DR) are children of zones; large-scale resources (nuclear, reservoir hydro, pumped hydro) are children of regions. Only assets with positive capacity generate nodes, so graph size varies.
+
+Containment edges form a strict tree. Transmission edges connect zones bidirectionally. Weather edges reach zones and renewable assets. For temporal extension, each base node is replicated at every time step, with SOC edges (storage), ramp edges (thermal/nuclear), and cooldown edges (DR) added between consecutive copies. The resulting supra-graph scales as $N_{\mathrm{base}} \times T$.
+
+\subsection{Hierarchical Temporal Encoder}
+\label{sec:hte}
+
+A standard dense-attention Transformer would require $\mathcal{O}(N^2 T^2)$ memory. We introduce a \emph{Hierarchical Temporal Encoder} (HTE) with three phases:
+
+\begin{enumerate}[noitemsep]
+  \item \textbf{Bottom-up spatial encoding.} GATv2 layers~\citep{brody_how_2022} aggregate information upward: assets $\to$ zones $\to$ regions $\to$ nation, with skip connections preserving local detail.
+  \item \textbf{Temporal Transformer.} A Transformer encoder~\citep{vaswani2017attention} at the nation level captures temporal dependencies across the $T{=}24$ step horizon.
+  \item \textbf{Top-down decoding.} The enriched nation representation broadcasts back through the hierarchy, combined with skip connections at each level.
+\end{enumerate}
+
+Output: temporal embeddings at every level ($D = 128$). Zone-level embeddings condition the EBM. The HTE is trained \emph{without MILP labels} via multi-lag InfoNCE contrastive loss~\citep{oord2018representation} at lags $\{1, 4, 8\}$ hours, using AdamW with cosine annealing ($\sim$80 epochs, $\sim$8h on H100).
+
+
+\section{Energy-Based Learning}
+\label{sec:ebm}
+
+The HTE embeddings capture \emph{what the system looks like}; the EBM learns \emph{what to do}---an energy landscape over binary decisions enabling fast, diverse sampling.
+
+\subsection{Why an EBM?}
+
+Three properties motivate the choice: (i)~\textbf{multimodality}---multiple near-optimal schedules exist; an EBM represents multiple low-energy basins; (ii)~\textbf{controlled exploration}---Langevin dynamics provides gradient-guided diverse sampling; (iii)~\textbf{compatibility with repair}---relaxed outputs during training, binary at inference.
+
+\subsection{Decision Representation}
+
+Each MILP solution projects onto $u \in \{0,1\}^{Z \times T \times 7}$:
+\begin{equation}
+u_{z,t} = [\,b^{\mathrm{ch}},\; b^{\mathrm{dis}},\; g^{\mathrm{ch}},\; g^{\mathrm{dis}},\; \delta^{\mathrm{dr}},\; v^{\mathrm{th}},\; u^{\mathrm{th}}\,]_{z,t}.
+\end{equation}
+Variable zone counts are handled via padding and a binary zone mask.
+
+\subsection{Architecture}
+
+At each zone, $u_{z,t}$ is concatenated with the HTE embedding $h_{z,t}$, projected, and processed by a bidirectional GRU. An MLP energy head produces per-zone, per-timestep energy $e_{z,t}$. The total energy combines mean and peak (log-sum-exp) terms with $\tanh$ bounding:
+\begin{equation}
+E_\theta(u, h) = E_{\max} \cdot \tanh\!\bigl(((1{-}w_p) E_{\mathrm{mean}} + w_p E_{\mathrm{peak}}) / E_{\max}\bigr).
+\end{equation}
+
+\subsection{Langevin Sampling in Logit Space}
+
+Decisions are parameterised as $u = \sigma(z)$ with logits $z \in \mathbb{R}$. At step $k$:
+\begin{equation}
+z^{(k+1)} = z^{(k)} - \eta\,\nabla_z E_\theta(\sigma(z^{(k)}), h) + \sigma_k \sqrt{\eta}\;\varepsilon_k, \quad \varepsilon_k \sim \mathcal{N}(0, I),
+\end{equation}
+with noise $\sigma_k$ linearly annealed from $\sigma_{\max}$ to $\sigma_{\min}$. Gradients are normalised. At inference, outputs are binarised via Bernoulli sampling.
+
+\subsection{Two-Step Training}
+
+\textbf{Step A (gold pre-training):} Contrastive divergence pushes MILP-optimal schedules to low energy:
+\begin{equation}
+\mathcal{L}_{\mathrm{CD}} = \mathbb{E}_{u^+}[E_\theta(u^+, h)] - \mathbb{E}_{u^-}[E_\theta(u^-, h)] + \lambda_{\mathrm{reg}} R(E).
+\end{equation}
+Langevin steps ramped 10$\to$50 (curriculum).
+
+\textbf{Step B (silver fine-tuning):} LP-evaluated preference pairs $(u_a, u_b)$ with $c_a < c_b$ yield:
+\begin{equation}
+\mathcal{L}_{\mathrm{pref}} = [E_\theta(u_a, h) - E_\theta(u_b, h) + \delta]_+, \quad
+\mathcal{L}_{\mathrm{silver}} = \lambda_{\mathrm{CD}} \mathcal{L}_{\mathrm{CD}} + \lambda_{\mathrm{pref}} \mathcal{L}_{\mathrm{pref}}.
+\end{equation}
+
+At inference: build graph, encode, run 5 parallel Langevin chains (100 steps), binarise, decode, LP solve, select best candidate.
+
+
+\section{Solution Reconstruction}
+\label{sec:reconstruction}
+
+EBM candidates may violate constraints and lack continuous variables. A \emph{feasibility decoder} repairs binaries; a \emph{two-stage LP worker} recovers optimal dispatch.
+
+\subsection{Feasibility Decoder}
+
+Two principles: (i)~\textbf{trust the EBM first}---dispatch suggested resources before merit-order fallback; (ii)~\textbf{guarantee feasibility}---unserved energy/overgeneration as last resort.
+
+At each timestep: \textbf{Phase~1} dispatches nuclear and renewables. \textbf{Phase~2} (deficit): nuclear headroom, hydro, EBM-suggested storage/thermal, fallback resources, imports, DR, unserved energy. \textbf{Phase~3} (surplus): exports, thermal reduction, curtailment, storage charging, overgeneration. The decoder mirrors MILP physics: separate efficiencies, self-discharge, ramp limits with startup exceptions.
+
+\subsection{Two-Stage LP Worker}
+
+The LP worker fixes all binaries and solves the resulting LP. Progressive repair handles tight sub-problems: Stage~1 (hard-fix, 20s), Stage~2 (repair-20 critical indices, 15s), Stage~3 (repair-100, 120s), Stage~4 (full soft relaxation, 900s), Stage~5 (round and refix, 20s). A deviation penalty ($\lambda = 10{,}000$) and flip budget keep repairs localised. The majority of scenarios resolve at Stage~1.
+
+The key insight: \emph{hard} combinatorial decisions are handled by the fast EBM+decoder, while \emph{easy} continuous optimisation goes to a mature LP solver.
+
+
+\section{Experimental Setup and Results}
+\label{sec:experiments}
+
+\subsection{Setup}
+
+Three families of 100 out-of-sample scenarios each:
+\begin{itemize}[noitemsep]
+  \item \textbf{Low} ($\bar{C} = 0.33$): 4--20 zones, MILP $<2$\,s.
+  \item \textbf{Medium} ($\bar{C} = 0.41$): 30--80 zones, MILP 1--120\,s.
+  \item \textbf{High} ($\bar{C} = 0.49$): 80--160 zones, MILP seconds to hours.
+\end{itemize}
+Hardware: NVIDIA A100 GPU, HiGHS solver, 10-min MILP time limit. For each scenario: 5 Langevin chains, best-of-5 selection. Metrics: cost gap (\%), speedup, slack, LP stage.
+
+\subsection{Main Results}
+\label{sec:main_results}
+
+\begin{quote}
+\emph{The pipeline's computational advantage scales positively with combinatorial hardness: Spearman $\rho = +0.224$ (criticality vs speedup, $p < 10^{-4}$) and $\rho = +0.299$ (problem size vs speedup, $p < 10^{-7}$).}
+\end{quote}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{fig14_central_divergence.png}
+  \caption{(A)~Solve time vs complexity percentile: MILP and pipeline diverge above the 60th percentile. (B)~Speedup vs criticality. (C)~Cost gap envelope vs complexity.}
+  \label{fig:central_divergence}
+\end{figure}
+
+The pipeline achieves \textbf{100\% feasibility} (mean slack $<0.01$\,MWh).
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lrrrrrrr}
+\toprule
+\textbf{Family} & $n$ & \textbf{Med.\ gap} & \textbf{Gap IQR} & \textbf{Gap P5--P95} & \textbf{Med.\ $S$} & \textbf{$S$ IQR} & \textbf{HF} \\
+ & & (\%) & (\%) & (\%) & ($\times$) & ($\times$) & (\%) \\
+\midrule
+Low & 100 & 12.6 & [0.7, 23.3] & [0.0, 52.3] & 0.12 & [0.10, 0.14] & 90 \\
+Med & 100 & 18.5 & [$-$34.8, 40.2] & [$-$418.6, 305.9] & 0.46 & [0.06, 1.47] & 65 \\
+High & 100 & $-$0.04 & [$-$118.3, 36.9] & [$-$273.5, 252.3] & 0.88 & [0.07, 10.80] & 40 \\
+\midrule
+\textbf{All} & \textbf{300} & \textbf{14.4} & [$-$23.8, 34.0] & [$-$222.1, 133.8] & \textbf{0.14} & [0.08, 1.43] & \textbf{65} \\
+\bottomrule
+\end{tabular}
+\caption{Per-family results. Negative gap = pipeline cheaper. $S$ = speedup. HF = hard-fix rate (\%).}
+\label{tab:main_results}
+\end{table}
+
+\paragraph{High criticality: the pipeline's sweet spot.} Negative median gap ($-0.04$\%): the pipeline matches or beats the time-limited MILP. Mean gap $-88$\% (driven by MILP time-outs).
+
+\paragraph{Low criticality: MILP dominance.} Median gap 12.6\%, speedup $0.12\times$. The pipeline's fixed overhead exceeds fast MILP solves.
+
+\paragraph{Medium criticality: transition.} Widest variance; mean speedup $3.4\times$ pulled up by slow MILP instances.
+
+\subsection{Time-Limited Hard Scenarios}
+
+Of 100 high-criticality scenarios, \textbf{41 hit the 20-min MILP limit}. \textbf{100\% are solved faster} by the pipeline: median speedup $11.5\times$ (range $3.3$--$21.4\times$), median time 104.9\,s, 73\% hard-fix rate. The 59 optimally-solved scenarios show the opposite pattern (pipeline gap $-112$\%, 17\% hard-fix), reinforcing the case for criticality-aware routing.
+
+\begin{table}[htbp]
+\centering\small
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Subset} & $n$ & \textbf{Med.\ gap} & \textbf{Med.\ $S$} & \textbf{Mean $S$} & \textbf{HF} & \textbf{Pipe.\ better} \\
+ & & (\%) & ($\times$) & ($\times$) & (\%) & (\%) \\
+\midrule
+Time-limited & 41 & 41.1 & 11.5 & 11.4 & 73 & 5 \\
+Optimal & 59 & $-$112.0 & 0.1 & 0.8 & 17 & 83 \\
+\bottomrule
+\end{tabular}
+\caption{High-criticality split by MILP termination status.}
+\label{tab:htl_comparison}
+\end{table}
+
+\subsection{Discussion: When Does the MILP Remain Superior?}
+
+When the MILP solves in $<10$\,s, it produces a better solution in 77\% of cases. When it requires $>60$\,s, the pipeline is faster in 93\%. Key diagnostics: (i)~LP stage predicts solution quality (hard-fix $\Rightarrow$ low gap); (ii)~extreme failures cluster where training coverage is thinnest; (iii)~cost gap is \emph{uncorrelated} with complexity ($\rho = -0.03$, $p = 0.58$)---the pipeline does not systematically degrade; (iv)~speedup correlates strongly with complexity ($\rho = +0.30$, $p < 10^{-7}$). Mann-Whitney tests confirm speedup distributions differ across families ($p < 0.05$) while cost gaps do not.
+
+\subsection{Implications}
+
+\paragraph{Criticality-aware routing.} Use the MILP for low-criticality (fast, exact) and the pipeline for high-criticality (faster, equally good). The criticality index provides a millisecond routing criterion.
+
+\paragraph{Predictable throughput.} The pipeline's bounded solve time enables reliable batch scheduling. A hybrid strategy on 500 stress-test scenarios achieves $\sim$14h vs $\sim$33h MILP-only.
+
+\paragraph{Solution diversity.} Multiple Langevin chains reveal which decisions are robust across candidates---valuable for operational hedging.
+
+\paragraph{Honest limitations.} The overall 14.4\% median gap reflects the greedy decoder's approximation and limited EBM generalisation to large topologies. The 53\% full-soft rate for high-criticality confirms data coverage as the primary bottleneck.
+
+
+\section{Conclusions and Research Avenues}
+\label{sec:conclusion}
+
+\subsection{Summary}
+
+This paper introduced a hybrid MILP--GNN--EBM methodology for near-real-time flexibility exploration, comprising: (i)~a scenario generator with diversity maximisation and criticality indexing; (ii)~a multi-layer MILP oracle; (iii)~heterogeneous temporal graph projection; (iv)~a self-supervised HTE encoder; (v)~a conditional graph EBM with Langevin sampling; and (vi)~a feasibility decoder and two-stage LP worker.
+
+\subsection{Key Findings}
+
+\paragraph{Value scales with difficulty.} On high-criticality scenarios, the pipeline achieves median gap $-0.04$\% with mean speedup $5.1\times$. For 41 time-limited scenarios, median speedup is $11.5\times$ with 100\% solved faster.
+
+\paragraph{Feasibility is guaranteed.} 100\% feasibility across all 300 scenarios ($<0.01$\,MWh slack)---a structural guarantee from the decoder+LP architecture.
+
+\paragraph{EBM learns meaningful patterns.} 65\% overall hard-fix rate (90\% for low-criticality) demonstrates that the two-step training captures MILP commitment logic.
+
+\paragraph{Honest cost gap.} The 14.4\% overall median gap reflects decoder approximation and limited generalisation to large topologies. The pipeline's sweet spot is MILP solve times exceeding 1--2 minutes.
+
+\subsection{Limitations}
+
+\begin{enumerate}[label=\textbf{L\arabic*}, leftmargin=*, itemsep=2pt]
+  \item \textbf{EBM generalisation to large topologies.} 53\% full-soft rate on high-criticality vs 10\% on low, due to training set sparsity at $>100$ zones.
+  \item \textbf{Greedy decoder sub-optimality.} No lookahead; 12.6\% median gap on low-criticality is largely decoder-driven.
+  \item \textbf{Fixed pipeline overhead.} $\sim$4\,s neural overhead exceeds MILP time for simplest scenarios.
+  \item \textbf{Single-horizon deterministic setting.} Real planning requires rolling horizons, stochastic scenarios, and N$-$1 security.
+  \item \textbf{Training distribution dependency.} No guarantee of generalisation to different generators or historical data.
+  \item \textbf{LP worker as scalability bottleneck.} LP solve accounts for $>90$\% of time on high-criticality.
+  \item \textbf{No real-world validation.} All scenarios are synthetic.
+\end{enumerate}
+
+\subsection{Research Avenues}
+
+\paragraph{R1: Scaling the EBM.} Augmented training sets and spatial attention (graph Transformer over zones) to address \textbf{L1}.
+\paragraph{R2: Learned decoder.} A recurrent policy trained end-to-end through the LP cost signal to address \textbf{L2}.
+\paragraph{R3: LP warm-starting.} Using decoder continuous variables as initial basis to shrink the dominant bottleneck (\textbf{L6}).
+\paragraph{R4: Batched inference.} GPU-parallel graph construction, encoding, and Langevin sampling to address \textbf{L3}.
+\paragraph{R5: Stochastic extensions.} Scenario trees, multi-stage conditioning, rolling horizons (\textbf{L4}).
+\paragraph{R6: Security constraints.} N$-$1 contingencies in the MILP oracle, extended criticality index.
+\paragraph{R7: Criticality-aware hybrid deployment.} Online-learning routing threshold adapting to observed performance.
+\paragraph{R8: Transfer across systems.} Testing HTE/EBM transfer to different system configurations (\textbf{L5}, \textbf{L7}).
+
+\subsection{Closing Remarks}
+
+The hybrid MILP--GNN--EBM methodology demonstrates that combining mathematical programming rigour with learned inference speed is a viable path toward interactive scenario exploration. The pipeline does not replace the MILP---it extends its reach to regimes where repeated exact solves are impractical. Every solution is feasible, economically meaningful, and accompanied by a cost gap estimate, enabling informed decisions about when to trust the approximation and when to invest in an exact solve.
+
+
+\bibliographystyle{plainnat}  
+\bibliography{MILP-GNN}       
+
+\end{document}

@@ -570,6 +570,314 @@ class HierarchicalFeasibilityDecoder:
         )
 
 
+    def decode_passthrough(self, u_relax: torch.Tensor) -> FeasiblePlan:
+        """
+        Pass-through decode: keep EBM binaries UNCHANGED, but compute
+        physically consistent continuous dispatch for LP warm-starting.
+
+        Unlike decode(), this does NOT flip any binaries. It only computes
+        MW dispatch values consistent with the EBM's on/off decisions,
+        respecting ramp limits, SOC bounds, and efficiencies.
+
+        Args:
+            u_relax: [Z, T, F] relaxed binary decisions from EBM/Langevin
+
+        Returns:
+            FeasiblePlan with EBM-original binaries + consistent dispatch
+        """
+        Z, T, F = u_relax.shape
+        p = self.physics
+        dt = p.dt_hours
+
+        # ── Binarize EBM decisions (keep as-is) ──
+        ebm_therm = u_relax[:, :, self.FEAT_THERMAL] > 0.5
+        ebm_b_ch = u_relax[:, :, self.FEAT_BATTERY_CHARGE] > 0.5
+        ebm_b_dis = u_relax[:, :, self.FEAT_BATTERY_DISCHARGE] > 0.5
+        ebm_p_ch = u_relax[:, :, self.FEAT_PUMPED_CHARGE] > 0.5
+        ebm_p_dis = u_relax[:, :, self.FEAT_PUMPED_DISCHARGE] > 0.5
+        ebm_dr = u_relax[:, :, self.FEAT_DR] > 0.5
+
+        # ── Capacities ──
+        batt_power = p.battery_power_mw if p.battery_power_mw is not None else torch.zeros(Z)
+        batt_cap = p.battery_capacity_mwh if p.battery_capacity_mwh is not None else torch.zeros(Z)
+        pump_power = p.pumped_power_mw if p.pumped_power_mw is not None else torch.zeros(Z)
+        pump_cap = p.pumped_capacity_mwh if p.pumped_capacity_mwh is not None else torch.zeros(Z)
+        dr_cap = p.dr_capacity_mw if p.dr_capacity_mw is not None else torch.zeros(Z)
+        therm_cap = p.thermal_capacity_mw if p.thermal_capacity_mw is not None else torch.zeros(Z)
+        therm_min = p.thermal_min_mw if p.thermal_min_mw is not None else therm_cap * 0.3
+        nuc_cap = p.nuclear_capacity_mw if p.nuclear_capacity_mw is not None else torch.zeros(Z)
+        hydro_cap_mw = p.hydro_capacity_mw if p.hydro_capacity_mw is not None else torch.zeros(Z)
+        hydro_cap_mwh = p.hydro_capacity_mwh if p.hydro_capacity_mwh is not None else torch.zeros(Z)
+        import_cap = p.import_capacity_mw
+
+        nuc_must_run = nuc_cap * self.nuclear_must_run_fraction
+
+        # ── Storage efficiencies ──
+        eta_bc = p.battery_eta_charge if p.battery_eta_charge is not None else p.battery_efficiency
+        eta_bd = p.battery_eta_discharge if p.battery_eta_discharge is not None else p.battery_efficiency
+        eta_pc = p.pumped_eta_charge if p.pumped_eta_charge is not None else p.pumped_efficiency
+        eta_pd = p.pumped_eta_discharge if p.pumped_eta_discharge is not None else p.pumped_efficiency
+        batt_ret = p.battery_retention_rate
+        pump_ret = p.pumped_retention_rate
+
+        # ── Thermal ramp ──
+        therm_ramp = p.thermal_ramp_mw if p.thermal_ramp_mw is not None else therm_cap.clone()
+        therm_ramp = torch.where((therm_ramp < 1e-6) & (therm_cap > 0), therm_cap, therm_ramp)
+        prev_therm_disp = p.thermal_initial_output.clone() if p.thermal_initial_output is not None else torch.zeros(Z)
+
+        anchor_z = p.import_anchor_zone_idx
+
+        # ── Initialize outputs ──
+        thermal_on = torch.zeros(Z, T)
+        nuclear_on = torch.zeros(Z, T)
+        battery_charging = torch.zeros(Z, T)
+        battery_discharging = torch.zeros(Z, T)
+        pumped_charging = torch.zeros(Z, T)
+        pumped_discharging = torch.zeros(Z, T)
+        dr_active = torch.zeros(Z, T)
+
+        thermal_dispatch = torch.zeros(Z, T)
+        nuclear_dispatch = torch.zeros(Z, T)
+        battery_charge = torch.zeros(Z, T)
+        battery_discharge = torch.zeros(Z, T)
+        pumped_charge = torch.zeros(Z, T)
+        pumped_discharge = torch.zeros(Z, T)
+        demand_response = torch.zeros(Z, T)
+
+        solar_dispatch = torch.zeros(Z, T)
+        wind_dispatch = torch.zeros(Z, T)
+        hydro_dispatch = torch.zeros(Z, T)
+
+        unserved_energy = torch.zeros(Z, T)
+        curtailment = torch.zeros(Z, T)
+        net_import = torch.zeros(Z, T)
+
+        battery_soc = torch.zeros(Z, T + 1)
+        pumped_level = torch.zeros(Z, T + 1)
+
+        b_soc = torch.zeros(Z)
+        p_level = torch.zeros(Z)
+        h_level = torch.zeros(Z)
+        dr_used_hours = torch.zeros(Z)
+
+        if p.battery_initial_soc is not None and batt_cap is not None:
+            b_soc = (p.battery_initial_soc * batt_cap).clone()
+        if p.pumped_initial_soc is not None and pump_cap is not None:
+            p_level = (p.pumped_initial_soc * pump_cap).clone()
+        if p.hydro_initial is not None:
+            h_level = p.hydro_initial.clone()
+
+        battery_soc[:, 0] = b_soc.clone()
+        pumped_level[:, 0] = p_level.clone()
+
+        for t in range(T):
+            demand_t = p.demand[:, t].clone() if p.demand is not None else torch.zeros(Z)
+            solar_avail = p.solar_available[:, t].clone() if p.solar_available is not None else torch.zeros(Z)
+            wind_avail = p.wind_available[:, t].clone() if p.wind_available is not None else torch.zeros(Z)
+            ror_t = p.hydro_ror[:, t].clone() if p.hydro_ror is not None else torch.zeros(Z)
+            hydro_inflow_t = p.hydro_inflow[:, t] if p.hydro_inflow is not None else torch.zeros(Z)
+
+            h_level = h_level + hydro_inflow_t * dt
+            h_level = torch.clamp(h_level, max=hydro_cap_mwh)
+
+            if batt_ret is not None:
+                b_soc = b_soc * batt_ret
+            if pump_ret is not None:
+                p_level = p_level * pump_ret
+
+            residual = demand_t.clone()
+
+            # ── PHASE 1: Must-run (same as decode) ──
+            nuc_dispatch_t = nuc_must_run.clone()
+            nuclear_dispatch[:, t] = nuc_dispatch_t
+            nuclear_on[:, t] = (nuc_cap > 0).float()
+            residual -= nuc_dispatch_t
+
+            solar_dispatch[:, t] = solar_avail
+            wind_dispatch[:, t] = wind_avail
+            residual -= solar_avail + wind_avail + ror_t
+
+            # ── PHASE 2: Dispatch ONLY EBM-on resources (no fallback) ──
+            for z in range(Z):
+                # Nuclear headroom
+                nuc_headroom = nuc_cap[z] - nuc_dispatch_t[z]
+                if nuc_headroom > 0 and residual[z] > 0:
+                    nuc_add = min(nuc_headroom.item(), residual[z].item())
+                    nuclear_dispatch[z, t] += nuc_add
+                    residual[z] -= nuc_add
+
+                # Hydro reservoir
+                if residual[z] > 0 and hydro_cap_mw[z] > 0 and h_level[z] > 0:
+                    max_release = min(hydro_cap_mw[z].item(), h_level[z].item() / dt)
+                    release = min(max_release, residual[z].item())
+                    hydro_dispatch[z, t] = release
+                    h_level[z] -= release * dt
+                    residual[z] -= release
+
+                # Pumped discharge - ONLY if EBM says ON
+                if ebm_p_dis[z, t] and pump_power[z] > 0 and p_level[z] > 0:
+                    max_dis = min(pump_power[z].item(), p_level[z].item() * eta_pd / dt)
+                    dis = min(max(max_dis, 0), max(residual[z].item(), 0))
+                    if dis > 0:
+                        pumped_discharge[z, t] = dis
+                        pumped_discharging[z, t] = 1.0
+                        p_level[z] -= dis * dt / max(eta_pd, 1e-4)
+                        residual[z] -= dis
+
+                # Battery discharge - ONLY if EBM says ON
+                if ebm_b_dis[z, t] and batt_power[z] > 0 and b_soc[z] > 0:
+                    max_dis = min(batt_power[z].item(), b_soc[z].item() * eta_bd / dt)
+                    dis = min(max(max_dis, 0), max(residual[z].item(), 0))
+                    if dis > 0:
+                        battery_discharge[z, t] = dis
+                        battery_discharging[z, t] = 1.0
+                        b_soc[z] -= dis * dt / max(eta_bd, 1e-4)
+                        residual[z] -= dis
+
+                # Thermal - ONLY if EBM says ON (with ramp limits)
+                if ebm_therm[z, t] and therm_cap[z] > 0:
+                    ramp_up_max = prev_therm_disp[z].item() + therm_ramp[z].item()
+                    if prev_therm_disp[z].item() < 1e-6:
+                        max_disp = min(therm_cap[z].item(), max(ramp_up_max, therm_min[z].item()))
+                    else:
+                        max_disp = min(therm_cap[z].item(), ramp_up_max)
+                    dispatch = min(max_disp, max(residual[z].item(), 0))
+                    if 0 < dispatch < therm_min[z].item():
+                        dispatch = min(therm_min[z].item(), max_disp)
+                    if dispatch > 0:
+                        thermal_dispatch[z, t] = dispatch
+                        thermal_on[z, t] = 1.0
+                        residual[z] -= dispatch
+
+                # Import
+                if residual[z] > 0 and import_cap > 0:
+                    imp = min(import_cap, residual[z].item())
+                    net_import[z, t] = imp
+                    residual[z] -= imp
+
+                # DR - ONLY if EBM says ON
+                if ebm_dr[z, t] and dr_cap[z] > 0 and dr_used_hours[z] < p.dr_max_duration_hours:
+                    if residual[z] > 0:
+                        dr_amt = min(dr_cap[z].item(), residual[z].item())
+                        demand_response[z, t] = dr_amt
+                        dr_active[z, t] = 1.0
+                        dr_used_hours[z] += dt
+                        residual[z] -= dr_amt
+
+                # Unserved (no fallback - accept imbalance for LP to fix)
+                if residual[z] > 1e-6:
+                    unserved_energy[z, t] = max(0, residual[z].item())
+                    residual[z] = 0
+
+            # ── PHASE 3: Surplus handling (respect EBM decisions) ──
+            surplus = torch.clamp(-residual, min=0)
+            for z in range(Z):
+                if surplus[z] <= 0:
+                    continue
+
+                # Export (anchor only)
+                if z == anchor_z and import_cap > 0:
+                    exp = min(import_cap, surplus[z].item())
+                    net_import[z, t] -= exp
+                    surplus[z] -= exp
+                if surplus[z] <= 0:
+                    continue
+
+                # Reduce thermal (ramp-aware)
+                therm_running = thermal_dispatch[z, t].item()
+                if therm_running > 0:
+                    ramp_dn_floor = max(prev_therm_disp[z].item() - therm_ramp[z].item(), 0)
+                    min_disp = max(therm_min[z].item(), ramp_dn_floor) if thermal_on[z, t] > 0 else 0
+                    reduce = min(therm_running - min_disp, surplus[z].item())
+                    if reduce > 0:
+                        thermal_dispatch[z, t] -= reduce
+                        if thermal_dispatch[z, t] < 1e-6:
+                            thermal_on[z, t] = 0.0
+                        surplus[z] -= reduce
+                if surplus[z] <= 0:
+                    continue
+
+                # Curtail wind then solar
+                wind_d = wind_dispatch[z, t].item()
+                if wind_d > 0:
+                    spill = min(wind_d, surplus[z].item())
+                    wind_dispatch[z, t] -= spill
+                    curtailment[z, t] += spill
+                    surplus[z] -= spill
+                if surplus[z] <= 0:
+                    continue
+                solar_d = solar_dispatch[z, t].item()
+                if solar_d > 0:
+                    spill = min(solar_d, surplus[z].item())
+                    solar_dispatch[z, t] -= spill
+                    curtailment[z, t] += spill
+                    surplus[z] -= spill
+                if surplus[z] <= 0:
+                    continue
+
+                # Pumped charge - ONLY if EBM says ON
+                if ebm_p_ch[z, t] and pump_power[z] > 0 and pump_cap[z] > 0:
+                    headroom = pump_cap[z].item() - p_level[z].item()
+                    if headroom > 0:
+                        max_ch = min(pump_power[z].item(), headroom / max(eta_pc, 1e-4) / dt)
+                        ch = min(max(max_ch, 0), surplus[z].item())
+                        if ch > 0:
+                            pumped_charge[z, t] = ch
+                            pumped_charging[z, t] = 1.0
+                            p_level[z] += ch * dt * eta_pc
+                            surplus[z] -= ch
+                if surplus[z] <= 0:
+                    continue
+
+                # Battery charge - ONLY if EBM says ON
+                if ebm_b_ch[z, t] and batt_power[z] > 0 and batt_cap[z] > 0:
+                    headroom = batt_cap[z].item() - b_soc[z].item()
+                    if headroom > 0:
+                        max_ch = min(batt_power[z].item(), headroom / max(eta_bc, 1e-4) / dt)
+                        ch = min(max(max_ch, 0), surplus[z].item())
+                        if ch > 0:
+                            battery_charge[z, t] = ch
+                            battery_charging[z, t] = 1.0
+                            b_soc[z] += ch * dt * eta_bc
+                            surplus[z] -= ch
+                if surplus[z] <= 0:
+                    continue
+
+                # Overgeneration spill
+                if surplus[z] > 1e-6:
+                    curtailment[z, t] += surplus[z].item()
+                    surplus[z] = 0
+
+            prev_therm_disp = thermal_dispatch[:, t].clone()
+            battery_soc[:, t + 1] = b_soc.clone()
+            pumped_level[:, t + 1] = p_level.clone()
+
+        return FeasiblePlan(
+            thermal_on=thermal_on,
+            nuclear_on=nuclear_on,
+            battery_charging=battery_charging,
+            battery_discharging=battery_discharging,
+            pumped_charging=pumped_charging,
+            pumped_discharging=pumped_discharging,
+            dr_active=dr_active,
+            thermal_dispatch=thermal_dispatch,
+            nuclear_dispatch=nuclear_dispatch,
+            battery_charge=battery_charge,
+            battery_discharge=battery_discharge,
+            pumped_charge=pumped_charge,
+            pumped_discharge=pumped_discharge,
+            demand_response=demand_response,
+            solar_dispatch=solar_dispatch,
+            wind_dispatch=wind_dispatch,
+            hydro_dispatch=hydro_dispatch,
+            unserved_energy=unserved_energy,
+            curtailment=curtailment,
+            net_import=net_import,
+            battery_soc=battery_soc,
+            pumped_level=pumped_level,
+        )
+
+
 def load_physics_from_scenario(
     scenario_id: str,
     scenarios_dir: str,

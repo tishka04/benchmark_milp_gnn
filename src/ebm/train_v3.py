@@ -439,7 +439,7 @@ def _lp_evaluate_candidates(
     config: EBMv3Config,
     n_candidates: int = 2,
     lp_worker=None,
-) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
+) -> Optional[List[Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]]]:
     """
     Generate candidates, evaluate with LP worker directly (no feasibility decoder).
 
@@ -448,9 +448,9 @@ def _lp_evaluate_candidates(
     binary inputs, enabling real preference pairs.
 
     Returns:
-        E_better: [N] energies of candidates with lower LP cost
-        E_worse:  [N] energies of candidates with higher LP cost
-        (or None, None if LP evaluation fails)
+        List of (u_better, u_worse, h, mask) tuples for gradient-connected
+        energy re-computation in the training loop, or None if no valid pairs.
+        Each u_better/u_worse has shape [1, Z_max, T, F].
     """
     if lp_worker is None:
         try:
@@ -462,11 +462,10 @@ def _lp_evaluate_candidates(
             )
         except ImportError as e:
             print(f"  LP evaluation unavailable: {e}")
-            return None, None
+            return None
 
     B = min(config.silver_lp_scenarios_per_batch, h_zt_batch.shape[0])
-    E_better_list = []
-    E_worse_list = []
+    pair_data = []  # list of (u_better, u_worse, h, mask) tuples
 
     model.eval()
     sampler.set_mode("infer")
@@ -477,34 +476,29 @@ def _lp_evaluate_candidates(
         mask_i = zone_mask_batch[i:i+1]
         n_zones_i = int(zone_mask_batch[i].sum().item())
 
-        # Generate candidates with diversity
-        # First candidate: direct Langevin sample
-        # Additional candidates: perturb by random bit-flips (~20%)
-        candidates = []
+        # Generate candidates: independent Langevin samples
+        # Both candidates are in the low-energy region, so LP preference
+        # signal doesn't conflict with CD loss (which pushes off-manifold UP)
+        candidates_padded = []  # keep padded [1, Z_max, T, F] for model forward
         energies = []
         lp_costs = []
-        base_bin = sampler.sample_binary(h_i, mask_i)  # [1, Z_max, T, F]
 
         for c_idx in range(n_candidates):
-            if c_idx == 0:
-                u_bin = base_bin
-            else:
-                # Flip ~20% of bits for diversity
-                flip_mask = (torch.rand_like(base_bin) < 0.20).float()
-                u_bin = (base_bin + flip_mask) % 2  # XOR via modular arithmetic
-                u_bin = sampler._apply_mask(u_bin, mask_i)
+            u_bin = sampler.sample_binary(h_i, mask_i)  # independent sample
             u_bin_trimmed = u_bin[0, :n_zones_i]         # [Z_actual, T, F]
 
             with torch.no_grad():
                 E = model(u_bin, h_i, mask_i).item()
-            candidates.append(u_bin_trimmed)
+            candidates_padded.append(u_bin.detach())
             energies.append(E)
 
             # LP evaluation — pass raw binary directly (no feasibility decoder)
+            # max_stages=2: skip expensive stages 3-5 for fast preference pairs
             try:
                 result = lp_worker.solve(
                     scenario_id=sc_id,
                     decoder_output=u_bin_trimmed,
+                    max_stages=2,
                 )
                 lp_cost = getattr(result, "objective_value", float("inf"))
             except Exception as e:
@@ -520,32 +514,39 @@ def _lp_evaluate_candidates(
             best_idx = sorted_idx[0]
             worst_idx = sorted_idx[-1]
 
+            cost_gap = lp_costs[worst_idx] - lp_costs[best_idx]
+            cost_ref = max(abs(lp_costs[best_idx]), 1.0)
+            rel_gap = cost_gap / cost_ref
+
             if lp_costs[best_idx] < lp_costs[worst_idx] and \
-               lp_costs[best_idx] < float("inf"):
-                E_better_list.append(energies[best_idx])
-                E_worse_list.append(energies[worst_idx])
+               lp_costs[best_idx] < float("inf") and rel_gap >= 0.02:
+                pair_data.append((
+                    candidates_padded[best_idx],   # [1, Z_max, T, F]
+                    candidates_padded[worst_idx],
+                    h_i.detach(),                  # [1, Z_max, T, D]
+                    mask_i.detach(),               # [1, Z_max]
+                ))
                 print(f"    LP pair {sc_id}: cost_best={lp_costs[best_idx]:.0f} "
                       f"cost_worst={lp_costs[worst_idx]:.0f} "
+                      f"Δ={rel_gap:.1%} "
                       f"E_better={energies[best_idx]:.4f} E_worse={energies[worst_idx]:.4f}")
             else:
                 inf_count = sum(1 for c in lp_costs if c == float("inf"))
                 if inf_count == 0:
-                    print(f"    LP no pair {sc_id}: costs equal "
-                          f"({lp_costs[best_idx]:.0f} == {lp_costs[worst_idx]:.0f})")
+                    if rel_gap < 0.02:
+                        print(f"    LP skip {sc_id}: gap too small "
+                              f"({lp_costs[best_idx]:.0f} vs {lp_costs[worst_idx]:.0f}, "
+                              f"Δ={rel_gap:.1%})")
+                    else:
+                        print(f"    LP no pair {sc_id}: costs equal "
+                              f"({lp_costs[best_idx]:.0f} == {lp_costs[worst_idx]:.0f})")
                 else:
                     print(f"    LP no pair {sc_id}: {inf_count}/{len(lp_costs)} inf costs")
 
     sampler.set_mode("train")
     model.train()
 
-    if not E_better_list:
-        return None, None
-
-    device = config.device
-    return (
-        torch.tensor(E_better_list, device=device),
-        torch.tensor(E_worse_list, device=device),
-    )
+    return pair_data if pair_data else None
 
 
 def train_epoch_silver(
@@ -566,6 +567,7 @@ def train_epoch_silver(
     use_amp = config.use_amp and config.device == "cuda"
     total_metrics = {}
     n_batches = 0
+    n_pref_batches = 0
 
     for batch_idx, batch in enumerate(train_loader):
         u_pos = batch["u_zt"].to(config.device)
@@ -588,10 +590,35 @@ def train_epoch_silver(
         # Preference component (periodic LP evaluation)
         E_better, E_worse = None, None
         if (batch_idx + 1) % config.silver_lp_eval_every == 0:
-            E_better, E_worse = _lp_evaluate_candidates(
+            pair_data = _lp_evaluate_candidates(
                 model, sampler, h_zt, zone_mask, scenario_ids, config,
                 lp_worker=lp_worker,
             )
+            # Re-compute energies WITH gradients for preference loss
+            # Temporarily zero dropout to get deterministic rankings
+            # (can't use model.eval() — cuDNN RNN backward needs training mode)
+            if pair_data is not None:
+                saved_dropout = {}
+                for name, mod in model.named_modules():
+                    if isinstance(mod, torch.nn.Dropout) and mod.p > 0:
+                        saved_dropout[name] = mod.p
+                        mod.p = 0.0
+                    elif isinstance(mod, torch.nn.GRU):
+                        saved_dropout[name] = mod.dropout
+                        mod.dropout = 0.0
+                E_better_list, E_worse_list = [], []
+                with torch.amp.autocast("cuda", enabled=use_amp):
+                    for u_b, u_w, h_p, m_p in pair_data:
+                        E_better_list.append(model(u_b, h_p, m_p))
+                        E_worse_list.append(model(u_w, h_p, m_p))
+                E_better = torch.cat(E_better_list)  # [N]
+                E_worse = torch.cat(E_worse_list)    # [N]
+                for name, mod in model.named_modules():
+                    if name in saved_dropout:
+                        if isinstance(mod, torch.nn.Dropout):
+                            mod.p = saved_dropout[name]
+                        elif isinstance(mod, torch.nn.GRU):
+                            mod.dropout = saved_dropout[name]
 
         with torch.amp.autocast("cuda", enabled=use_amp):
             loss, metrics = loss_fn(E_pos, E_neg, E_better, E_worse)
@@ -610,16 +637,31 @@ def train_epoch_silver(
         for k, v in metrics.items():
             total_metrics[k] = total_metrics.get(k, 0.0) + v
         n_batches += 1
+        if 'pref/E_better_mean' in metrics:
+            n_pref_batches += 1
 
         if (batch_idx + 1) % config.log_every == 0:
+            pref_str = ""
+            if 'pref/E_better_mean' in metrics:
+                pref_str = (
+                    f" | Pref: Eb={metrics['pref/E_better_mean']:.3f} "
+                    f"Ew={metrics['pref/E_worse_mean']:.3f} "
+                    f"acc={metrics.get('pref/pref_accuracy', 0):.1%}"
+                )
             print(
                 f"  [Epoch {epoch}] Batch {batch_idx+1}/{len(train_loader)} | "
                 f"Total={metrics.get('loss_total', 0):.4f} | "
                 f"CD={metrics.get('cd/cd_loss', 0):.4f} | "
-                f"Gap={metrics.get('cd/E_gap', 0):.4f} [L]"
+                f"Gap={metrics.get('cd/E_gap', 0):.4f} [L]{pref_str}"
             )
 
-    return {k: v / max(n_batches, 1) for k, v in total_metrics.items()}
+    avg = {}
+    for k, v in total_metrics.items():
+        if k.startswith('pref/') or k == 'loss_pref_weighted':
+            avg[k] = v / max(n_pref_batches, 1)
+        else:
+            avg[k] = v / max(n_batches, 1)
+    return avg
 
 
 def run_silver_finetuning(
@@ -714,12 +756,21 @@ def run_silver_finetuning(
 
     min_delta = getattr(config, "silver_min_delta", 0.01)
 
+    warmup_epochs = getattr(config, "silver_pref_warmup_epochs", 5)
+
     for epoch in range(config.silver_epochs):
         t0 = time.time()
 
         # Silver curriculum: ramp Langevin steps
         curr_steps = _get_silver_langevin_steps(epoch, config.silver_epochs, config)
         sampler.set_num_steps(curr_steps)
+
+        # Lambda_pref warmup: ramp from 0 → full over first N epochs
+        if warmup_epochs > 0 and epoch < warmup_epochs:
+            warmup_ratio = epoch / warmup_epochs
+            loss_fn.lambda_pref = config.silver_lambda_pref * warmup_ratio
+        else:
+            loss_fn.lambda_pref = config.silver_lambda_pref
 
         train_metrics = train_epoch_silver(
             model, sampler, train_loader, optimizer, loss_fn,
@@ -734,13 +785,22 @@ def run_silver_finetuning(
 
         val_gap_rand = val_metrics.get("E_gap_rand", 0)
         val_gap_lang = val_metrics.get("E_gap_lang", float("nan"))
+        pref_summary = ""
+        if 'pref/E_better_mean' in train_metrics:
+            pref_summary = (
+                f" | Pref: Eb={train_metrics['pref/E_better_mean']:.2f} "
+                f"Ew={train_metrics['pref/E_worse_mean']:.2f} "
+                f"acc={train_metrics.get('pref/pref_accuracy', 0):.1%}"
+            )
         print(
             f"Epoch {epoch+1}/{config.silver_epochs} ({dt:.1f}s) | "
             f"Train Total={train_metrics.get('loss_total', 0):.4f} "
             f"CD={train_metrics.get('cd/cd_loss', 0):.4f} | "
             f"ValGap_R={val_gap_rand:.4f} ValGap_L={val_gap_lang:.4f} | "
             f"E+={val_metrics.get('E_pos_mean', 0):.2f} | "
-            f"LR={scheduler.get_last_lr()[0]:.2e} | Lsteps={curr_steps}"
+            f"LR={scheduler.get_last_lr()[0]:.2e} | Lsteps={curr_steps} | "
+            f"λp={loss_fn.lambda_pref:.2f}"
+            f"{pref_summary}"
         )
 
         # Early stopping on ValGap_L with min_delta

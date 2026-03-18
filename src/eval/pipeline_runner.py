@@ -59,6 +59,12 @@ class PipelineConfig:
     slack_tol_mwh: float = 1.0
     deviation_penalty: float = 10000.0
 
+    # Ablation flags
+    skip_decoder: bool = False  # bypass decoder, pass raw EBM binaries to LP
+    decoder_passthrough: bool = False  # decoder builds warm-start but keeps EBM binaries unchanged
+    use_gnn_dispatch: bool = False  # replace decoder+LP with GNN dispatch predictor
+    gnn_dispatch_path: str = 'outputs/gnn_dispatch/dispatch_gnn_best.pt'
+
     device: str = 'cuda'
     seed: int = 42
 
@@ -119,7 +125,7 @@ class PipelineRunner:
         self.sampler = None
 
     def load_models(self):
-        """Load encoder and EBM models."""
+        """Load encoder, EBM, and optionally GNN dispatch models."""
         from src.gnn.models.hierarchical_temporal_encoder import HierarchicalTemporalEncoder
         from src.ebm.model_v3 import TrajectoryZonalEBM
         from src.ebm.sampler_v3 import NormalizedTemporalLangevinSampler
@@ -176,6 +182,16 @@ class PipelineRunner:
             device=self.device,
         )
         print("  Sampler ready (infer mode)")
+
+        # Optionally load GNN dispatch predictor
+        self.gnn_predictor = None
+        if cfg.use_gnn_dispatch:
+            from src.gnn.dispatch_predictor import GNNDispatchPredictor
+            gnn_path = self.repo_path / cfg.gnn_dispatch_path
+            self.gnn_predictor = GNNDispatchPredictor(
+                model_path=str(gnn_path),
+                device=self.device,
+            )
 
     def _build_graph(self, scenario_path: Path, report_path: Path, output_path: Path):
         """Build temporal graph for a scenario."""
@@ -334,8 +350,48 @@ class PipelineRunner:
         plan = decoder.decode(u_bin)
         return plan, physics
 
-    def _run_lp_worker(self, decoder_tensor: torch.Tensor, scenario_path: Path, scenarios_dir: Path):
-        """Run LP Worker Two-Stage on decoded binary tensor [Z, T, F]."""
+    def _run_decoder_passthrough(self, u_bin: torch.Tensor, scenario_path: Path):
+        """Run pass-through decoder: keep EBM binaries, build warm-start only."""
+        from src.ebm.feasibility import (
+            HierarchicalFeasibilityDecoder, load_physics_from_scenario,
+        )
+
+        sc_id = scenario_path.stem
+        scenarios_dir = str(scenario_path.parent)
+        physics = load_physics_from_scenario(sc_id, scenarios_dir)
+        decoder = HierarchicalFeasibilityDecoder(physics)
+        plan = decoder.decode_passthrough(u_bin)
+        return plan, physics
+
+    def _run_gnn_dispatch(self, u_bin: torch.Tensor, zone_emb: torch.Tensor, n_zones: int, scenario_id: str):
+        """Run GNN dispatch predictor to get continuous dispatch directly.
+
+        Args:
+            u_bin:     [Z, T, F] binary candidate from EBM
+            zone_emb:  [Z, T, D] zone-level HTE embeddings
+            n_zones:   number of valid zones
+            scenario_id: scenario identifier
+
+        Returns:
+            GNNDispatchResult with continuous_vars dict
+        """
+        zone_mask = torch.ones(n_zones)
+        return self.gnn_predictor.predict(
+            u_bin=u_bin[:n_zones],
+            h_zt=zone_emb[:n_zones],
+            zone_mask=zone_mask,
+            scenario_id=scenario_id,
+        )
+
+    def _run_lp_worker(self, decoder_tensor: torch.Tensor, scenario_path: Path, scenarios_dir: Path, feasible_plan=None):
+        """Run LP Worker Two-Stage on decoded binary tensor [Z, T, F].
+
+        Args:
+            decoder_tensor: Binary tensor [Z, T, 7] from decoder.
+            scenario_path: Path to scenario JSON.
+            scenarios_dir: Directory containing scenario JSONs.
+            feasible_plan: Optional FeasiblePlan for LP warm-starting.
+        """
         from src.milp.lp_worker_two_stage import LPWorkerTwoStage
 
         cfg = self.config
@@ -348,7 +404,7 @@ class PipelineRunner:
         )
 
         sc_id = scenario_path.stem
-        result = worker.solve(sc_id, decoder_tensor)
+        result = worker.solve(sc_id, decoder_tensor, feasible_plan=feasible_plan)
         return result
 
     def evaluate_scenario(
@@ -389,19 +445,44 @@ class PipelineRunner:
             result.time_ebm_sampling = time.perf_counter() - t0
             result.n_samples = len(all_samples)
 
-            # Step 4+5: Decoder + LP for each sample
+            # Step 4+5: Decoder + LP (or GNN dispatch) for each sample
             t0 = time.perf_counter()
             lp_results = []
             for sample_idx, u_bin in enumerate(all_samples):
                 try:
-                    # Decoder
-                    plan, physics = self._run_decoder(u_bin, scenario_path)
+                    if self.config.use_gnn_dispatch and self.gnn_predictor is not None:
+                        # GNN dispatch: replaces decoder + LP entirely
+                        gnn_result = self._run_gnn_dispatch(
+                            u_bin, zone_emb, n_zones, sc_id,
+                        )
+                        lp_results.append(gnn_result)
+                        result.all_objectives.append(gnn_result.objective_value)
+                        result.all_stages.append('gnn_dispatch')
+                        continue
+                    elif self.config.skip_decoder:
+                        # Ablation: pass raw EBM binaries directly to LP
+                        lp_tensor = (u_bin > 0.5).float()  # ensure crisp 0/1
+                        lp_result = self._run_lp_worker(
+                            lp_tensor, scenario_path, scenario_path.parent,
+                            feasible_plan=None,
+                        )
+                    elif self.config.decoder_passthrough:
+                        # Ablation: decoder builds warm-start but keeps EBM binaries
+                        plan, physics = self._run_decoder_passthrough(u_bin, scenario_path)
+                        lp_tensor = (u_bin > 0.5).float()  # EBM binaries for LP fixing
+                        lp_result = self._run_lp_worker(
+                            lp_tensor, scenario_path, scenario_path.parent,
+                            feasible_plan=plan,
+                        )
+                    else:
+                        # Decoder
+                        plan, physics = self._run_decoder(u_bin, scenario_path)
 
-                    # Convert FeasiblePlan to tensor [Z, T, F] for LP worker
-                    decoder_tensor = plan.to_tensor()  # [Z, T, 7]
+                        # Convert FeasiblePlan to tensor [Z, T, F] for LP worker
+                        decoder_tensor = plan.to_tensor()  # [Z, T, 7]
 
-                    # LP Worker
-                    lp_result = self._run_lp_worker(decoder_tensor, scenario_path, scenario_path.parent)
+                        # LP Worker (warm-started from decoder plan)
+                        lp_result = self._run_lp_worker(decoder_tensor, scenario_path, scenario_path.parent, feasible_plan=plan)
                     lp_results.append(lp_result)
 
                     result.all_objectives.append(lp_result.objective_value)

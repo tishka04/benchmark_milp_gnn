@@ -17,6 +17,10 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any, Set as TypingSet
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.ebm.feasibility import FeasiblePlan
 
 from pyomo.environ import (
     value, SolverFactory, Var, Binary, Constraint, Set,
@@ -68,6 +72,9 @@ class TwoStageResult:
     slack_repair_20: float = 0.0
     slack_repair_100: float = 0.0
     slack_full_soft: float = 0.0
+    
+    # Warm-start diagnostics
+    warm_started: bool = False
     
     # For analysis
     critical_indices: List[Tuple[str, int]] = field(default_factory=list)
@@ -136,6 +143,10 @@ class LPWorkerTwoStage:
         if self.solver is None or not self.solver.available():
             raise RuntimeError("No LP/MILP solver available")
         
+        # Enable warm-start so APPSI HiGHS passes .value to setSolution()
+        if hasattr(self.solver, 'config') and hasattr(self.solver.config, 'warmstart'):
+            self.solver.config.warmstart = True
+        
         if self.verbose:
             print(f"✓ LPWorkerTwoStage initialized")
             print(f"  Solver: {self.solver_name}")
@@ -202,6 +213,110 @@ class LPWorkerTwoStage:
                 targets['dr_active'][(zone, t)] = float(decoder_np[z_idx, t, 4] > 0.5)
         
         return targets
+
+    def _warm_start_from_plan(
+        self,
+        model,
+        plan: 'FeasiblePlan',
+        zone_names: List[str],
+    ) -> int:
+        """
+        Set .value on Pyomo variables from the decoder's FeasiblePlan so that
+        APPSI HiGHS can pass them to highspy.setSolution() for a crash basis.
+
+        Requires self.solver.config.warmstart = True to take effect.
+
+        Optimised for minimal Python overhead:
+        - All tensors converted to numpy up-front (one C++ call per field)
+        - One hasattr check per variable family, not per (zone, time)
+        - Derived variables (spill, overgen) skipped to avoid value() calls
+
+        Returns the number of variables successfully initialised.
+        """
+        Z_plan, T_plan = plan.thermal_dispatch.shape
+        Z = min(Z_plan, len(zone_names))
+        T = T_plan
+
+        # Pre-convert all tensors to numpy in one batch
+        field_map = {
+            'p_thermal':       plan.thermal_dispatch[:Z, :T].cpu().numpy(),
+            'p_nuclear':       plan.nuclear_dispatch[:Z, :T].cpu().numpy(),
+            'p_solar':         plan.solar_dispatch[:Z, :T].cpu().numpy(),
+            'p_wind':          plan.wind_dispatch[:Z, :T].cpu().numpy(),
+            'b_charge':        plan.battery_charge[:Z, :T].cpu().numpy(),
+            'b_discharge':     plan.battery_discharge[:Z, :T].cpu().numpy(),
+            'b_soc':           plan.battery_soc[:Z, 1:T + 1].cpu().numpy(),
+            'pumped_charge':   plan.pumped_charge[:Z, :T].cpu().numpy(),
+            'pumped_discharge':plan.pumped_discharge[:Z, :T].cpu().numpy(),
+            'pumped_level':    plan.pumped_level[:Z, 1:T + 1].cpu().numpy(),
+            'h_release':       plan.hydro_dispatch[:Z, :T].cpu().numpy(),
+            'dr_shed':         plan.demand_response[:Z, :T].cpu().numpy(),
+            'unserved':        plan.unserved_energy[:Z, :T].cpu().numpy(),
+        }
+
+        # Build (pyomo_var, np_array) pairs — one hasattr per family
+        zt_vars = [
+            (getattr(model, name), data)
+            for name, data in field_map.items()
+            if hasattr(model, name)
+        ]
+
+        # Tight inner loop — only dict lookup + float assignment
+        n_set = 0
+        for z_idx in range(Z):
+            zone = zone_names[z_idx]
+            for t in range(T):
+                idx = (zone, t)
+                for var_obj, data in zt_vars:
+                    try:
+                        v = var_obj[idx]
+                        if v.is_fixed():
+                            continue
+                        fval = float(data[z_idx, t])
+                        if fval < 0.0:
+                            fval = 0.0
+                        ub = v.ub
+                        if ub is not None and fval > ub:
+                            fval = ub
+                        v.value = fval
+                        n_set += 1
+                    except (KeyError, IndexError):
+                        pass
+
+        # Net import / export (time-indexed, system-level)
+        has_imp = hasattr(model, 'net_import')
+        has_exp = hasattr(model, 'net_export')
+        if has_imp or has_exp:
+            np_net = plan.net_import[:Z, :T].cpu().numpy()
+            for t in range(T):
+                col = np_net[:, t]
+                if has_imp:
+                    try:
+                        v = model.net_import[t]
+                        if not v.is_fixed():
+                            fval = max(0.0, float(col[col > 0].sum()))
+                            if v.ub is not None and fval > v.ub:
+                                fval = v.ub
+                            v.value = fval
+                            n_set += 1
+                    except (KeyError, IndexError):
+                        pass
+                if has_exp:
+                    try:
+                        v = model.net_export[t]
+                        if not v.is_fixed():
+                            fval = max(0.0, float((-col[col < 0]).sum()))
+                            if v.ub is not None and fval > v.ub:
+                                fval = v.ub
+                            v.value = fval
+                            n_set += 1
+                    except (KeyError, IndexError):
+                        pass
+
+        if self.verbose:
+            print(f"    Warm-start: set {n_set} variable values from decoder plan")
+
+        return n_set
 
     def _fix_all_binaries(self, model, targets: Dict, eps: float = 1e-6, only_u_thermal: bool = False):
         """
@@ -914,10 +1029,27 @@ class LPWorkerTwoStage:
         
         return flips
 
-    def solve(self, scenario_id: str, decoder_output: torch.Tensor) -> TwoStageResult:
+    def solve(
+        self,
+        scenario_id: str,
+        decoder_output: torch.Tensor,
+        feasible_plan: 'FeasiblePlan | None' = None,
+        max_stages: int = 5,
+    ) -> TwoStageResult:
         """
         Solve with two-stage approach: hard-fix LP → soft repair fallback.
-        
+
+        Args:
+            scenario_id: Scenario identifier.
+            decoder_output: Binary tensor [Z, T, 7] from EBM/decoder.
+            feasible_plan: Optional FeasiblePlan from the decoder containing
+                continuous dispatch values.  When provided, these are used to
+                warm-start the LP solver at each stage, significantly reducing
+                simplex iterations (especially for Stage 1 hard-fix LP).
+            max_stages: Maximum number of stages to attempt (1-5).
+                Use max_stages=2 for fast silver training (skip expensive
+                stages 3-5).  Default 5 = full cascade.
+
         Returns TwoStageResult with comprehensive logging.
         """
         total_start = time.time()
@@ -968,6 +1100,13 @@ class LPWorkerTwoStage:
                 print(f"    Stage 1 has {unfixed_count} unfixed binaries (MILP): {unfixed_names[:5]}...")
             
             self._relax_slack_bounds(model1)
+            
+            # Warm-start Stage 1 from decoder continuous dispatch.
+            # APPSI HiGHS reads .value attrs and calls setSolution() for a
+            # crash basis when config.warmstart=True.
+            if feasible_plan is not None:
+                self._warm_start_from_plan(model1, feasible_plan, zone_names)
+                result.warm_started = True
             
             res1, time1, has1 = self._solve_with_timeout(model1, self.time_limits['hard_fix'])
             result.time_hard_fix = time1
@@ -1061,6 +1200,25 @@ class LPWorkerTwoStage:
             # ================================================================
             # STAGE 3: REPAIR-100 (K=100 critical variables)
             # ================================================================
+            if max_stages < 3:
+                # Early exit: return best available result from stages 1-2
+                best_slack = min(result.slack_hard_fix, result.slack_repair_20)
+                if has1 or has2:
+                    best_model = model2 if (has2 and result.slack_repair_20 <= result.slack_hard_fix) else model1
+                    best_stage = SolveStage.REPAIR_20 if best_model is model2 else SolveStage.HARD_FIX
+                    result.status = 'feasible_early'
+                    result.stage_used = best_stage
+                    result.objective_value = self._get_true_objective(best_model)
+                    result.solve_time = time.time() - total_start
+                    result.continuous_vars = self._extract_solution(best_model)
+                    result.slack_used = best_slack
+                    result.message = f"Early exit (max_stages={max_stages}): slack={best_slack:.1f}"
+                else:
+                    result.status = 'infeasible'
+                    result.solve_time = time.time() - total_start
+                    result.message = f"Stages 1-2 failed (max_stages={max_stages})"
+                return result
+            
             if self.verbose:
                 print(f"  Stage 3: Repair-100...")
             

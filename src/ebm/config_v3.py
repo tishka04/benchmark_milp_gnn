@@ -108,6 +108,7 @@ class EBMv3Config:
     silver_preference_margin: float = 0.1   # Margin for preference loss
     silver_lambda_cd: float = 1.0           # Weight of CD loss in silver
     silver_lambda_pref: float = 0.5         # Weight of preference loss in silver
+    silver_pref_warmup_epochs: int = 5      # Ramp lambda_pref from 0 → full over N epochs
 
     # ── LP Worker config (silver) ──
     lp_solver: str = "appsi_highs"

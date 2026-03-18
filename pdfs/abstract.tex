@@ -1,0 +1,41 @@
+\documentclass[12pt]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[a4paper, margin=3cm]{geometry}
+
+\title{Coordinating Multilayer Power System Flexibility:\\
+A Hybrid MILP--GNN--EBM Framework for Large-Scale Scenario Exploration}
+\author{Th\'eotime Coudray* \\ St\'ephane Goutte*\\[2pt]
+\normalsize *Universit\'e de Versailles Saint-Quentin-en-Yvelines (UVSQ), UMI SOURCE}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+The large-scale integration of variable renewable energy, storage, and demand response
+requires coordinating flexibility across multiple spatial layers and temporal scales.
+Operators and planners increasingly need to explore thousands of what-if scenarios---spanning
+extreme weather, topology changes, and evolving flexibility portfolios---rather than relying on
+single-shot optimisation. Mixed-Integer Linear Programming (MILP) delivers rigorous and auditable
+solutions to such problems, but repeated solves become computationally prohibitive as scenario
+volume and model complexity grow. This paper proposes a hybrid MILP--GNN--EBM methodology designed
+for near-real-time scenario exploration. A synthetic scenario generator produces diverse
+power-system instances, ranked by an
+ex-ante criticality index combining physical stress and combinatorial hardness. A multi-layer MILP
+oracle solves each instance to produce optimal binary commitment and continuous dispatch labels.
+Scenarios are then projected onto heterogeneous temporal graphs and encoded by a self-supervised
+Hierarchical Temporal Encoder into compact topology-aware embeddings. Conditioned on these
+embeddings, an Energy-Based Model learns an energy landscape over binary activation decisions
+and generates diverse binary candidates. A feasibility decoder repairs residual constraint violations, and a two-stage LP worker recovers
+the optimal continuous dispatch, guaranteeing complete and economically meaningful operating plans.
+Evaluation on 300 out-of-sample scenarios across three criticality families shows that the
+pipeline's advantage scales positively with scenario difficulty. On high-criticality instances, the pipeline achieves a median cost gap of
+$-0.04\%$ relative to the MILP, with a median speedup of $11.5\times$ on the 41 scenarios
+where the MILP hits its time limit.
+\end{abstract}
+
+\end{document}
