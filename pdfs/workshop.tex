@@ -32,6 +32,7 @@
 \usepackage{xcolor}
 \usepackage{array}
 \usepackage{hyperref}
+\usepackage{natbib}
 
 \newcommand{\highlight}[1]{\textcolor{powOrange}{\textbf{#1}}}
 
@@ -43,7 +44,7 @@
 \subtitle{A Hybrid MILP--GNN--EBM Framework\\for Large-Scale Scenario Exploration}
 \author{Th\'eotime Coudray \and St\'ephane Goutte}
 \institute{UVSQ -- UMI SOURCE -- Projet PowDev}
-\date{Workshop PowDev -- 2025}
+\date{Workshop PowDev -- March 2026}
 
 \begin{document}
 
@@ -136,7 +137,7 @@
 \Large
 \textit{Can a hybrid \highlight{MILP--GNN--EBM} methodology enable\\[6pt]
 \highlight{near-real-time exploration} of multi-scale flexibility scenarios\\[6pt]
----and remain effective as scenarios become \highlight{increasingly complex}?}
+and remain effective as scenarios become \highlight{increasingly complex}?}
 \end{center}
 \vspace{1em}
 \begin{columns}[T]
@@ -184,7 +185,7 @@ Each scenario $s = (\mathcal{G}, \mathcal{A}, \pi, \tau, c, \xi)$:
 \begin{enumerate}
   \item \textbf{Budget guard} -- rejects intractable
   \item \textbf{LHS + $k$-center} -- max diversity
-  \item \textbf{Criticality index}\\$\mathrm{Crit}(s) = \alpha\,\mathrm{Stress} + (1{-}\alpha)\,\mathrm{Hard}$
+  \item \textbf{Criticality index \applink{app:L}{App.~L: Criticality}}\\$\mathrm{Crit}(s) = \alpha\,\mathrm{Stress} + (1{-}\alpha)\,\mathrm{Hard}$
 \end{enumerate}
 \end{column}
 \begin{column}{0.53\textwidth}
@@ -192,16 +193,14 @@ Each scenario $s = (\mathcal{G}, \mathcal{A}, \pi, \tau, c, \xi)$:
 \vspace{4em}
 \includegraphics[width=\textwidth]{scenario_paper_figure.png}
 {\footnotesize{Two illustrative realizations of the scenario generator.}}
+\vspace{0.1em}
+\applink{app:W}{App.~W: Simple}
+\applink{app:X}{App.~X: Critical}
 \vspace{4em}
 
 {\tiny Low-criticality (left) vs.\ high-criticality (right): capacity portfolios and demand profiles.}
 \end{column}
 \end{columns}
-\vspace{0.2em}
-\applink{app:L}{App.~L: Criticality}
-\applink{app:W}{App.~W: Scenarios}
-\applink{app:X}{App.~X: Simple}
-\applink{app:Y}{App.~Y: Critical}
 \end{frame}
 
 \begin{frame}{Block 2: Multi-Scale MILP Oracle}
@@ -220,7 +219,7 @@ Coordinates all flexibility resources:
 \end{itemize}
 \vspace{0.3em}
 \textbf{Objective:} Minimise total cost\\
-{\small $\min_{u,x}\; C^{\mathrm{gen}} + C^{\mathrm{su}} + C^{\mathrm{dr}} + C^{\mathrm{uns}} + C^{\mathrm{spl}} + C^{\mathrm{sto}} + C^{\mathrm{imp}} + C^{\mathrm{ovg}}$}
+{\small $\min_{u,x}\; C^{\mathrm{gen}} + C^{\mathrm{su}} + C^{\mathrm{dr}} + C^{\mathrm{uns}} + C^{\mathrm{spl}} + C^{\mathrm{sto}} + C^{\mathrm{imp}} + C^{\mathrm{ovg}}$} \applink{app:A}{App.~A: Objective}
 \vspace{0.3em}
 
 \textbf{9 constraint families}\\
@@ -232,24 +231,23 @@ Coordinates all flexibility resources:
 \begin{itemize}
   \item \highlight{Binary variables} $u$: commitment, modes -- the \emph{hard} decisions
   \item \textbf{Continuous variables} $x$: dispatch, SOC, flows -- recovered later by LP
+  \item \applink{app:B}{App.~B: Variables}
 \end{itemize}
 \vspace{0.4em}
 \textbf{Label quality:}
 \begin{itemize}
   \item \textcolor{powGreen}{\textbf{Gold}}: solved to optimality (4,388)
   \item \textcolor{powOrange}{\textbf{Silver}}: best incumbent at time limit (612)
-  \item \applink{app:Y}{Dispatch comparison}
+  \item \applink{app:Y}{App.~Y: Dispatch comparison}
 \end{itemize}
-\vspace{0.4em}
+\vspace{0.2em}
 \textbf{Scale:} 5,000 training scenarios\\
-$\sim$45k--139k variables per instance\\
-Solve time: seconds to hours
+$\sim$45k--139k variables per instance
+\applink{app:C}{App.~C: Constraints}
+
 \end{column}
 \end{columns}
-\vspace{0.1em}
-\applink{app:A}{App.~A: Objective}
-\applink{app:B}{App.~B: Variables}
-\applink{app:C}{App.~C: Constraints}
+
 \end{frame}
 
 \begin{frame}{Block 3: Graph Builder \& Hierarchical Temporal Encoder}
@@ -271,6 +269,8 @@ Solve time: seconds to hours
 \end{itemize}
 \vspace{0.2em}
 \textbf{No MILP solution needed} $\to$ usable at inference
+\applink{app:AA}{App.~AA: Graph}
+\applink{app:AB}{App.~AB: Temporal}
 \end{column}
 \begin{column}{0.48\textwidth}
 \textbf{Hierarchical Temporal Encoder (HTE):}
@@ -292,10 +292,6 @@ Output: $h \in \mathbb{R}^{Z \times T \times 128}$\\
 {\scriptsize 3.2M params, $\sim$8h training on A100}
 \end{column}
 \end{columns}
-\vspace{0.1em}
-\applink{app:W}{App.~W: Scenarios}
-\applink{app:AA}{App.~AA: Graph}
-\applink{app:AB}{App.~AB: HTE}
 \end{frame}
 
 \begin{frame}{Block 4: Energy-Based Model \& Langevin Sampler}
@@ -391,21 +387,20 @@ Progressive repair: hard-fix $\to$ repair-20 $\to$ repair-100 $\to$ full-soft $\
 \end{columns}
 \vspace{0.1em}
 \applink{app:G}{App.~G: LP stages}
-\applink{app:Y}{App.~Y: Dispatch}
 \end{frame}
 
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Results}
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\begin{frame}{Results: Central Divergence}
+\begin{frame}{Main Results}
 \hypertarget{main:central}{}
 \centering
-\includegraphics[width=0.92\textwidth]{fig14_central_divergence.png}
+\includegraphics[width=0.92\textwidth]{fig1_solve_time_cost_gap_speedup.png}
 
-{\scriptsize (A) Solve time vs complexity: MILP (red) vs pipeline (green). (B) Speedup vs criticality. (C) Cost gap envelope.}
+{\scriptsize (A) Pipeline vs MILP solve time (log--log; dashed = parity). (B) Cost gap vs criticality. (C) Speedup vs criticality.}
 
-\applink{app:P}{App.~P: Solve time}
+\applink{app:P}{App.~P: Central Divergence}
 \applink{app:T}{App.~T: Complexity}
 \end{frame}
 
@@ -526,19 +521,21 @@ Full-soft (\%) & 6 & 53 \\
 
 \begin{columns}[T]
 \begin{column}{0.48\textwidth}
+\vspace{0.2em}
 \textbf{\textcolor{powGreen}{Good news:}}
 \begin{itemize}
-  \item 100\% faster (median $5.4\times$, range $3.9$--$9.3\times$)
-  \item 100\% feasible, near-zero slack
-  \item 48\% hard-fix (EBM transfers well)
+  \item {\scriptsize100\% faster (median $5.4\times$, range $3.9$--$9.3\times$)}
+  \item {\scriptsize 100\% feasible, near-zero slack}
+  \item {\scriptsize 48\% hard-fix (EBM transfers well)}
 \end{itemize}
 \end{column}
 \begin{column}{0.48\textwidth}
+\vspace{0.2em}
 \textbf{\textcolor{powRed}{Trade-off:}}
 \begin{itemize}
-  \item Cost gap 119.6\% (EBM under-represented)
-  \item MILP also returns sub-optimal incumbents
-  \item Feasible plans in $<$4 min even OOD
+  \item {\scriptsize Cost gap 119.6\% (EBM under-represented)}
+  \item {\scriptsize MILP also returns sub-optimal incumbents}
+  \item {\scriptsize Feasible plans in $<$4 min even OOD}
 \end{itemize}
 \end{column}
 \end{columns}
@@ -547,13 +544,6 @@ Full-soft (\%) & 6 & 53 \\
 \applink{app:K}{App.~K: Failure modes}
 \end{frame}
 
-\begin{frame}{OOD: Robustness Analysis}
-\hypertarget{main:robust}{}
-\centering
-\includegraphics[width=0.92\textwidth]{fig15_robustness_analysis.png}
-
-{\scriptsize Robustness across extreme-criticality scenarios: solve time, cost gap, and pipeline timing.}
-\end{frame}
 
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
@@ -911,7 +901,7 @@ Binary vars & Cost gap & $-0.030$ & n.s. \\
 \end{tabular}
 }
 \vspace{0.3em}
-{\scriptsize Key: cost gap is \emph{uncorrelated} with complexity---no systematic degradation.}
+{\\\scriptsize Key: cost gap is \emph{uncorrelated} with complexity---no systematic degradation.}
 \backlink{main:conclusion}{Conclusion}
 \end{frame}
 
@@ -919,9 +909,6 @@ Binary vars & Cost gap & $-0.030$ & n.s. \\
 \hypertarget{app:K}{}
 \centering
 \includegraphics[width=\textwidth, height=0.8\textheight, keepaspectratio]{fig12_failure_modes.png}
-
-{\scriptsize (A) Cost gap vs MILP solve time. (B) Cost gap by LP stage. (C) Speedup vs system size. (D) Extreme failures ($>$100\%) vs normal.}
-\vspace{0.2em}
 
 Crossover at $\sim$30\,s ($\approx$ criticality 0.40). $\Rightarrow$ Natural hybrid routing strategy.
 \backlink{main:ood}{Results: OOD}
@@ -944,6 +931,8 @@ $\mathrm{Crit}(s) = \alpha\,\mathrm{Stress}(s) + (1-\alpha)\,\mathrm{Hard}(s)$
   \item[A6] Peak/firm capacity ratio
   \item[A7--A9] Flexibility margins (inverse)
   \item[A10--A12] Spatial tension
+  \vspace{0.5em}
+  \item[] {\scriptsize All computable ex ante (no MILP solve). Normalised to $[0,1]$ via min-max.}
 \end{enumerate}
 \end{column}
 \begin{column}{0.48\textwidth}
@@ -959,12 +948,10 @@ $\mathrm{Crit}(s) = \alpha\,\mathrm{Stress}(s) + (1-\alpha)\,\mathrm{Hard}(s)$
   \item[B8] SOC tightness
   \item[B9] Interconnection density
   \item[B10] Network heterogeneity
+  \item[] \backlink{main:scengen}{Block 1: Scenarios}
 \end{enumerate}
 \end{column}
 \end{columns}
-\vspace{0.2em}
-{\scriptsize All computable ex ante (no MILP solve). Normalised to $[0,1]$ via min-max.}
-\backlink{main:scengen}{Block 1: Scenarios}
 \end{frame}
 
 \begin{frame}{App.\ M: Persona Definitions}
@@ -1044,12 +1031,12 @@ Math & B1--10 (all), A5, A9 & 0.20 & MILP hard. \\
 
 % ---------- Additional figure appendices ----------
 
-\begin{frame}{App.\ P: Solve Time, Cost Gap \& Speedup}
+\begin{frame}{App.\ P: Solve Time, Cost Gap}
 \hypertarget{app:P}{}
 \centering
-\includegraphics[width=0.92\textwidth]{fig1_solve_time_cost_gap_speedup.png}
+\includegraphics[width=0.92\textwidth]{fig14_central_divergence.png}
 
-{\scriptsize (A) Pipeline vs MILP solve time (log--log; dashed = parity). (B) Cost gap vs criticality. (C) Speedup vs criticality with linear regression.}
+{\scriptsize (A) Solve time vs complexity: MILP (red) vs pipeline (green). (B) Speedup vs criticality. (C) Cost gap envelope.}
 \backlink{main:central}{Central Divergence}
 \end{frame}
 
@@ -1093,8 +1080,6 @@ Math & B1--10 (all), A5, A9 & 0.20 & MILP hard. \\
 \hypertarget{app:U}{}
 \centering
 \includegraphics[width=0.92\textwidth]{fig11_perfamily_dashboard.png}
-
-{\scriptsize (A) Cost gap boxplots. (B) Speedup boxplots. (C) Timing breakdown. (D) LP stage distribution. (E) Cost gap vs size. (F) Quality tolerance fractions.}
 \backlink{main:families}{Results: Families}
 \end{frame}
 
@@ -1103,7 +1088,6 @@ Math & B1--10 (all), A5, A9 & 0.20 & MILP hard. \\
 \centering
 \includegraphics[width=0.92\textwidth]{fig1_persona_dashboard.png}
 
-{\scriptsize (A) Solve time distribution. (B) Cost gap distribution. (C) Speedup distribution. (D) Pipeline vs MILP time (log--log). (E) MILP time-limit rate. (F) LP stage distribution.}
 \backlink{main:personas}{Results: Personas}
 \end{frame}
 
@@ -1132,7 +1116,7 @@ Math & B1--10 (all), A5, A9 & 0.20 & MILP hard. \\
 \includegraphics[width=0.92\textwidth, height=0.78\textheight, keepaspectratio]{dispatch_comparison.png}
 
 {\scriptsize Side-by-side dispatch comparison: low (right) criticality vs. high (right) criticality. Resource stacking and temporal dynamics.}
-\backlink{main:recon}{Block 5: Recon.}
+\backlink{main:milp}{Block 2: MILP.}
 \end{frame}
 
 \begin{frame}{App.\ Z: Climate Stress Use Case (Perspectives)}
@@ -1144,22 +1128,32 @@ Math & B1--10 (all), A5, A9 & 0.20 & MILP hard. \\
 \backlink{main:persp}{Perspectives}
 \end{frame}
 
+
 \begin{frame}{App.\ AA: Heterogeneous Graph Construction}
 \hypertarget{app:AA}{}
 \centering
 \includegraphics[width=0.92\textwidth, height=0.78\textheight, keepaspectratio]{fig01_graph_overview.png}
 
-{\scriptsize Overview of the heterogeneous multi-layer graph: 5 node types (nation, region, zone, asset, weather) and 11 edge types (7 spatial + 4 temporal).}
+{\scriptsize Overview of the heterogeneous multi-layer graph.}
 \backlink{main:hte}{Block 3: Graph \& HTE}
 \end{frame}
 
-\begin{frame}{App.\ AB: Hierarchical Temporal Encoder}
+\begin{frame}{App.\ AB: Temporal Graph}
 \hypertarget{app:AB}{}
 \centering
 \includegraphics[width=0.92\textwidth, height=0.78\textheight, keepaspectratio]{fig02_temporal_overview.png}
 
-{\scriptsize Three-phase HTE architecture: bottom-up aggregation, temporal Transformer at nation level, and top-down broadcast with skip connections.}
+{\scriptsize Temporal structure of a given zone over time.}
 \backlink{main:hte}{Block 3: Graph \& HTE}
+
+\end{frame}
+
+\begin{frame}[allowframebreaks]{References}
+    \footnotesize
+    \renewcommand{\refname}{} % removes inner "References"
+    \nocite{*}
+    \bibliographystyle{apalike}
+    \bibliography{MILP-GNN}
 \end{frame}
 
 \end{document}

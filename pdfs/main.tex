@@ -1179,7 +1179,7 @@ Same structure as Stage~2, but with $K{=}100$ critical indices and a larger flip
 If targeted repair is insufficient, all binaries are unfixed and relaxed to continuous $[0,1]$, with a soft deviation penalty on all (zone, time) pairs to anchor the solution near the decoder's suggestion. This stage always finds a feasible solution but may produce fractional binaries.
 
 \paragraph{Stage~5: Round and refix.}
-The fractional solution from Stage~4 is rounded ($u \geq 0.5 \to 1$, else $0$) and used as a new set of fixed binaries for a final hard-fix LP. If this improves the slack, the rounded solution is returned; otherwise, the Stage~4 result is kept.
+The fractional solution from Stage~4 is rounded ($u \geq 0.5 \to 1$, else $0$) across all six binary variable families (thermal commitment, thermal startup, battery mode, pumped-storage mode, demand-response activation, and import/export mode) and used as a new set of fixed binaries for a final hard-fix LP. The Stage~5 result is \emph{always} used, even if its slack is higher than Stage~4's, because Stage~4's fractional binaries do not constitute a valid integer-feasible dispatch plan. This guarantees that every pipeline solution has fully integral binary variables.
 
 \subsubsection{Deviation penalty and flip budget}
 

@@ -1,0 +1,137 @@
+﻿# scenario_space.yaml
+global:
+  seed: 1234
+  horizon_hours: 24
+  dt_minutes: 60
+  target_scenarios: 3000
+  max_scenarios_per_hour_per_core: 3   # calibration locale
+  cpu_cores: 12
+  max_compute_hours: 168
+
+structure:
+  regions: [2, 13]
+  zones_per_region: [2, 13]
+  intertie_density: [0.2, 0.6]
+  neighbor_nations: [1, 5]
+
+assets:
+  thermal_per_zone: [0, 2]
+  solar_per_zone: [0, 5]
+  wind_per_zone: [0, 4]
+  battery_per_zone: [0, 2]
+  dr_per_zone: [0, 3]
+  nuclear_per_region: [0, 2]
+  hydro_reservoir_per_region: [0, 4]
+  hydro_ror_per_zone: [0, 3]
+  hydro_pumped_per_region: [0, 2]
+
+unit_capacities:
+  thermal_unit_mw: [100, 450]
+  nuclear_unit_mw: [450, 1600]
+  solar_unit_mw: [30, 500]
+  wind_unit_mw: [50, 300]
+  battery_power_unit_mw: [20, 100]
+  hydro_reservoir_power_unit_mw: [150, 400]
+  hydro_reservoir_energy_hours: [4.0, 10.0]
+  hydro_ror_unit_mw: [40, 100]
+  pumped_power_unit_mw: [100, 400]
+  pumped_energy_hours: [6.0, 12.0]
+
+transport_capacities:
+  transmission_base_mw: [750, 4500]
+  import_export_base_mw: [1500, 6000]
+
+economics_policy:
+  co2_price_eur_per_t: [35, 250]
+  price_cap_eur_per_mwh: [500, 3000]
+  cross_border_policy: ["allow", "cap", "block"]
+  import_export_caps_factor: [0.4, 1.6]
+
+techno_params_scalers:
+  thermal_marg_cost: [2, 10]              # additional variable O&M cost adders
+  thermal_ramp_pct: [0.2, 0.95]
+  battery_roundtrip_eff: [0.8, 0.94]
+  battery_e_to_p_hours: [1.0, 6.0]
+  dr_max_shed_share: [0.05, 0.3]
+  dr_duration_hours: [1, 6]
+  dr_num_blocks: [2, 4]                   # number of tiered DR cost blocks
+  dr_rebound_decay: [0.01, 0.15]           # decay rate per timestep for DR rebound state
+  dr_rebound_tolerance: [0.1, 5]        # max remaining rebound energy at horizon end (MWh)
+  dr_max_events: [2, 10]                  # max number of DR activation events per zone
+  dr_min_duration: [1, 3]                 # min consecutive periods for DR event
+  dr_ramp_limit_factor: [0.25, 1]       # DR ramp limit as fraction of peak demand
+  hydro_reservoir_head_eff: [0.75, 0.95]
+  battery_initial_soc_fraction: [0.35, 0.65]
+  battery_final_soc_tolerance: [0.05, 0.2]
+  battery_self_discharge_per_hour: [0.0001, 0.002]
+  pumped_initial_level_fraction: [0.4, 0.7]
+  pumped_final_level_tolerance: [0.05, 0.18]
+  pumped_self_discharge_per_hour: [0.00005,0.0008]
+
+operation_costs:
+  thermal_fuel_eur_per_mwh: [45, 85]
+  nuclear_fuel_eur_per_mwh: [16, 28]
+  thermal_startup_cost_eur: [1500, 8000]          # Cold start cost per thermal unit
+  nuclear_startup_cost_eur: [15000, 50000]        # Cold start cost per nuclear unit
+  demand_response_cost_eur_per_mwh: [80, 500]
+  value_of_lost_load_eur_per_mwh: [6000, 12000]
+  renewable_spill_cost_eur_per_mwh: [1, 15]
+  hydro_spill_cost_eur_per_mwh: [5, 20]
+  overgen_spill_cost_eur_per_mwh: [10, 500]
+  battery_cycle_cost_eur_per_mwh: [50, 125]
+  pumped_cycle_cost_eur_per_mwh: [45, 90]
+
+exogenous:
+  weather_profiles: ["calm_winter", "stormy_winter", "sunny_summer", "overcast_summer", "mixed"]
+  weather_spread_intensity: [0.5, 1.5]
+  demand_profiles: ["wkday_peak", "wkend_flat", "cold_snap", "heatwave", "shoulder"]
+  demand_scale_factor: [0.65, 1.35]
+  inflow_factor: [0.4, 1.7]
+  zone_profile_variants:
+    evening_peak: 0.28
+    double_peak: 0.16
+    office_peak: 0.20
+    industrial: 0.14
+    night_shift: 0.10
+    residential_morning: 0.12
+  zone_profile_mix_weight: [0.4, 0.8]
+  zone_profile_phase_shift_hours: [-2.5, 2.5]
+  zone_profile_noise_std: [0.02, 0.06]
+  zone_profile_curvature_exp: [0.9, 1.18]
+
+diversity:
+  selection_method: "greedy_cover"
+  cover_metric: [
+    # 0. Topologie 
+    "regions",
+
+    # 1. Stress Exogène (Le plus important)
+    "weather_profiles",       # Change la corrélation vent/solaire/demande
+    "demand_scale_factor",    # Change la marge de réserve système
+    "inflow_factor",          # Change la disponibilité hydro
+
+    # 2. Contrainte Réseau
+    "intertie_density",       # Change la congestion (Îlot vs Plaque de cuivre)
+    "cross_border_policy",    # Change la sécurité d'approvisionnement externe
+
+    # 3. Flexibilité Technique
+    "thermal_ramp_pct",       # Change la réactivité du thermique
+    "battery_e_to_p_hours",   # Change la nature du stockage (Puissance vs Énergie)
+
+    # 4. Signal Économique
+    "co2_price_eur_per_t"     # Change le merit order
+  ]
+  min_pairwise_distance: 0.35
+
+budget_guard:
+  max_vars_per_scenario: 150000
+  max_cons_per_scenario: 200000
+  max_binary_vars_per_scenario: 20000
+  mip_gap_target: [0.4, 1.5]
+  time_estimator:
+    base_intercept_sec: 180
+    per_1k_vars_sec: 12
+    per_1k_cons_sec: 15
+    per_1k_binary_sec: 50
+    branching_penalty: 1.2
+  reject_if_est_cpu_hours_gt: 2

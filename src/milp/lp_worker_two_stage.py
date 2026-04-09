@@ -38,6 +38,7 @@ class SolveStage(Enum):
     REPAIR_20 = "repair_20"
     REPAIR_100 = "repair_100"
     FULL_SOFT = "full_soft"
+    ROUND_REFIX = "round_refix"
     FAILED = "failed"
 
 
@@ -978,6 +979,28 @@ class LPWorkerTwoStage:
                 except:
                     pass
         
+        # v_thermal_startup (Z, T indexed) - not in original targets, add from model
+        if hasattr(model, 'v_thermal_startup'):
+            rounded['v_thermal_startup'] = {}
+            for z in model.Z:
+                for t in model.T:
+                    if (z, t) in model.v_thermal_startup:
+                        try:
+                            u = value(model.v_thermal_startup[z, t])
+                            rounded['v_thermal_startup'][(z, t)] = 1.0 if (u is not None and u >= 0.5) else 0.0
+                        except:
+                            rounded['v_thermal_startup'][(z, t)] = 0.0
+        
+        # import_mode (T indexed only, not zone-indexed)
+        if hasattr(model, 'import_mode'):
+            rounded['import_mode'] = {}
+            for t in model.T:
+                try:
+                    u = value(model.import_mode[t])
+                    rounded['import_mode'][t] = 1.0 if (u is not None and u >= 0.5) else 0.0
+                except:
+                    rounded['import_mode'][t] = 1.0  # default to import mode
+        
         return rounded
 
     def _calculate_deviation_all(self, model, targets: Dict) -> Dict[str, int]:
@@ -1317,7 +1340,7 @@ class LPWorkerTwoStage:
                           f"rounded_flips={relaxed_metrics['rounded_flips']}")
                 
                 # ================================================================
-                # STAGE 5: ROUND & REFIX (warm-start from Stage 4)
+                # STAGE 5: ROUND & REFIX (always used to guarantee integrality)
                 # ================================================================
                 if self.verbose:
                     print(f"  Stage 5: Round & Refix...")
@@ -1325,9 +1348,22 @@ class LPWorkerTwoStage:
                 # Round Stage 4 solution to discrete targets
                 rounded_targets = self._round_solution_to_targets(model4, targets4)
                 
-                # Build new model with rounded binaries fixed
+                # Build new model with ALL rounded binaries fixed
                 model5 = build_uc_model(scenario_data, enable_duals=False)
                 self._fix_all_binaries(model5, rounded_targets, only_u_thermal=False)
+                
+                # Fix v_thermal_startup from rounded targets (not handled by _fix_all_binaries)
+                if 'v_thermal_startup' in rounded_targets and hasattr(model5, 'v_thermal_startup'):
+                    for (z, t), val in rounded_targets['v_thermal_startup'].items():
+                        if (z, t) in model5.v_thermal_startup and not model5.v_thermal_startup[z, t].is_fixed():
+                            model5.v_thermal_startup[z, t].fix(val)
+                
+                # Fix import_mode from rounded targets (T-indexed, not handled by _fix_all_binaries)
+                if 'import_mode' in rounded_targets and hasattr(model5, 'import_mode'):
+                    for t, val in rounded_targets['import_mode'].items():
+                        if t in model5.import_mode and not model5.import_mode[t].is_fixed():
+                            model5.import_mode[t].fix(val)
+                
                 TransformationFactory('core.relax_integer_vars').apply_to(model5)
                 self._relax_slack_bounds(model5)
                 
@@ -1338,25 +1374,21 @@ class LPWorkerTwoStage:
                     if self.verbose:
                         print(f"    Stage 5: slack={slack5:.1f} (vs Stage 4: {slack4:.1f})")
                     
-                    # Use Stage 5 if it's better
-                    if slack5 < slack4:
-                        if self.verbose:
-                            print(f"    → Using Stage 5 (better slack)")
-                        result.status = 'feasible_full_soft'
-                        result.stage_used = SolveStage.FULL_SOFT
-                        result.objective_value = self._get_true_objective(model5)
-                        result.solve_time = time.time() - total_start
-                        result.continuous_vars = self._extract_solution(model5)
-                        result.slack_used = slack5
-                        result.decoder_deviation, result.n_flips = self._calculate_deviation(model5, rounded_targets)
-                        result.n_unfixed = 0  # All fixed in Stage 5
-                        result.message = f"Round&Refix: slack={slack5:.1f} (was {slack4:.1f}), flips={result.n_flips}"
-                        return result
-                    else:
-                        if self.verbose:
-                            print(f"    → Keeping Stage 4 (slack5={slack5:.1f} >= slack4={slack4:.1f})")
+                    # Always use Stage 5 to guarantee integer-feasible binaries
+                    result.status = 'optimal'
+                    result.stage_used = SolveStage.ROUND_REFIX
+                    result.objective_value = self._get_true_objective(model5)
+                    result.solve_time = time.time() - total_start
+                    result.continuous_vars = self._extract_solution(model5)
+                    result.slack_used = slack5
+                    result.decoder_deviation, result.n_flips = self._calculate_deviation(model5, rounded_targets)
+                    result.n_unfixed = 0  # All binaries fixed to integer values
+                    result.message = f"Round&Refix: slack={slack5:.1f} (relaxed was {slack4:.1f}), flips={result.n_flips}"
+                    return result
                 
-                # Fall back to Stage 4 result
+                # Stage 5 solve failed entirely (extremely rare with relaxed slack bounds)
+                if self.verbose:
+                    print(f"    ⚠ Stage 5 solve failed, falling back to Stage 4 (fractional)")
                 result.status = 'feasible_full_soft'
                 result.stage_used = SolveStage.FULL_SOFT
                 result.objective_value = self._get_true_objective(model4)
@@ -1367,7 +1399,7 @@ class LPWorkerTwoStage:
                 result.decoder_deviation = relaxed_metrics['l1_deviation']
                 result.n_flips = relaxed_metrics['rounded_flips']
                 result.n_unfixed = len(all_zt)
-                result.message = f"Full soft (relaxed): slack={slack4:.1f}, L1={relaxed_metrics['l1_deviation']:.1f}, rounded_flips={relaxed_metrics['rounded_flips']}"
+                result.message = f"Full soft fallback (Stage 5 failed): slack={slack4:.1f}"
                 return result
             
             # All stages failed

@@ -205,6 +205,7 @@ class LPOracle:
                     "repair_20": OracleStage.REPAIR,
                     "repair_100": OracleStage.REPAIR,
                     "full_soft": OracleStage.FULL_SOFT,
+                    "round_refix": OracleStage.FULL_SOFT,
                     "failed": OracleStage.FAILED,
                 }
                 stage = stage_map.get(result.stage_used.value, OracleStage.FAILED)
