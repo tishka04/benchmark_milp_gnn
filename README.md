@@ -1,224 +1,345 @@
-﻿# Multilayer MILP + GNN Benchmark
-
-This repository bundles three tightly coupled pieces:
-- a scenario generator that samples synthetic power-system cases;
-- a MILP-based unit commitment solver with optional reporting & plotting; and
-- utilities to transform solved scenarios into graph datasets for GNN pipelines.
-
-The code is pure Python (3.10 or newer recommended) built on top of [Pyomo](http://www.pyomo.org/) and the HiGHS LP/MIP solver. The sections below walk you through environment setup and the full workflow end to end.
-
-## 0. Prerequisites
-
-1. **Python**: 3.10+ with a working `python` executable on your PATH.
-2. **C/C++ toolchain**: not required, but having one helps if wheels fall back to source builds.
-3. **HiGHS solver**: Pyomo can delegate to a system binary or to the `highspy` Python wheel. The easiest path is:
-   ```bash
-   pip install highspy
-   ```
-   If you prefer an external binary, ensure the `highs` executable is discoverable via PATH and matches your platform.
-
-## 1. Environment setup
-
-```bash
-python -m venv .venv
-. .venv/Scripts/activate        # Windows PowerShell: .\.venv\Scripts\Activate.ps1
-pip install --upgrade pip
-pip install pyomo highspy numpy scipy pandas matplotlib pyarrow tqdm pyyaml torch
-```
-Optional extras:
-- `pip install hvplot` if you want richer plotting backends.
-- `pip install black ruff` if you plan to contribute code.
-- Install [PyTorch](https://pytorch.org/get-started/locally/) with the build that matches your platform if you prefer GPU acceleration.
-
-## 2. Repository layout primer
-
-```
-config/                  # Scenario-space configuration knobs
-outputs/                 # Generated scenarios, solve reports, dispatch CSVs, plots, etc.
-src/
-  generator/             # Scenario generator entry points
-  milp/                  # MILP model, single/batch runners, plotting helpers
-  gnn/                   # Graph dataset exporter, models, and training utilities
-```
-
-Keep everything relative to the project root (`benchmark/` in this checkout). All commands below assume you run them from that directory.
-
-## 3. Generate scenarios
-
-The quickest way to sample a new batch is the convenience wrapper:
-
-```bash
-python -m src.generator.run_generator -v v2 -o outputs/scenarios_v3
-```
-
-This reads `config/scenario_space.yaml` and writes JSON payloads plus a `manifest.json` under `outputs/scenarios_v1/`. You can customise behaviour by editing the YAML (e.g., horizon length, asset ranges) or by importing `generate_scenarios` from `src.generator.generator_v1` in your own script.
-
-Useful tips:
-- Re-run the generator with a different `outputs/<folder>` to keep multiple corpora side-by-side.
-- Set `scenario_space.global.target` to control how many scenarios to keep.
-- Inspect scenarios files with `python -m src.generator.inspect_scenarios outputs/scenarios_v1`.
-
-
-## Criticality-based Clustering analysis using HDBSCAN 
-```bash
-python -m src.analysis.criticality_index outputs/scenarios_v3 -a 0.6 --percentile-low 10 --percentile-high 90"
-```
-
-```bash
-python -m src.analysis.criticality_clustering outputs/scenarios_v3/criticality_results.json --min-cluster-size 30 --cluster-epsilon 0.5 --n-components 11
-```
-
-```bash
-python -m src.analysis.visualize_clusters outputs/scenarios_v3/criticality_results.json -o outputs/scenarios_v3/clusters_viz.png
-```
-
-## 4. Solve scenarios with the MILP
-
-### 4.1 Single scenario
-
-```bash
-python -m src.milp.run_milp outputs/scenarios_v2/scenario_00001.json --solver highs --tee --save-json outputs/scenarios_v2/reports/scenario_00001.json --plot --plot-dir outputs/scenarios_v2/plots
-```
-
-Flags of interest:
-- `--solver`: any Pyomo-registered solver (HiGHS by default).
-- `--tee`: stream solver output to the terminal.
-- `--save-json`: persist the full report (required later for the GNN exporter).
-- `--plot`: generate capacity & dispatch visualisations (requires matplotlib).
-- `--export-*`: dump time-series CSV/HDF files. HDF export needs pandas + pyarrow.
-
-Storage units (batteries and pumped hydro) incorporate cycle-throughput costs, per-step self-discharge, and end-of-horizon state-of-charge windows. Adjust the new `operation_costs.battery_cycle_cost_eur_per_mwh`, `operation_costs.pumped_cycle_cost_eur_per_mwh`, and `techno_params_scalers` storage fractions in `config/scenario_space.yaml` to explore alternative policies.
-
-### 4.2 Batch solving
-
-```bash
-python -m src.milp.batch_runner outputs/scenarios_v3 --solver highs --workers 4 --reports-dir outputs/scenarios_v3/reports --dispatch-dir outputs/scenarios_v3/dispatch_batch --plot --plots-dir outputs/scenarios_v3/plots --summary-json outputs/scenarios_v3/batch_summary.json --start-from 1
-```
-
-Notes:
-- You can mix files and glob patterns in the positional `inputs` (e.g., `outputs/scenarios_v1/scenario_000*.json`).
-- Any of `--reports-dir`, `--dispatch-dir`, `--hdf-dir`, or `--plot` triggers capture of high-resolution detail from the MILP.
-- `--workers N` toggles a `ProcessPoolExecutor`; keep an eye on RAM usage for large horizons.
-- The summary JSON aggregates success/failure counts, objective statistics, and cost totals for quick QA.
-
-Troubleshooting:
-- A `FAILED: 'solar_per_site'` message means the JSON predates the solar/wind split. Regenerate reports with the current loaderï¿½all legacy `res_per_site` cases are now auto-split.
-- If Pyomo says it cannot locate the solver, confirm `highspy` is installed or add the HiGHS binary folder to PATH.
-
-## 5. Build GNN graph datasets
-
-Once a scenario is solved and you have a detailed JSON report, convert it to an NPZ:
-
-```bash
-python -m src.gnn.graph_dataset \
-    outputs/scenarios_v1/scenario_00001.json \
-    outputs/scenarios_v1/reports/scenario_00001.json \
-    outputs/gnn/scenario_00001.npz
-```
-
-The exporter expects the report to include the `detail` payload (produced automatically when using `--save-json`, `--reports-dir`, `--dispatch-dir`, etc.). Each NPZ contains:
-- `node_static`: per-zone capacities (thermal, solar, wind, storage, demand-response, etc.).
-- `node_time`: stacked demand, solar & wind generation, hydro release/run-of-river output, storage charge/discharge traces, and import/export series.
-- `node_labels`: ground-truth dispatch & slack per timestep.
-- `edge_*`: topology and flows; `duals_*`: optional dual arrays from the LP relaxation.
-
-To convert an entire directory of scenario/report pairs in one shot:
-
-```bash
-python -m src.gnn.build_hetero_graph_dataset outputs/scenarios_v3 outputs/graphs/hetero_temporal_v3 --temporal
-```
-
-The command above mirrors scenario/report stems into `outputs/datasets/graphs`, emitting one compressed NPZ per solved case.
-
-## 6. Train GNN models
-
-With NPZ graph files in hand you can train the baseline dispatch predictors provided in `src/gnn`.
-
-1. **Prepare the dataset index**: Step 5 writes `dataset_index.json` beside the NPZs (default: `outputs/datasets/graphs/dataset_index.json`). If you store datasets elsewhere, update `data.index_path` in the training config accordingly.
-2. **Review the training config**: `config/gnn/baseline.yaml` lists the data splits, model backbone (`gcn`, `graphsage`, or `gat`), optimisation hyperparameters, feasibility decoder options, and metric settings. Paths are resolved relative to the repository root unless they start with `./` or `../`, in which case they are relative to the config file.
-   - To enable the dual-shaped loss discussed in the presentation, supply `loop.loss_params.dual_keys` (for example `['power_balance']`). The trainer will up-weight per-node errors in proportion to the magnitude of those LP duals; tune `dual_scale`, `dual_power`, `dual_clip`, or the new `balance_penalty_weight` / `pre_target_weight` terms to keep pre-decoder dispatch near feasibility.
-   - The validation checkpoint is chosen via a weighted score `0.45 * dispatch_error + 0.45 * violation_rate + 0.10 * |cost_gap|` using normalized dispatch MAE, so you can keep the best model on all three metrics.
-   - Fine-tune the feasibility decoder with `decoder.balance_iterations` (number of projection passes) and `decoder.dual_adjustment_scale` to control how aggressively the post-processor reacts to dual signals.
-   - The graph dataset now stores both the feasible dispatch and a “pre-decoder” target (slack removed) plus the implied correction. Rebuild NPZs after regenerating scenarios to populate these additional channels. The dispatch tensor covers thermal, nuclear, solar, wind, hydro release, demand response, storage charge/discharge, net imports, and unserved energy.
-   - Violation metrics and the feasibility decoder now take storage charge/discharge and net exchanges into account with the same balance equation as the MILP. Only the anchor zone carries non-zero net import/export features.
-3. **Launch training**:
-
-```bash
-python -m src.gnn.train --config config/gnn/baseline.yaml
-```
-
-During training the CLI logs epoch losses and validation metrics, writes the fully-resolved config to the run directory, and saves `best_model.pt`, `final_model.pt`, plus `test_metrics.json` under `outputs/gnn_runs/<run_name>/`. Use `--device cuda` (or set `loop.device: cuda` in the YAML) if you have a GPU-capable PyTorch install.
-
-
-
-Each run now also emits: 
-- `training_history.json` / `.csv`: epoch-level train/validation metrics with an `is_best` flag for the checkpointed model.
-- `training_step_losses.json` / `.csv`: mini-batch loss snapshots logged at the configured interval (default: every `log_every` steps).
-- `training_summary.json`: quick metadata overview (best epoch, total steps).
-- `test_metrics.json`: nested metric dictionaries (`value` + `details`) for easier downstream analysis.
-
-
-python -m src.gnn.train_temporal_hetero `
-    --data-dir outputs/graphs/hetero_temporal_v1 `
-    --model-type hgt `
-    --hidden-dim 1 `
-    --num-layers 1 `
-    --num-heads 1 `
-    --dropout 0.1 `
-    --epochs 2 `
-    --batch-size 1 `
-    --lr 0.0005 `
-    --train-split 0.7 `
-    --target-vars thermal,nuclear,solar,wind,hydro_release,hydro_ror,dr,battery_charge,battery_discharge,pumped_charge,pumped_discharge,net_import,unserved `
-
-
-### 6.1 Analyse GNN vs MILP performance
-
-
-
-Open `notebooks/performance_comparison.ipynb` to combine MILP scenario metadata with GNN predictions. The notebook loads speed-up estimates, cost gaps, and feasibility rates using the helpers in `src.analysis.performance`. Speed-up calculations now use the measured MILP solve time stored in each report (falling back to the historical estimates when needed). Update `RUN_DIR` if you want to compare a different experiment.
-
-
-
-### 6.2 Inspect training curves
-
-
-
-`notebooks/training_visualization.ipynb` reads the history files above and renders epoch-level and step-level diagnostics. If the notebook reports missing logs, re-run training with the updated pipeline to regenerate them.
-
-
-
-## 7. Optional tooling & best practices
-
-- **Visual QA**: `src/milp/visualize.py` contains helper functions to overlay capacities and dispatch. The batch runner can auto-save plots if `--plot` is set.
-- **Scenario tweaks**: adjust `config/scenario_space.yaml` to change weather regimes, asset distributions, or solver budget guards. The defaults target a moderate-size UC instance solvable in minutes.
-- **Reproducibility**: scenario IDs seed the RNG, so keeping the same JSON yields identical profiles and capacities.
-- **Performance knobs**: the MILP model supports a `--workers` parallel solve, but also consider tightening horizons or asset counts if solve times spike.
-- **Data hygiene**: clear `outputs/` between major runs to avoid mixing corpora with different configuration baselines.
-
-## 8. Frequently asked questions
-
-**Q: Pyomo throws `ApplicationError: No executable found for solver 'highs'`.**
-A: Install `highspy` (`pip install highspy`) or download the HiGHS binary and add it to PATH.
-
-**Q: How do I inspect the generated scenarios without solving them?**
-A: Use `python -m src.generator.inspect_scenarios outputs/scenarios_v1/scenario_00010.json` to print headline stats.
-
-**Q: Can I add my own solver?**
-A: Yesï¿½pass any Pyomo-supported solver via `--solver`. For commercial solvers (CPLEX/Gurobi), ensure licences and bindings are configured.
-
-**Q: Do the NPZs include cost information?**
-A: Cost components live in the JSON reports; the NPZ stores structural/time-series tensors. Load the JSON alongside the NPZ in your ML pipeline if you need economics.
+# Coordinating Multilayer Power System Flexibility — MILP / GNN / EBM Benchmark
+
+Companion code for the paper
+**"Coordinating Multilayer Power System Flexibility: A Hybrid MILP–GNN–EBM
+Framework for Large-Scale Scenario Exploration"** (Coudray & Goutte).
+
+The repository implements every block of the pipeline figure in the paper
+(Section 2) plus the deterministic baseline:
+
+| Block | Module | Description |
+|------:|--------|-------------|
+| 1 | `src/generator/`         | Diversity-maximising scenario generator (LHS + greedy *k*-center) |
+| 2 | `src/milp/`              | Multi-layer MILP oracle (Pyomo + HiGHS) and `LPWorkerTwoStage` cascade |
+| 3 | `src/gnn/`               | Hierarchical heterogeneous temporal graphs and HTE encoder |
+| 4 | `src/gnn/`               | Topology-consistent GNN encoder (zone embeddings) |
+| 5 | `src/ebm/`               | Conditional graph EBM with normalized temporal Langevin sampler |
+| 6 | `src/ebm/feasibility.py` | Hierarchical feasibility decoder (merit-order projection) |
+| 7 | `src/eval/`              | Pipeline runner (Stage 1–5 LP cascade) and metrics |
+| 8 | `src/heuristics/`        | **RH-MO+LP** rolling-horizon merit-order baseline |
+| 9 | `src/analysis/`          | Criticality index, HDBSCAN clustering, paper figures |
+
+Pure Python (3.10 +). Solver: [HiGHS](https://highs.dev/) via `highspy`.
+Deep-learning stack: PyTorch + PyTorch Geometric.
 
 ---
-Happy benchmarking! File issues or ideas to extend the workflowï¿½there is plenty of room for new weather regimes, solver configurations, and richer graph targets.
 
+## 0. Quick start (single-command paper reproduction)
 
-## 9. License
+```powershell
+# Windows PowerShell, from the repo root benchmark_milp_gnn/
+python -m venv .venv
+. .\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
 
-MIT License
+# Reproduce the three criticality families used in the paper
+python -m src.generator.run_generator -v hard -o outputs/high_criticality_scenarios
+python -m src.milp.batch_runner outputs/high_criticality_scenarios `
+    --solver highs --workers 4 `
+    --reports-dir outputs/high_criticality_scenarios/reports `
+    --summary-json outputs/high_criticality_scenarios/batch_summary.json
 
+# Heuristic baseline (RH-MO+LP) on the same scenarios
+python -m src.heuristics.runner outputs/high_criticality_scenarios `
+    -W 6 -o outputs/rhmo_high.json
 
+# Full MILP-GNN-EBM pipeline (requires trained checkpoints; see §6)
+python -m src.eval.pipeline_runner --family high
+```
 
+> **GPU users**: install a CUDA wheel of `torch` *before* running
+> `pip install -r requirements.txt`, and pull the matching
+> `torch-scatter` wheel from
+> `https://data.pyg.org/whl/torch-<ver>+<cuda>.html`.
 
+---
 
+## 1. Prerequisites
+
+1. **Python 3.10 +** with `python` on `PATH`.
+2. **HiGHS solver** — bundled via `pip install highspy` (already in
+   `requirements.txt`). For an external binary, ensure `highs` is on
+   `PATH`.
+3. **Build tools** (Linux/Mac): a recent C++ compiler is helpful when
+   wheels for `torch-scatter` or `hdbscan` fall back to source.
+4. **Disk**: ≈ 5 GB for a full 200-scenarios-per-family run with detailed
+   JSON reports.
+
+---
+
+## 2. Environment setup
+
+```bash
+# Use Python 3.11 (torch < 2.5 has no wheels for 3.12+)
+py -3.11 -m venv .venv             # Windows
+# python3.11 -m venv .venv         # Linux / macOS
+
+source .venv/bin/activate           # Linux / macOS
+# .\.venv\Scripts\Activate.ps1      # Windows PowerShell
+
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+pip install -r requirements-pyg.txt   # torch-scatter from the PyG wheel index
+```
+
+The PyG companion wheels (`torch-scatter`) are split into a separate
+file because they need a custom index URL. CPU build is the default;
+for CUDA, edit the `--find-links` line in `requirements-pyg.txt` to
+match your torch / CUDA version (see comments inside).
+
+Verify the install:
+
+```bash
+python -c "import torch, pyomo, highspy, torch_geometric, torch_scatter, hdbscan, umap; print('OK')"
+```
+
+---
+
+## 3. Repository layout
+
+```
+benchmark_milp_gnn/
+├── config/                    # Scenario-space and GNN training configs (YAML)
+├── configs/                   # EBM training configs
+├── outputs/                   # Generated scenarios, reports, results, plots
+│   ├── low_criticality_scenarios/
+│   ├── medium_criticality_scenarios/
+│   └── high_criticality_scenarios/
+├── src/
+│   ├── generator/             # Scenario sampler (Block 1)
+│   ├── milp/                  # MILP oracle + LP worker cascade (Block 2/7)
+│   ├── gnn/                   # Hetero temporal graphs + HTE encoder (Block 3/4)
+│   ├── ebm/                   # Conditional EBM + Langevin sampler (Block 5/6)
+│   ├── heuristics/            # RH-MO+LP rolling-horizon baseline (Block 8)
+│   ├── eval/                  # Full-pipeline runner and metrics
+│   └── analysis/              # Criticality index, clustering, figures
+├── scripts/                   # One-off paper-reproduction scripts
+├── notebooks/                 # Result analysis / visualisation
+├── pdfs/main.tex              # Paper source
+├── requirements.txt
+└── README.md
+```
+
+All commands assume the repo root (`benchmark_milp_gnn/`) as the working
+directory.
+
+---
+
+## 4. Generate scenarios (Block 1)
+
+Three criticality families are used in the paper. The generator
+implements LHS sampling, a budget guard, and greedy *k*-center
+selection (paper §2.1).
+
+```bash
+# Low criticality
+python -m src.generator.run_generator -v v2 -o outputs/low_criticality_scenarios
+
+# Medium / hard - controlled by config/scenario_space[_hard].yaml
+python -m src.generator.run_generator -v v2  -o outputs/medium_criticality_scenarios
+python -m src.generator.run_generator -v hard -o outputs/high_criticality_scenarios
+```
+
+Each output folder contains `scenario_*.json` plus a `manifest.json`.
+
+### 4.1 Criticality index & clustering (paper §2.1.4)
+
+```bash
+python -m src.analysis.criticality_index outputs/high_criticality_scenarios -a 0.6
+python -m src.analysis.criticality_clustering \
+    outputs/high_criticality_scenarios/criticality_results.json \
+    --min-cluster-size 30 --cluster-epsilon 0.5 --n-components 11
+python -m src.analysis.visualize_clusters \
+    outputs/high_criticality_scenarios/criticality_results.json \
+    -o outputs/high_criticality_scenarios/clusters_viz.png
+```
+
+---
+
+## 5. MILP oracle (Block 2 — ground truth)
+
+### 5.1 Single scenario
+
+```bash
+python -m src.milp.run_milp outputs/high_criticality_scenarios/scenario_00001.json \
+    --solver highs --tee \
+    --save-json outputs/high_criticality_scenarios/reports/scenario_00001.json \
+    --plot --plot-dir outputs/high_criticality_scenarios/plots
+```
+
+### 5.2 Whole family in parallel
+
+```bash
+python -m src.milp.batch_runner outputs/high_criticality_scenarios \
+    --solver highs --workers 4 \
+    --reports-dir outputs/high_criticality_scenarios/reports \
+    --dispatch-dir outputs/high_criticality_scenarios/dispatch_batch \
+    --summary-json outputs/high_criticality_scenarios/batch_summary.json
+```
+
+The `--reports-dir` JSONs contain the *full* MILP solution and are the
+ground truth used by every other block.
+
+---
+
+## 6. MILP-GNN-EBM pipeline (Blocks 3–7)
+
+### 6.1 Build hierarchical temporal graphs (Block 3)
+
+```bash
+python -m src.gnn.build_hetero_graph_dataset \
+    outputs/high_criticality_scenarios outputs/graphs/hetero_temporal_high \
+    --temporal
+```
+
+### 6.2 Train the HTE encoder (Block 4)
+
+```bash
+python -m src.gnn.train_temporal_hetero \
+    --data-dir outputs/graphs/hetero_temporal_high \
+    --model-type hgt --hidden-dim 128 --num-layers 2 --num-heads 8 \
+    --epochs 60 --batch-size 8 --lr 5e-4
+```
+
+Outputs land in `outputs/encoders/hierarchical_temporal_v3/`.
+
+### 6.3 Train the conditional EBM (Block 5)
+
+```bash
+python -m src.ebm.train_v3 --config configs/ebm_config.yaml
+```
+
+Best checkpoint is saved to `outputs/ebm_models/ebm_v3/ebm_v3_final.pt`.
+
+### 6.4 Run the full pipeline + LP worker cascade (Block 6 + 7)
+
+```bash
+python -m src.eval.pipeline_runner --family high
+```
+
+The runner performs Langevin sampling → feasibility decoding → the same
+five-stage LP cascade (`hard_fix → repair_20 → repair_wider →
+soft_relaxation → round_and_refix`) used by the heuristic baseline.
+
+---
+
+## 7. Rolling-horizon heuristic baseline (Block 8 — RH-MO+LP)
+
+Deterministic learning-free baseline described in paper §6
+(*RH-MO+LP: Rolling-Horizon Merit-Order Heuristic with LP
+Reconstruction*). See `src/heuristics/README.md` for algorithm details.
+
+```bash
+# Single scenario, with verbose timing
+python -m src.heuristics.runner \
+    outputs/high_criticality_scenarios/scenario_00001.json -W 6 -v
+
+# Whole family, with custom LP-cascade depth
+python -m src.heuristics.runner outputs/medium_criticality_scenarios \
+    -W 8 -o outputs/rhmo_medium.json --max-stages 5
+```
+
+The output JSON has one record per scenario: timings (`time_heuristic`,
+`time_lp_solve`, `time_total`), `lp_objective`, `lp_stage_used`,
+`lp_slack`, and `binary_active_fractions`.
+
+---
+
+## 8. Reproducing the paper experiments
+
+The exact commands used to produce Tables/Figures of Section 6 are in
+`scripts/`. The recommended end-to-end recipe per criticality family is:
+
+```bash
+FAMILY=high_criticality_scenarios
+
+# (1) Generate scenarios
+python -m src.generator.run_generator -v hard -o outputs/$FAMILY
+
+# (2) MILP oracle
+python -m src.milp.batch_runner outputs/$FAMILY --workers 4 \
+    --reports-dir outputs/$FAMILY/reports \
+    --summary-json outputs/$FAMILY/batch_summary.json
+
+# (3) Graphs + encoder + EBM (skip if checkpoints already present)
+python -m src.gnn.build_hetero_graph_dataset outputs/$FAMILY \
+    outputs/graphs/hetero_temporal_${FAMILY%_scenarios} --temporal
+python -m src.gnn.train_temporal_hetero --data-dir \
+    outputs/graphs/hetero_temporal_${FAMILY%_scenarios}
+python -m src.ebm.train_v3 --config configs/ebm_config.yaml
+
+# (4) Full pipeline evaluation
+python -m src.eval.pipeline_runner --family ${FAMILY%_criticality_scenarios}
+
+# (5) Heuristic baseline on the same scenarios
+python -m src.heuristics.runner outputs/$FAMILY \
+    -o outputs/rhmo_${FAMILY%_criticality_scenarios}.json -W 6
+```
+
+Then open the analysis notebooks:
+
+- `notebooks/performance_comparison.ipynb` — speed-up, optimality gap,
+  feasibility rate vs. MILP and vs. RH-MO+LP.
+- `notebooks/training_visualization.ipynb` — encoder / EBM training
+  curves.
+- `notebooks/criticality_*` — figures of paper §2.1.4.
+
+---
+
+## 9. Reproducibility & determinism
+
+- Scenario IDs seed every random draw (sampler, profile generator).
+  Re-running with the same JSON yields bit-identical inputs.
+- The MILP is deterministic at the solver level (HiGHS with default
+  parameters).
+- The heuristic baseline (`src/heuristics/`) is fully deterministic
+  given its `HeuristicConfig`.
+- Encoder + EBM training fix `torch.manual_seed`; for fully reproducible
+  GPU runs set `CUBLAS_WORKSPACE_CONFIG=:4096:8` and pass
+  `--deterministic` where supported.
+
+---
+
+## 10. FAQ
+
+**Q. `ApplicationError: No executable found for solver 'highs'`.**
+A. `pip install highspy`, or place the HiGHS binary on `PATH`.
+
+**Q. `ModuleNotFoundError: No module named 'numpy'` (or `torch`).**
+A. The active interpreter is not the venv. Re-activate with
+`. .\.venv\Scripts\Activate.ps1` (Windows) or
+`source .venv/bin/activate` (Linux/macOS) and re-run.
+
+**Q. `torch-scatter` fails to install.**
+A. Use the prebuilt wheel matching your torch + CUDA version from
+`https://data.pyg.org/whl/torch-<ver>+<cuda>.html`.
+
+**Q. Inspect a scenario without solving it.**
+A. `python -m src.generator.inspect_scenarios outputs/<folder>/scenario_00010.json`.
+
+**Q. Add a commercial solver (Gurobi / CPLEX).**
+A. Install bindings, then pass `--solver gurobi` (or `cplex`) to
+`run_milp` / `batch_runner`. The LP-worker cascade also accepts any
+Pyomo-supported solver via `--solver`.
+
+---
+
+## 11. Citation
+
+If you use this code, please cite:
+
+```bibtex
+@article{coudray2026milpgnnebm,
+  title   = {Coordinating Multilayer Power System Flexibility:
+             A Hybrid MILP--GNN--EBM Framework for
+             Large-Scale Scenario Exploration},
+  author  = {Coudray, Th{\'e}otime and Goutte, St{\'e}phane},
+  journal = {Working paper, UVSQ -- UMI SOURCE},
+  year    = {2026}
+}
+```
+
+## 12. License
+
+MIT — see `LICENSE`.

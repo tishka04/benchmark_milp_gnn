@@ -1,0 +1,13 @@
+# PyG companion wheels that need a custom index (torch must already be installed).
+#
+# CPU build (default - matches the torch wheel from requirements.txt):
+#     pip install -r requirements-pyg.txt
+#
+# CUDA 12.1 build: replace +cpu with +cu121, e.g.
+#     pip install torch-scatter -f https://data.pyg.org/whl/torch-2.4.0+cu121.html
+#
+# Find the right URL for your torch version at
+#     https://data.pyg.org/whl/
+
+--find-links https://data.pyg.org/whl/torch-2.4.0+cpu.html
+torch-scatter>=2.1
