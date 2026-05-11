@@ -150,6 +150,51 @@ class NormalizedTemporalLangevinSampler:
         mask = zone_mask.to(x.device).view(B, Z, 1, 1).float()
         return x * mask
 
+    def _similarity_penalty(
+        self,
+        u: torch.Tensor,
+        diversity_refs: Optional[List[torch.Tensor]] = None,
+        zone_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Smooth agreement penalty against previously generated samples.
+
+        We penalize binary agreement rather than exact energy likelihood:
+            sim(u, u_k) = mean(u*u_k + (1-u)*(1-u_k))
+
+        Minimizing this term encourages larger Hamming distance in the final
+        binary pool while remaining differentiable w.r.t. the relaxed sample u.
+        """
+        if not diversity_refs:
+            return torch.zeros((), device=u.device, dtype=u.dtype)
+
+        refs: List[torch.Tensor] = []
+        for ref in diversity_refs:
+            if ref is None:
+                continue
+            ref_tensor = ref.detach() if isinstance(ref, torch.Tensor) else torch.as_tensor(ref)
+            if ref_tensor.dim() == 3:
+                ref_tensor = ref_tensor.unsqueeze(0)
+            ref_tensor = ref_tensor.to(device=u.device, dtype=u.dtype)
+            refs.append(self._apply_mask(ref_tensor, zone_mask))
+
+        if not refs:
+            return torch.zeros((), device=u.device, dtype=u.dtype)
+
+        ref_stack = torch.stack(refs, dim=0)  # [R, B, Z, T, F]
+        u_stack = u.unsqueeze(0).expand_as(ref_stack)
+        agreement = u_stack * ref_stack + (1.0 - u_stack) * (1.0 - ref_stack)
+
+        if zone_mask is None:
+            return agreement.mean()
+
+        B, Z = zone_mask.shape
+        _, _, _, T, F = agreement.shape
+        mask = zone_mask.to(u.device, dtype=u.dtype).view(1, B, Z, 1, 1)
+        denom = (mask.sum(dim=(2, 3, 4)) * float(T * F)).clamp(min=1.0)
+        agreement_per_ref = (agreement * mask).sum(dim=(2, 3, 4)) / denom
+        return agreement_per_ref.mean()
+
     # ── Core Langevin (logit space) ──
 
     @torch.enable_grad()
@@ -158,6 +203,10 @@ class NormalizedTemporalLangevinSampler:
         h_zt: torch.Tensor,
         zone_mask: Optional[torch.Tensor] = None,
         u_oracle: Optional[torch.Tensor] = None,
+        sample_temperature_scale: float = 1.0,
+        sample_noise_scale: float = 1.0,
+        diversity_refs: Optional[List[torch.Tensor]] = None,
+        diversity_lambda: float = 0.0,
         return_trajectory: bool = False,
         verbose: bool = False,
     ):
@@ -174,19 +223,28 @@ class NormalizedTemporalLangevinSampler:
             self.model.train(True)
 
         z = self._init_logits((B, Z, T, F), u_oracle=u_oracle).requires_grad_(True)
+        temperature_scale = max(1e-6, float(sample_temperature_scale))
+        noise_scale = max(0.0, float(sample_noise_scale))
+        diversity_weight = max(0.0, float(diversity_lambda))
 
         traj: List[torch.Tensor] = []
         if return_trajectory:
             traj.append(torch.sigmoid(z).detach().clone())
 
         for k in range(self.num_steps):
-            Tk = self._get_temperature(k)
+            Tk = self._get_temperature(k) * temperature_scale
 
             u = torch.sigmoid(z)
             u = self._apply_mask(u, zone_mask)
 
             energy = self.model(u, h_zt, zone_mask)
-            E = energy.sum()
+            E = (energy / temperature_scale).sum()
+            if diversity_weight > 0.0 and diversity_refs:
+                E = E + diversity_weight * self._similarity_penalty(
+                    u,
+                    diversity_refs=diversity_refs,
+                    zone_mask=zone_mask,
+                )
 
             grad_z = torch.autograd.grad(
                 E, z, create_graph=False, retain_graph=False,
@@ -204,7 +262,7 @@ class NormalizedTemporalLangevinSampler:
 
             noise = torch.randn_like(z)
             step = self.step_size
-            noise_term = self.noise_scale * Tk * math.sqrt(step) * noise
+            noise_term = self.noise_scale * noise_scale * Tk * math.sqrt(step) * noise
 
             z = z - step * grad_z - step * prior_drift + noise_term
 
@@ -242,12 +300,20 @@ class NormalizedTemporalLangevinSampler:
         h_zt: torch.Tensor,
         zone_mask: Optional[torch.Tensor] = None,
         u_oracle: Optional[torch.Tensor] = None,
+        sample_temperature_scale: float = 1.0,
+        sample_noise_scale: float = 1.0,
+        diversity_refs: Optional[List[torch.Tensor]] = None,
+        diversity_lambda: float = 0.0,
         return_trajectory: bool = False,
         verbose: bool = False,
     ):
         """Always returns relaxed u ∈ (0,1)."""
         return self._langevin_relaxed(
             h_zt=h_zt, zone_mask=zone_mask, u_oracle=u_oracle,
+            sample_temperature_scale=sample_temperature_scale,
+            sample_noise_scale=sample_noise_scale,
+            diversity_refs=diversity_refs,
+            diversity_lambda=diversity_lambda,
             return_trajectory=return_trajectory, verbose=verbose,
         )
 
@@ -258,6 +324,10 @@ class NormalizedTemporalLangevinSampler:
         u_oracle: Optional[torch.Tensor] = None,
         binarize: Optional[Literal["bernoulli", "threshold"]] = None,
         threshold: Optional[float] = None,
+        sample_temperature_scale: float = 1.0,
+        sample_noise_scale: float = 1.0,
+        diversity_refs: Optional[List[torch.Tensor]] = None,
+        diversity_lambda: float = 0.0,
         return_trajectory: bool = False,
         verbose: bool = False,
     ):
@@ -269,6 +339,10 @@ class NormalizedTemporalLangevinSampler:
 
         out = self._langevin_relaxed(
             h_zt=h_zt, zone_mask=zone_mask, u_oracle=u_oracle,
+            sample_temperature_scale=sample_temperature_scale,
+            sample_noise_scale=sample_noise_scale,
+            diversity_refs=diversity_refs,
+            diversity_lambda=diversity_lambda,
             return_trajectory=return_trajectory, verbose=verbose,
         )
 
@@ -295,6 +369,10 @@ class NormalizedTemporalLangevinSampler:
         h_zt: torch.Tensor,
         zone_mask: Optional[torch.Tensor] = None,
         u_oracle: Optional[torch.Tensor] = None,
+        sample_temperature_scale: float = 1.0,
+        sample_noise_scale: float = 1.0,
+        diversity_refs: Optional[List[torch.Tensor]] = None,
+        diversity_lambda: float = 0.0,
         return_trajectory: bool = False,
         verbose: bool = False,
     ):
@@ -302,11 +380,19 @@ class NormalizedTemporalLangevinSampler:
         if self.mode == "train":
             return self.sample_relaxed(
                 h_zt=h_zt, zone_mask=zone_mask, u_oracle=u_oracle,
+                sample_temperature_scale=sample_temperature_scale,
+                sample_noise_scale=sample_noise_scale,
+                diversity_refs=diversity_refs,
+                diversity_lambda=diversity_lambda,
                 return_trajectory=return_trajectory, verbose=verbose,
             )
         if self.mode == "infer":
             return self.sample_binary(
                 h_zt=h_zt, zone_mask=zone_mask, u_oracle=u_oracle,
+                sample_temperature_scale=sample_temperature_scale,
+                sample_noise_scale=sample_noise_scale,
+                diversity_refs=diversity_refs,
+                diversity_lambda=diversity_lambda,
                 return_trajectory=return_trajectory, verbose=verbose,
             )
         raise ValueError(f"Unknown mode: {self.mode}")

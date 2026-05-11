@@ -1,0 +1,1 @@
+"""UC-JEPA model definitions."""

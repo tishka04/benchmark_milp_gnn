@@ -104,13 +104,37 @@ class EBMv3Config:
     silver_langevin_start: int = 20         # curriculum: gentle start
     silver_langevin_end: int = 35           # curriculum: don't exceed gold's peak (~32)
     silver_lp_eval_every: int = 5           # LP eval frequency (batches)
-    silver_lp_scenarios_per_batch: int = 4  # scenarios to LP-evaluate per batch
+    silver_lp_scenarios_per_batch: int = 2  # scenarios to LP-evaluate per batch
     silver_preference_margin: float = 0.1   # Margin for preference loss
     silver_lambda_cd: float = 1.0           # Weight of CD loss in silver
     silver_lambda_pref: float = 0.5         # Weight of preference loss in silver
     silver_pref_warmup_epochs: int = 5      # Ramp lambda_pref from 0 → full over N epochs
 
     # ── LP Worker config (silver) ──
+    silver_lp_candidates_per_scenario: int = 8  # candidates sampled per scenario for LP ranking
+    silver_lp_max_stages: int = 4           # LP repair depth used during silver preference eval
+    silver_lp_incumbent_candidates: int = 1  # exact MILP incumbent candidates per scenario
+    silver_lp_oracle_langevin_candidates: int = 3  # Langevin samples seeded from incumbent
+    silver_lp_corrupt_candidates: int = 2   # corrupted incumbent candidates
+    silver_lp_langevin_candidates: int = 2  # unconstrained Langevin candidates
+    silver_lp_corrupt_flip_rate: Optional[float] = None  # fallback to corruption_flip_rate when unset
+    silver_pref_min_relative_gap: float = 0.02  # Minimum relative J-gap to keep a pair
+    silver_pref_slack_weight: float = 0.0   # J = LP cost + weight * slack
+    silver_pref_repair_weight: float = 0.0  # J = cost + lambda_slack * slack + lambda_repair * repair_distance
+    silver_pref_repair_metric: Literal["decoder_deviation", "rounded_flips"] = "decoder_deviation"
+    silver_pref_invalid_score: float = 1e12  # Finite penalty for non-finite LP outcomes
+    silver_pref_all_informative_pairs: bool = False
+    silver_pref_max_pairs_per_scenario: int = 1
+    silver_pref_margin_mode: Literal["constant", "scaled_gap"] = "constant"
+    silver_pref_margin_rel_gap_cap: float = 1.0
+    silver_pair_coverage_floor: float = 0.20
+    silver_val_ranking_scenarios: int = 0   # 0 disables ranking validation
+    silver_val_candidates_per_scenario: int = 8
+    silver_val_max_stages: Optional[int] = 4
+    silver_log_individual_pairs: bool = False
+    silver_early_stop_metric: Literal["val_gap_lang", "val_pref_accuracy", "val_spearman"] = "val_gap_lang"
+    silver_output_prefix: str = "silver"
+
     lp_solver: str = "appsi_highs"
     lp_slack_tol: float = 1.0
     lp_deviation_penalty: float = 10000.0

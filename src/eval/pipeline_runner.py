@@ -6,7 +6,7 @@ Runs the complete pipeline:
 2. Generate HTE Embeddings using trained encoder
 3. Extract Zone-level Embeddings for EBM input
 4. EBM + Normalized Temporal Langevin Sampler → binary candidates
-5. Hierarchical Feasibility Decoder → enforce constraints
+5. Pass-through feasibility decoder → LP warm-start only, no binary edits
 6. LP Worker Two-Stage → solve continuous LP
 
 Designed to be imported from Colab notebook via Google Drive.
@@ -23,6 +23,147 @@ from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Dict, List, Optional, Tuple, Any
 from tqdm.auto import tqdm
+from typing import Literal
+
+
+_BINARY_FEATURE_NAMES = [
+    'battery_charge',
+    'battery_discharge',
+    'pumped_charge',
+    'pumped_discharge',
+    'dr_active',
+    'thermal_startup',
+    'thermal_on',
+]
+
+_LP_STAGE_ORDER = [
+    'hard_fix',
+    'repair_20',
+    'repair_100',
+    'full_soft',
+    'round_refix',
+]
+
+
+def _display_stage_name(lp_result: Any, stage: str) -> str:
+    """Map internal LP-worker stage keys to user-facing labels when available."""
+    if stage == 'repair_20':
+        return str(getattr(lp_result, 'stage_name_repair_20', '') or stage)
+    if stage == 'repair_100':
+        return str(getattr(lp_result, 'stage_name_repair_100', '') or stage)
+    return str(stage or '')
+
+
+def _binary_stats(u_bin: torch.Tensor) -> Dict[str, float]:
+    """Summarize the activity rate of each binary channel."""
+    stats: Dict[str, float] = {}
+    for idx, name in enumerate(_BINARY_FEATURE_NAMES):
+        stats[name] = float(u_bin[..., idx].float().mean().item())
+    return stats
+
+
+def _pairwise_hamming_stats(samples: List[torch.Tensor]) -> Dict[str, Any]:
+    """
+    Compute pairwise Hamming diversity across sampled binary candidates.
+
+    Distances are normalized in [0, 1] by the total number of binary entries
+    in the candidate tensor, matching the paper-style interpretation
+    ``||u_a - u_b||_1 / (Z*T*F)``.
+    """
+    if not samples:
+        return {
+            'distances': [],
+            'matrix': [],
+            'mean': float('nan'),
+            'max': float('nan'),
+            'unique_ratio': float('nan'),
+        }
+
+    flat_samples = [
+        sample.detach().cpu().numpy().astype(np.uint8, copy=False).reshape(-1)
+        for sample in samples
+    ]
+    distances: List[float] = []
+    n_samples = len(flat_samples)
+    matrix = np.zeros((n_samples, n_samples), dtype=float)
+    for idx_a in range(len(flat_samples)):
+        for idx_b in range(idx_a + 1, len(flat_samples)):
+            dist = float(np.mean(flat_samples[idx_a] != flat_samples[idx_b]))
+            distances.append(dist)
+            matrix[idx_a, idx_b] = dist
+            matrix[idx_b, idx_a] = dist
+
+    unique_ratio = len({flat.tobytes() for flat in flat_samples}) / len(flat_samples)
+    return {
+        'distances': distances,
+        'matrix': matrix.tolist(),
+        'mean': float(np.mean(distances)) if distances else 0.0,
+        'max': float(np.max(distances)) if distances else 0.0,
+        'unique_ratio': float(unique_ratio),
+    }
+
+
+def _normalize_stage_name(stage: Any) -> str:
+    if hasattr(stage, 'value'):
+        stage = stage.value
+    return str(stage or '')
+
+
+def _extract_stage_flags(lp_result: Any) -> Dict[str, bool]:
+    """Infer which LP-worker stages were actually executed."""
+    flags: Dict[str, bool] = {}
+    final_stage = _normalize_stage_name(getattr(lp_result, 'stage_used', ''))
+    for stage in _LP_STAGE_ORDER:
+        time_val = float(getattr(lp_result, f'time_{stage}', 0.0) or 0.0)
+        slack_val = getattr(lp_result, f'slack_{stage}', 0.0)
+        flags[stage] = bool(
+            time_val > 0.0
+            or final_stage == stage
+            or (slack_val is not None and np.isfinite(float(slack_val)) and float(slack_val) > 0.0)
+        )
+    return flags
+
+
+def _deepest_stage_reached(lp_result: Any) -> str:
+    flags = _extract_stage_flags(lp_result)
+    for stage in reversed(_LP_STAGE_ORDER):
+        if flags[stage]:
+            return _display_stage_name(lp_result, stage)
+    return _display_stage_name(lp_result, _normalize_stage_name(getattr(lp_result, 'stage_used', '')))
+
+
+def _stage_rank(stage: str) -> int:
+    try:
+        return _LP_STAGE_ORDER.index(stage) + 1
+    except ValueError:
+        return 0
+
+
+def _diagnostic_result_key(lp_result: Any) -> Tuple[int, int, float]:
+    """
+    Sort key for fallback diagnostics when no finite objective exists.
+
+    Prefer the deepest reached stage, then any loaded solution over a pure
+    failure marker, then the lowest available slack.
+    """
+    reached_stage = _deepest_stage_reached(lp_result)
+    status = str(getattr(lp_result, 'status', ''))
+    def _slack_or_inf(attr_name: str) -> float:
+        raw_value = getattr(lp_result, attr_name, float('inf'))
+        return float('inf') if raw_value is None else float(raw_value)
+
+    slack_candidates = [
+        _slack_or_inf('slack_used'),
+        _slack_or_inf('slack_round_refix'),
+        _slack_or_inf('slack_full_soft'),
+        _slack_or_inf('slack_repair_100'),
+        _slack_or_inf('slack_repair_20'),
+        _slack_or_inf('slack_hard_fix'),
+    ]
+    finite_slacks = [value for value in slack_candidates if np.isfinite(value)]
+    best_slack = min(finite_slacks) if finite_slacks else float('inf')
+    has_solution = 0 if status in {'infeasible', 'error', 'pending'} else 1
+    return (_stage_rank(reached_stage), has_solution, -best_slack if np.isfinite(best_slack) else -float('inf'))
 
 
 @dataclass
@@ -53,20 +194,63 @@ class PipelineConfig:
     init_temp: float = 1.0
     final_temp: float = 0.1
     n_samples: int = 5
+    # Native sampler_v3 knobs for evaluation diversity control.
+    # `temp_max` / `temp_min` override `init_temp` / `final_temp` when provided.
+    temp_max: Optional[float] = None
+    temp_min: Optional[float] = None
+    init_mode: Literal['soft', 'prior', 'bernoulli', 'oracle'] = 'bernoulli'
+    init_p: float = 0.5
+    prior_p: float = 0.025
+    prior_strength: float = 0.0
+    normalize_grad: bool = True
+    infer_binarize: Literal['bernoulli', 'threshold'] = 'bernoulli'
+    infer_threshold: float = 0.5
+    require_train_mode_for_sampling: bool = True
+    diversity_priority: bool = True
+    diversity_temperature_scale_min: float = 1.15
+    diversity_temperature_scale_max: float = 2.50
+    diversity_noise_scale_min: float = 1.00
+    diversity_noise_scale_max: float = 2.00
+    diversity_similarity_lambda: float = 0.35
+    diversity_schedule: Literal['linear', 'staggered'] = 'linear'
 
     # LP Worker
     solver_name: str = 'appsi_highs'
     slack_tol_mwh: float = 1.0
     deviation_penalty: float = 10000.0
+    flip_budget_repair_20: int = 100
+    flip_budget_repair_100: int = 1000
+    lp_worker_max_stages: int = 5
+    strict_feasibility_tol_mwh: Optional[float] = None
+    enable_exact_fallback: bool = False
+    fallback_solver_name: Optional[str] = None
+    fallback_milp_time_limit_seconds: float = 600.0
 
     # Ablation flags
-    skip_decoder: bool = False  # bypass decoder, pass raw EBM binaries to LP
-    decoder_passthrough: bool = False  # decoder builds warm-start but keeps EBM binaries unchanged
+    skip_decoder: bool = False  # bypass decoder entirely, pass raw EBM binaries to LP
+    decoder_passthrough: bool = True  # kept for compatibility; evaluation always preserves source binaries
     use_gnn_dispatch: bool = False  # replace decoder+LP with GNN dispatch predictor
     gnn_dispatch_path: str = 'outputs/gnn_dispatch/dispatch_gnn_best.pt'
+    top_m_enabled: bool = False
+    top_m: int = 1
+    top_m_score_mode: Literal['energy', 'activation', 'energy_activation', 'first', 'learned_selector'] = 'energy'
+    top_m_selector_path: Optional[str] = None
+    top_m_target_activation_rate: Optional[float] = None
+    top_m_energy_weight: float = 1.0
+    top_m_activation_weight: float = 1.0
 
     device: str = 'cuda'
     seed: int = 42
+
+    @property
+    def sampler_temp_max(self) -> float:
+        """Resolved high-temperature endpoint for sampler_v3."""
+        return float(self.temp_max if self.temp_max is not None else self.init_temp)
+
+    @property
+    def sampler_temp_min(self) -> float:
+        """Resolved low-temperature endpoint for sampler_v3."""
+        return float(self.temp_min if self.temp_min is not None else self.final_temp)
 
 
 @dataclass
@@ -86,15 +270,85 @@ class PipelineResult:
     # LP results (best sample)
     lp_status: str = ''
     lp_stage_used: str = ''
+    lp_stage_reached: str = ''
     lp_objective: float = float('nan')
-    lp_slack: float = 0.0
+    lp_slack: float = 0.0          # final slack of the stage that was kept
     lp_n_flips: int = 0
+
+    # Per-stage slack progression (MWh) of the best sample.
+    # A scenario can carry multiple non-zero values if the cascade reached
+    # Stage 4/5 (e.g. slack_full_soft and slack_round_refix coexist).
+    lp_slack_hard_fix: float = 0.0
+    lp_slack_repair_20: float = 0.0
+    lp_slack_repair_100: float = 0.0
+    lp_slack_full_soft: float = 0.0
+    lp_slack_round_refix: float = 0.0
+    lp_reached_hard_fix: bool = False
+    lp_reached_repair_20: bool = False
+    lp_reached_repair_100: bool = False
+    lp_reached_full_soft: bool = False
+    lp_reached_round_refix: bool = False
 
     # All sample results
     n_samples: int = 0
     best_sample_idx: int = 0
     all_objectives: List[float] = field(default_factory=list)
+    all_objectives_raw: List[float] = field(default_factory=list)
     all_stages: List[str] = field(default_factory=list)
+    all_stages_reached: List[str] = field(default_factory=list)
+    all_sample_sampling_times: List[float] = field(default_factory=list)
+    all_sample_decoder_times: List[float] = field(default_factory=list)
+    all_sample_lp_solve_times: List[float] = field(default_factory=list)
+    all_sample_total_times: List[float] = field(default_factory=list)
+    all_sample_ebm_energies: List[float] = field(default_factory=list)
+    all_sample_slacks: List[float] = field(default_factory=list)
+    all_sample_statuses: List[str] = field(default_factory=list)
+    best_sample_sampling_time: float = float('nan')
+    best_sample_decoder_time: float = float('nan')
+    best_sample_lp_solve_time: float = float('nan')
+    best_sample_total_time: float = float('nan')
+    first_sample_total_time: float = float('nan')
+    all_binary_active_fractions: List[Dict[str, float]] = field(default_factory=list)
+    pairwise_hamming_distances: List[float] = field(default_factory=list)
+    pairwise_hamming_matrix: List[List[float]] = field(default_factory=list)
+    sample_mean_pairwise_hamming: float = float('nan')
+    sample_max_pairwise_hamming: float = float('nan')
+    sample_unique_ratio: float = float('nan')
+    sample_energy_mean: float = float('nan')
+    sample_energy_std: float = float('nan')
+    best_status: str = ''
+    direct_feasible_count: int = 0
+    repaired_feasible_count: int = 0
+    direct_feasible_rate: float = float('nan')
+    repair_success_rate: float = float('nan')
+    fallback_rate: float = float('nan')
+    fallback_used: bool = False
+    time_direct_lp: float = 0.0
+    time_repair: float = 0.0
+    time_fallback: float = 0.0
+    fallback_warm_start_vars: int = 0
+    all_repair_flips: List[int] = field(default_factory=list)
+    all_repair_radii: List[float] = field(default_factory=list)
+    all_repair_times: List[float] = field(default_factory=list)
+    mean_repair_flips: float = float('nan')
+    median_repair_flips: float = float('nan')
+    min_repair_flips: float = float('nan')
+    max_repair_flips: float = float('nan')
+    median_repair_radius_used: float = float('nan')
+    max_repair_radius_used: float = float('nan')
+    mean_repair_time: float = float('nan')
+    median_repair_time: float = float('nan')
+    selected_repair_flips: float = float('nan')
+    selected_repair_radius_used: float = float('nan')
+    selected_repair_time: float = float('nan')
+    top_m_enabled: bool = False
+    top_m_score_mode: str = ''
+    top_m_projected: int = 0
+    top_m_selected_indices: List[int] = field(default_factory=list)
+    top_m_skipped_indices: List[int] = field(default_factory=list)
+    top_m_candidate_scores: List[float] = field(default_factory=list)
+    n_candidates_generated: int = 0
+    n_candidates_projected: int = 0
 
     # Scenario metadata
     n_zones: int = 0
@@ -123,6 +377,7 @@ class PipelineRunner:
         self.encoder = None
         self.ebm = None
         self.sampler = None
+        self.top_m_selector = None
 
     def load_models(self):
         """Load encoder, EBM, and optionally GNN dispatch models."""
@@ -175,10 +430,17 @@ class PipelineRunner:
             num_steps=cfg.langevin_steps,
             step_size=cfg.step_size,
             noise_scale=cfg.noise_scale,
-            temp_min=cfg.final_temp,
-            temp_max=cfg.init_temp,
-            init_mode='bernoulli',
+            temp_min=cfg.sampler_temp_min,
+            temp_max=cfg.sampler_temp_max,
+            init_mode=cfg.init_mode,
+            init_p=cfg.init_p,
+            prior_p=cfg.prior_p,
+            prior_strength=cfg.prior_strength,
+            normalize_grad=cfg.normalize_grad,
             mode='infer',
+            infer_binarize=cfg.infer_binarize,
+            infer_threshold=cfg.infer_threshold,
+            require_train_mode_for_sampling=cfg.require_train_mode_for_sampling,
             device=self.device,
         )
         print("  Sampler ready (infer mode)")
@@ -315,6 +577,26 @@ class PipelineRunner:
 
         return zone_emb, n_zones, T
 
+    def _candidate_diversity_schedule(self, sample_idx: int, n_samples: int) -> Tuple[float, float]:
+        """Return (temperature_scale, noise_scale) for a candidate index."""
+        cfg = self.config
+        if not getattr(cfg, 'diversity_priority', False) or n_samples <= 1:
+            return 1.0, 1.0
+
+        if getattr(cfg, 'diversity_schedule', 'linear') == 'staggered':
+            alpha = 0.0 if sample_idx == 0 else sample_idx / max(1, n_samples - 1)
+            alpha = min(1.0, max(0.0, alpha ** 0.75))
+        else:
+            alpha = sample_idx / max(1, n_samples - 1)
+
+        temp_scale = float(cfg.diversity_temperature_scale_min) + alpha * (
+            float(cfg.diversity_temperature_scale_max) - float(cfg.diversity_temperature_scale_min)
+        )
+        noise_scale = float(cfg.diversity_noise_scale_min) + alpha * (
+            float(cfg.diversity_noise_scale_max) - float(cfg.diversity_noise_scale_min)
+        )
+        return max(1e-6, temp_scale), max(0.0, noise_scale)
+
     def _run_ebm_sampling(self, zone_emb: torch.Tensor, n_zones: int, T: int):
         """Run EBM + Langevin sampling to get binary candidates."""
         cfg = self.config
@@ -326,32 +608,232 @@ class PipelineRunner:
 
         # Generate multiple samples
         all_samples = []
-        for _ in range(cfg.n_samples):
+        sample_times = []
+        previous_samples: List[torch.Tensor] = []
+        for sample_idx in range(cfg.n_samples):
+            temp_scale, noise_scale = self._candidate_diversity_schedule(sample_idx, cfg.n_samples)
+            t0 = time.perf_counter()
             u_bin = self.sampler.sample_binary(
                 h_zt=h_zt,
                 zone_mask=zone_mask,
-                binarize='bernoulli',
-                threshold=0.5,
+                binarize=cfg.infer_binarize,
+                threshold=cfg.infer_threshold,
+                sample_temperature_scale=temp_scale,
+                sample_noise_scale=noise_scale,
+                diversity_refs=previous_samples if cfg.diversity_priority else None,
+                diversity_lambda=(
+                    float(cfg.diversity_similarity_lambda)
+                    if cfg.diversity_priority and previous_samples
+                    else 0.0
+                ),
             )
+            sample_times.append(time.perf_counter() - t0)
+            previous_samples.append(u_bin.detach())
             all_samples.append(u_bin.squeeze(0).cpu())  # [Z, T, F]
 
-        return all_samples
+        return all_samples, sample_times
+
+    def _score_ebm_samples(self, samples: List[torch.Tensor], zone_emb: torch.Tensor) -> List[float]:
+        """Evaluate EBM energies for sampled binary candidates."""
+        if not samples:
+            return []
+
+        Z = zone_emb.shape[0]
+        h_zt = zone_emb.unsqueeze(0).to(self.device)  # [1, Z, T, D]
+        zone_mask = torch.ones(1, Z, device=self.device)
+
+        prev_train_state = self.ebm.training
+        self.ebm.eval()
+        energies: List[float] = []
+        with torch.no_grad():
+            for sample in samples:
+                u_bin = sample.unsqueeze(0).to(self.device).float()
+                energy = self.ebm(u_bin, h_zt, zone_mask)
+                energies.append(float(energy.reshape(-1)[0].item()))
+        self.ebm.train(prev_train_state)
+        return energies
+
+    def _load_top_m_selector(self) -> Dict[str, Any]:
+        if self.top_m_selector is not None:
+            return self.top_m_selector
+        selector_path = getattr(self.config, 'top_m_selector_path', None)
+        if not selector_path:
+            raise ValueError('top_m_score_mode="learned_selector" requires top_m_selector_path.')
+        path = Path(selector_path)
+        if not path.is_absolute():
+            path = self.repo_path / path
+        with path.open('rb') as f:
+            selector = pickle.load(f)
+        if not isinstance(selector, dict):
+            raise TypeError(f'Top-M selector artifact must contain a dict, got {type(selector).__name__}.')
+        required = {'feature_cols', 'model_columns', 'feature_medians', 'scaler'}
+        missing = sorted(required - set(selector))
+        if missing:
+            raise ValueError(f'Top-M selector artifact is missing required keys: {missing}')
+        self.top_m_selector = selector
+        return selector
+
+    def _learned_selector_scores(
+        self,
+        ebm_energies: List[float],
+        active_fractions: List[Dict[str, float]],
+        scenario_features: Optional[Dict[str, Any]] = None,
+    ) -> List[float]:
+        selector = self._load_top_m_selector()
+        scenario_features = scenario_features or {}
+        rows: List[Dict[str, Any]] = []
+        n_candidates = max(len(ebm_energies), len(active_fractions))
+        for sample_idx in range(n_candidates):
+            stats = active_fractions[sample_idx] if sample_idx < len(active_fractions) else {}
+            row: Dict[str, Any] = {
+                'sample_idx': int(sample_idx),
+                'family': str(scenario_features.get('family', '')),
+                'criticality_index': float(scenario_features.get('criticality_index', float('nan'))),
+                'n_zones': float(scenario_features.get('n_zones', float('nan'))),
+                'n_timesteps': float(scenario_features.get('n_timesteps', float('nan'))),
+                'sample_ebm_energy': (
+                    float(ebm_energies[sample_idx])
+                    if sample_idx < len(ebm_energies)
+                    else float('nan')
+                ),
+                'sample_activation_rate': float('nan'),
+            }
+            activation_values = []
+            if isinstance(stats, dict):
+                for key, value in stats.items():
+                    try:
+                        value_f = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    row[f'active_{key}'] = value_f
+                    if np.isfinite(value_f):
+                        activation_values.append(value_f)
+            if activation_values:
+                row['sample_activation_rate'] = float(np.mean(activation_values))
+            rows.append(row)
+
+        import pandas as pd
+        candidate_df = pd.DataFrame(rows)
+        feature_cols = [col for col in selector.get('feature_cols', []) if col in candidate_df.columns]
+        parts = []
+        if feature_cols:
+            parts.append(candidate_df[feature_cols].apply(pd.to_numeric, errors='coerce'))
+        if 'family' in candidate_df.columns:
+            parts.append(pd.get_dummies(candidate_df['family'].astype(str), prefix='family', dtype=float))
+        X_raw = pd.concat(parts, axis=1) if parts else pd.DataFrame(index=candidate_df.index)
+        X = X_raw.reindex(columns=selector.get('model_columns', []), fill_value=0.0)
+        medians = pd.Series(selector.get('feature_medians', {}), dtype=float)
+        X = X.replace([np.inf, -np.inf], np.nan).fillna(medians).fillna(0.0)
+        Xz = selector['scaler'].transform(X)
+
+        feasibility_model = selector.get('feasibility_model')
+        if feasibility_model is not None:
+            p_feasible = feasibility_model.predict_proba(Xz)[:, 1]
+        else:
+            p_feasible = np.full(len(candidate_df), float(selector.get('feasibility_constant', 0.5)))
+
+        gap_model = selector.get('gap_model')
+        if gap_model is not None:
+            pred_abs_gap = np.maximum(gap_model.predict(Xz), 0.0)
+        else:
+            pred_abs_gap = np.full(len(candidate_df), float(selector.get('gap_constant', 100.0)))
+
+        lp_time_model = selector.get('lp_time_model')
+        if lp_time_model is not None:
+            pred_lp_time = np.maximum(lp_time_model.predict(Xz), 0.0)
+        else:
+            pred_lp_time = np.full(len(candidate_df), float(selector.get('lp_time_constant', 0.0)))
+
+        scores = (
+            pred_abs_gap
+            + float(selector.get('failure_penalty', 100.0)) * (1.0 - p_feasible)
+            + float(selector.get('time_penalty', 0.0)) * pred_lp_time
+        )
+        return [float(value) for value in scores]
+
+    def _top_m_candidate_scores(
+        self,
+        samples: List[torch.Tensor],
+        ebm_energies: List[float],
+        active_fractions: List[Dict[str, float]],
+        scenario_features: Optional[Dict[str, Any]] = None,
+    ) -> List[float]:
+        cfg = self.config
+        mode = str(getattr(cfg, 'top_m_score_mode', 'energy') or 'energy')
+        if mode not in {'energy', 'activation', 'energy_activation', 'first', 'learned_selector'}:
+            raise ValueError(f'Unsupported top_m_score_mode: {mode}')
+        if mode == 'learned_selector':
+            return self._learned_selector_scores(ebm_energies, active_fractions, scenario_features)
+
+        scores: List[float] = []
+        for sample_idx, _sample in enumerate(samples):
+            energy = (
+                float(ebm_energies[sample_idx])
+                if sample_idx < len(ebm_energies) and np.isfinite(ebm_energies[sample_idx])
+                else float('inf')
+            )
+            stats = active_fractions[sample_idx] if sample_idx < len(active_fractions) else {}
+            activation_values = []
+            if isinstance(stats, dict):
+                for value in stats.values():
+                    try:
+                        value_f = float(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if np.isfinite(value_f):
+                        activation_values.append(value_f)
+            activation_rate = float(np.mean(activation_values)) if activation_values else float('nan')
+            target_activation = getattr(cfg, 'top_m_target_activation_rate', None)
+            if target_activation is None:
+                target_activation = float(getattr(cfg, 'prior_p', 0.025) or 0.025)
+            activation_penalty = (
+                abs(activation_rate - float(target_activation))
+                if np.isfinite(activation_rate)
+                else float('inf')
+            )
+
+            if mode == 'first':
+                score = float(sample_idx)
+            elif mode == 'activation':
+                score = activation_penalty
+            elif mode == 'energy_activation':
+                score = (
+                    float(getattr(cfg, 'top_m_energy_weight', 1.0)) * energy
+                    + float(getattr(cfg, 'top_m_activation_weight', 1.0)) * activation_penalty
+                )
+            else:
+                score = energy
+            scores.append(float(score))
+        return scores
+
+    def _top_m_project_indices(
+        self,
+        samples: List[torch.Tensor],
+        ebm_energies: List[float],
+        active_fractions: List[Dict[str, float]],
+        scenario_features: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[int], List[float]]:
+        if not getattr(self.config, 'top_m_enabled', False):
+            scores = [
+                float(ebm_energies[idx])
+                if idx < len(ebm_energies) and np.isfinite(ebm_energies[idx])
+                else float(idx)
+                for idx in range(len(samples))
+            ]
+            return list(range(len(samples))), scores
+
+        scores = self._top_m_candidate_scores(samples, ebm_energies, active_fractions, scenario_features)
+        top_m = max(1, int(getattr(self.config, 'top_m', 1) or 1))
+        top_m = min(top_m, len(samples))
+        ranked = sorted(range(len(samples)), key=lambda idx: (scores[idx], idx))
+        return ranked[:top_m], scores
 
     def _run_decoder(self, u_bin: torch.Tensor, scenario_path: Path):
-        """Run feasibility decoder on binary sample."""
-        from src.ebm.feasibility import (
-            HierarchicalFeasibilityDecoder, load_physics_from_scenario,
-        )
-
-        sc_id = scenario_path.stem
-        scenarios_dir = str(scenario_path.parent)
-        physics = load_physics_from_scenario(sc_id, scenarios_dir)
-        decoder = HierarchicalFeasibilityDecoder(physics)
-        plan = decoder.decode(u_bin)
-        return plan, physics
+        """Run pass-through feasibility warm-start on a binary sample."""
+        return self._run_decoder_passthrough(u_bin, scenario_path)
 
     def _run_decoder_passthrough(self, u_bin: torch.Tensor, scenario_path: Path):
-        """Run pass-through decoder: keep EBM binaries, build warm-start only."""
+        """Run pass-through decoder: keep source binaries, build warm-start only."""
         from src.ebm.feasibility import (
             HierarchicalFeasibilityDecoder, load_physics_from_scenario,
         )
@@ -384,13 +866,13 @@ class PipelineRunner:
         )
 
     def _run_lp_worker(self, decoder_tensor: torch.Tensor, scenario_path: Path, scenarios_dir: Path, feasible_plan=None):
-        """Run LP Worker Two-Stage on decoded binary tensor [Z, T, F].
+        """Run LP Worker Two-Stage on source binary tensor [Z, T, F].
 
         Args:
-            decoder_tensor: Binary tensor [Z, T, 7] from decoder.
+            decoder_tensor: Binary tensor [Z, T, 7] from the source method.
             scenario_path: Path to scenario JSON.
             scenarios_dir: Directory containing scenario JSONs.
-            feasible_plan: Optional FeasiblePlan for LP warm-starting.
+            feasible_plan: Optional FeasiblePlan used only for LP warm-starting.
         """
         from src.milp.lp_worker_two_stage import LPWorkerTwoStage
 
@@ -400,12 +882,57 @@ class PipelineRunner:
             solver_name=cfg.solver_name,
             slack_tol_mwh=cfg.slack_tol_mwh,
             deviation_penalty=cfg.deviation_penalty,
+            flip_budget_20=cfg.flip_budget_repair_20,
+            flip_budget_100=cfg.flip_budget_repair_100,
             verbose=False,
         )
 
         sc_id = scenario_path.stem
-        result = worker.solve(sc_id, decoder_tensor, feasible_plan=feasible_plan)
+        result = worker.solve(
+            sc_id,
+            decoder_tensor,
+            feasible_plan=feasible_plan,
+            max_stages=int(getattr(cfg, 'lp_worker_max_stages', 5) or 5),
+        )
         return result
+
+    @staticmethod
+    def _assign_lp_diagnostics(result: PipelineResult, lp_result: Any) -> None:
+        """Copy final LP diagnostics, including deepest reached stage."""
+        result.lp_status = str(getattr(lp_result, 'status', ''))
+        stage_used = _normalize_stage_name(getattr(lp_result, 'stage_used', ''))
+        result.lp_stage_used = _display_stage_name(lp_result, stage_used)
+        result.lp_stage_reached = _deepest_stage_reached(lp_result)
+        result.lp_objective = float(getattr(lp_result, 'objective_value', float('nan')))
+        result.lp_slack = float(getattr(lp_result, 'slack_used', 0.0) or 0.0)
+        result.lp_n_flips = int(getattr(lp_result, 'n_flips', 0) or 0)
+
+        result.lp_slack_hard_fix = float(getattr(lp_result, 'slack_hard_fix', 0.0) or 0.0)
+        result.lp_slack_repair_20 = float(getattr(lp_result, 'slack_repair_20', 0.0) or 0.0)
+        result.lp_slack_repair_100 = float(getattr(lp_result, 'slack_repair_100', 0.0) or 0.0)
+        result.lp_slack_full_soft = float(getattr(lp_result, 'slack_full_soft', 0.0) or 0.0)
+        result.lp_slack_round_refix = float(getattr(lp_result, 'slack_round_refix', 0.0) or 0.0)
+
+        flags = _extract_stage_flags(lp_result)
+        result.lp_reached_hard_fix = flags['hard_fix']
+        result.lp_reached_repair_20 = flags['repair_20']
+        result.lp_reached_repair_100 = flags['repair_100']
+        result.lp_reached_full_soft = flags['full_soft']
+        result.lp_reached_round_refix = flags['round_refix']
+
+    @staticmethod
+    def _assign_selected_sample_times(result: PipelineResult, sample_idx: int) -> None:
+        """Persist timing telemetry for the selected candidate."""
+        if 0 <= sample_idx < len(result.all_sample_sampling_times):
+            result.best_sample_sampling_time = float(result.all_sample_sampling_times[sample_idx])
+        if 0 <= sample_idx < len(result.all_sample_decoder_times):
+            result.best_sample_decoder_time = float(result.all_sample_decoder_times[sample_idx])
+        if 0 <= sample_idx < len(result.all_sample_lp_solve_times):
+            result.best_sample_lp_solve_time = float(result.all_sample_lp_solve_times[sample_idx])
+        if 0 <= sample_idx < len(result.all_sample_total_times):
+            result.best_sample_total_time = float(result.all_sample_total_times[sample_idx])
+        if result.all_sample_total_times:
+            result.first_sample_total_time = float(result.all_sample_total_times[0])
 
     def evaluate_scenario(
         self,
@@ -441,53 +968,131 @@ class PipelineRunner:
 
             # Step 3: EBM + Langevin sampling
             t0 = time.perf_counter()
-            all_samples = self._run_ebm_sampling(zone_emb, n_zones, T)
+            all_samples, sample_sampling_times = self._run_ebm_sampling(zone_emb, n_zones, T)
             result.time_ebm_sampling = time.perf_counter() - t0
             result.n_samples = len(all_samples)
+            result.all_sample_sampling_times = [float(x) for x in sample_sampling_times]
+            result.all_binary_active_fractions = [_binary_stats(sample) for sample in all_samples]
 
-            # Step 4+5: Decoder + LP (or GNN dispatch) for each sample
-            t0 = time.perf_counter()
+            hamming_stats = _pairwise_hamming_stats(all_samples)
+            result.pairwise_hamming_distances = hamming_stats['distances']
+            result.pairwise_hamming_matrix = hamming_stats['matrix']
+            result.sample_mean_pairwise_hamming = hamming_stats['mean']
+            result.sample_max_pairwise_hamming = hamming_stats['max']
+            result.sample_unique_ratio = hamming_stats['unique_ratio']
+            result.all_sample_ebm_energies = self._score_ebm_samples(all_samples, zone_emb)
+            finite_energies = [value for value in result.all_sample_ebm_energies if np.isfinite(value)]
+            if finite_energies:
+                result.sample_energy_mean = float(np.mean(finite_energies))
+                result.sample_energy_std = float(np.std(finite_energies))
+
+            projection_indices, candidate_scores = self._top_m_project_indices(
+                all_samples,
+                result.all_sample_ebm_energies,
+                result.all_binary_active_fractions,
+                scenario_features={
+                    'family': family,
+                    'criticality_index': result.criticality_index,
+                    'n_zones': result.n_zones,
+                    'n_timesteps': result.n_timesteps,
+                },
+            )
+            projection_index_set = set(projection_indices)
+            result.top_m_enabled = bool(getattr(self.config, 'top_m_enabled', False))
+            result.top_m_score_mode = str(getattr(self.config, 'top_m_score_mode', ''))
+            result.top_m_projected = int(len(projection_indices))
+            result.top_m_selected_indices = [int(idx) for idx in projection_indices]
+            result.top_m_skipped_indices = [
+                int(idx) for idx in range(len(all_samples)) if idx not in projection_index_set
+            ]
+            result.top_m_candidate_scores = [float(value) for value in candidate_scores]
+            result.n_candidates_generated = int(len(all_samples))
+            result.n_candidates_projected = int(len(projection_indices))
+
+            # Step 4+5: Optional pass-through warm-start + LP (or GNN dispatch)
             lp_results = []
             for sample_idx, u_bin in enumerate(all_samples):
+                sample_decoder_time = 0.0
+                sample_lp_time = 0.0
+                if sample_idx not in projection_index_set:
+                    result.all_objectives_raw.append(float('nan'))
+                    result.all_objectives.append(float('inf'))
+                    result.all_stages.append('top_m_skipped')
+                    result.all_stages_reached.append('top_m_skipped')
+                    result.all_sample_slacks.append(float('nan'))
+                    result.all_sample_statuses.append('top_m_skipped')
+                    sample_sampling_time = (
+                        sample_sampling_times[sample_idx]
+                        if sample_idx < len(sample_sampling_times)
+                        else 0.0
+                    )
+                    result.all_sample_decoder_times.append(0.0)
+                    result.all_sample_lp_solve_times.append(0.0)
+                    result.all_sample_total_times.append(float(sample_sampling_time))
+                    continue
+
                 try:
+                    sample_result = None
+                    sample_stage = None
                     if self.config.use_gnn_dispatch and self.gnn_predictor is not None:
                         # GNN dispatch: replaces decoder + LP entirely
+                        t1 = time.perf_counter()
                         gnn_result = self._run_gnn_dispatch(
                             u_bin, zone_emb, n_zones, sc_id,
                         )
-                        lp_results.append(gnn_result)
-                        result.all_objectives.append(gnn_result.objective_value)
-                        result.all_stages.append('gnn_dispatch')
-                        continue
+                        sample_lp_time = time.perf_counter() - t1
+                        sample_result = gnn_result
+                        sample_stage = 'gnn_dispatch'
                     elif self.config.skip_decoder:
                         # Ablation: pass raw EBM binaries directly to LP
                         lp_tensor = (u_bin > 0.5).float()  # ensure crisp 0/1
+                        t1 = time.perf_counter()
                         lp_result = self._run_lp_worker(
                             lp_tensor, scenario_path, scenario_path.parent,
                             feasible_plan=None,
                         )
-                    elif self.config.decoder_passthrough:
-                        # Ablation: decoder builds warm-start but keeps EBM binaries
+                        sample_lp_time = time.perf_counter() - t1
+                        sample_result = lp_result
+                    else:
+                        # Pass-through decoder: preserve EBM binaries, build LP warm-start only
+                        t1 = time.perf_counter()
                         plan, physics = self._run_decoder_passthrough(u_bin, scenario_path)
-                        lp_tensor = (u_bin > 0.5).float()  # EBM binaries for LP fixing
+                        sample_decoder_time = time.perf_counter() - t1
+
+                        # LP Worker sees the original EBM binaries; the feasible
+                        # plan is provided only as a continuous warm-start.
+                        lp_tensor = (u_bin > 0.5).float()
+                        t1 = time.perf_counter()
                         lp_result = self._run_lp_worker(
-                            lp_tensor, scenario_path, scenario_path.parent,
+                            lp_tensor,
+                            scenario_path,
+                            scenario_path.parent,
                             feasible_plan=plan,
                         )
-                    else:
-                        # Decoder
-                        plan, physics = self._run_decoder(u_bin, scenario_path)
+                        sample_lp_time = time.perf_counter() - t1
+                        sample_result = lp_result
 
-                        # Convert FeasiblePlan to tensor [Z, T, F] for LP worker
-                        decoder_tensor = plan.to_tensor()  # [Z, T, 7]
-
-                        # LP Worker (warm-started from decoder plan)
-                        lp_result = self._run_lp_worker(decoder_tensor, scenario_path, scenario_path.parent, feasible_plan=plan)
-                    lp_results.append(lp_result)
-
-                    result.all_objectives.append(lp_result.objective_value)
-                    stage_name = lp_result.stage_used.value if hasattr(lp_result.stage_used, 'value') else str(lp_result.stage_used)
-                    result.all_stages.append(stage_name)
+                    if sample_result is not None:
+                        lp_results.append((sample_idx, sample_result))
+                        result.all_objectives_raw.append(
+                            float(getattr(sample_result, 'objective_value', float('inf')))
+                        )
+                        result.all_objectives.append(
+                            float(getattr(sample_result, 'objective_value', float('inf')))
+                        )
+                        if sample_stage is None:
+                            sample_stage_key = (
+                                sample_result.stage_used.value
+                                if hasattr(sample_result.stage_used, 'value')
+                                else str(sample_result.stage_used)
+                            )
+                            sample_stage = _display_stage_name(sample_result, sample_stage_key)
+                        result.all_stages.append(sample_stage)
+                        result.all_stages_reached.append(_deepest_stage_reached(sample_result))
+                        result.all_sample_slacks.append(
+                            float(getattr(sample_result, 'slack_used', float('nan')) or 0.0)
+                        )
+                        result.all_sample_statuses.append(str(getattr(sample_result, 'status', '')))
 
                 except Exception as e:
                     import logging
@@ -496,28 +1101,46 @@ class PipelineRunner:
                     )
                     result.all_objectives.append(float('inf'))
                     result.all_stages.append('failed')
+                    result.all_stages_reached.append('failed')
+                    result.all_sample_slacks.append(float('nan'))
+                    result.all_sample_statuses.append('error')
+                finally:
+                    result.all_sample_decoder_times.append(float(sample_decoder_time))
+                    result.all_sample_lp_solve_times.append(float(sample_lp_time))
+                    sample_sampling_time = (
+                        sample_sampling_times[sample_idx]
+                        if sample_idx < len(sample_sampling_times)
+                        else 0.0
+                    )
+                    result.all_sample_total_times.append(
+                        float(sample_sampling_time + sample_decoder_time + sample_lp_time)
+                    )
 
-            result.time_decoder = time.perf_counter() - t0 - sum(
-                getattr(lr, 'solve_time', 0) for lr in lp_results if hasattr(lr, 'solve_time')
-            )
-            result.time_lp_solve = sum(
-                getattr(lr, 'solve_time', 0) for lr in lp_results if hasattr(lr, 'solve_time')
-            )
+            result.time_decoder = float(sum(result.all_sample_decoder_times))
+            result.time_lp_solve = float(sum(result.all_sample_lp_solve_times))
 
             # Select best sample
             if lp_results:
                 valid_results = [
-                    (i, lr) for i, lr in enumerate(lp_results)
+                    (sample_idx, lr) for sample_idx, lr in lp_results
                     if hasattr(lr, 'objective_value') and lr.objective_value < float('inf')
                 ]
                 if valid_results:
                     best_idx, best_lr = min(valid_results, key=lambda x: x[1].objective_value)
                     result.best_sample_idx = best_idx
-                    result.lp_status = best_lr.status
-                    result.lp_stage_used = best_lr.stage_used.value if hasattr(best_lr.stage_used, 'value') else str(best_lr.stage_used)
-                    result.lp_objective = best_lr.objective_value
-                    result.lp_slack = getattr(best_lr, 'slack_used', 0.0)
-                    result.lp_n_flips = getattr(best_lr, 'n_flips', 0)
+                    self._assign_lp_diagnostics(result, best_lr)
+                    self._assign_selected_sample_times(result, best_idx)
+                else:
+                    diag_idx, diag_lr = max(
+                        lp_results,
+                        key=lambda x: _diagnostic_result_key(x[1]),
+                    )
+                    result.best_sample_idx = diag_idx
+                    self._assign_lp_diagnostics(result, diag_lr)
+                    self._assign_selected_sample_times(result, diag_idx)
+                    result.success = False
+            else:
+                result.success = False
 
         except Exception as e:
             result.success = False

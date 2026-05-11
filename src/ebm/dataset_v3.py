@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import json
 import glob
+import re
 import numpy as np
 import torch
 import torch.nn.functional as F_nn
@@ -46,6 +47,14 @@ def load_classification_index(path: str) -> Dict[str, List[str]]:
         "silver": data.get("silver", []),
         "summary": data.get("summary", {}),
     }
+
+
+def extract_scenario_id(value: str) -> Optional[str]:
+    """Extract a scenario id from nested or flattened embedding filenames."""
+    match = re.search(r"(scenario_\d{5})(?!\d)", value)
+    if match is None:
+        return None
+    return match.group(1)
 
 
 def _extract_binaries_from_report(
@@ -196,6 +205,8 @@ class ScenarioReportDataset(Dataset):
 
         Handles nested structures like:
           embeddings_v3/outputs/scenarios_v3/scenario_00001.npz
+        and flattened filenames like:
+          outputs_scenarios_v3_scenario_00001.npz
         """
         if not os.path.isdir(self.embeddings_dir):
             print(f"  WARNING: embeddings dir does not exist: {self.embeddings_dir}")
@@ -208,15 +219,12 @@ class ScenarioReportDataset(Dataset):
                 if ext not in (".npz", ".pt", ".npy"):
                     continue
                 stem = os.path.splitext(fname)[0]
-                # Extract scenario_id from stem which may contain path
-                # separators, e.g. "outputs\scenarios_v3\scenario_00001"
-                # Split on both / and \ then take the last part
-                parts = stem.replace("\\", "/").split("/")
-                scenario_part = parts[-1]
-                if scenario_part.startswith("scenario_"):
-                    full_path = os.path.join(root, fname)
-                    self._embedding_lookup[scenario_part] = full_path
-                    n_found += 1
+                scenario_id = extract_scenario_id(stem)
+                if scenario_id is None:
+                    continue
+                full_path = os.path.join(root, fname)
+                self._embedding_lookup[scenario_id] = full_path
+                n_found += 1
 
         # Also try loading a consolidated .pt dict
         if n_found == 0:

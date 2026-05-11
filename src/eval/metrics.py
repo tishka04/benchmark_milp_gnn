@@ -17,6 +17,119 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
 
+def _coerce_float_list(values: Any) -> List[float]:
+    """Convert serialized timing/objective lists to floats with NaN fallback."""
+    if values is None:
+        return []
+    if isinstance(values, float) and np.isnan(values):
+        return []
+    out: List[float] = []
+    for value in values:
+        try:
+            out.append(float(value))
+        except (TypeError, ValueError):
+            out.append(float('nan'))
+    return out
+
+
+def _safe_ratio(num: Any, den: Any) -> float:
+    """Return num/den with NaN for non-finite or zero denominators."""
+    try:
+        num_f = float(num)
+        den_f = float(den)
+    except (TypeError, ValueError):
+        return float('nan')
+    if not np.isfinite(num_f) or not np.isfinite(den_f) or den_f <= 0.0:
+        return float('nan')
+    return num_f / den_f
+
+
+def _pipeline_timing_views(pr: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Derive multiple pipeline timing views for fair comparisons.
+
+    - `actual_wall_clock`: observed end-to-end latency after evaluating all K candidates.
+    - `first_candidate`: latency if we stopped at K=1.
+    - `best_candidate_oracle`: optimistic latency if an oracle revealed the best
+      candidate in advance.
+    - `parallel_ideal`: ideal latency if all candidates were post-processed in
+      parallel and we waited for the slowest one.
+
+    The headline benchmark should use `actual_wall_clock`, because it matches the
+    real computation spent to return the selected best-of-K solution.
+    """
+    fixed_time = float(pr.get('time_graph_build', 0.0) or 0.0) + float(
+        pr.get('time_embedding', 0.0) or 0.0
+    )
+    actual_wall_clock = float(pr.get('time_total', float('nan')))
+
+    sample_total_times = _coerce_float_list(pr.get('all_sample_total_times'))
+    sample_lp_times = _coerce_float_list(pr.get('all_sample_lp_solve_times'))
+    n_samples = len(sample_total_times)
+
+    if n_samples == 0:
+        declared_samples = int(pr.get('n_samples', 0) or 0)
+        if declared_samples > 0 and np.isfinite(actual_wall_clock):
+            variable_total = max(actual_wall_clock - fixed_time, 0.0)
+            sample_total_times = [variable_total / declared_samples] * declared_samples
+            n_samples = declared_samples
+            raw_lp_total = float(pr.get('time_lp_solve', float('nan')))
+            if np.isfinite(raw_lp_total):
+                sample_lp_times = [raw_lp_total / declared_samples] * declared_samples
+
+    cumulative_candidates = (
+        fixed_time + float(np.nansum(sample_total_times))
+        if sample_total_times
+        else float('nan')
+    )
+    if not np.isfinite(actual_wall_clock) and np.isfinite(cumulative_candidates):
+        actual_wall_clock = cumulative_candidates
+
+    best_idx = pr.get('best_sample_idx', 0)
+    try:
+        best_idx = int(best_idx)
+    except (TypeError, ValueError):
+        best_idx = 0
+
+    first_candidate = (
+        fixed_time + float(sample_total_times[0])
+        if sample_total_times
+        else float('nan')
+    )
+    best_candidate_oracle = (
+        fixed_time + float(sample_total_times[best_idx])
+        if 0 <= best_idx < len(sample_total_times)
+        else float('nan')
+    )
+    parallel_ideal = (
+        fixed_time + float(np.nanmax(sample_total_times))
+        if sample_total_times
+        else float('nan')
+    )
+    mean_candidate = (
+        fixed_time + float(np.nanmean(sample_total_times))
+        if sample_total_times
+        else float('nan')
+    )
+    best_lp_time = (
+        float(sample_lp_times[best_idx])
+        if 0 <= best_idx < len(sample_lp_times)
+        else float('nan')
+    )
+
+    return {
+        'fixed_time': fixed_time,
+        'actual_wall_clock': actual_wall_clock,
+        'cumulative_candidates': cumulative_candidates,
+        'first_candidate': first_candidate,
+        'best_candidate_oracle': best_candidate_oracle,
+        'parallel_ideal': parallel_ideal,
+        'mean_candidate': mean_candidate,
+        'best_candidate_lp_time': best_lp_time,
+        'n_candidates_evaluated': int(len(sample_total_times)),
+    }
+
+
 def load_milp_reports(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
     """Load MILP reports from a directory."""
     milp_data = {}
@@ -53,22 +166,82 @@ def build_comparison_dataframe(
         family = pr.get('family', '')
         # Try family-prefixed key first, fall back to plain sc_id
         milp = milp_data.get(f"{family}/{sc_id}", milp_data.get(sc_id, {}))
+        timing_views = _pipeline_timing_views(pr)
         
         row = {
             # Pipeline
             'scenario_id': sc_id,
             'family': pr.get('family', ''),
             'pipeline_objective': pr.get('lp_objective', float('nan')),
-            'pipeline_solve_time': pr.get('time_total', float('nan')),
+            'pipeline_solve_time': timing_views['actual_wall_clock'],
+            'pipeline_wall_clock_time': timing_views['actual_wall_clock'],
+            'pipeline_candidate_cumulative_time': timing_views['cumulative_candidates'],
+            'pipeline_first_candidate_time': timing_views['first_candidate'],
+            'pipeline_best_candidate_oracle_time': timing_views['best_candidate_oracle'],
+            'pipeline_parallel_ideal_time': timing_views['parallel_ideal'],
+            'pipeline_mean_candidate_time': timing_views['mean_candidate'],
+            'pipeline_best_candidate_lp_time': timing_views['best_candidate_lp_time'],
+            'pipeline_fixed_time': timing_views['fixed_time'],
+            'pipeline_n_candidates_evaluated': timing_views['n_candidates_evaluated'],
             'pipeline_status': pr.get('lp_status', ''),
             'pipeline_stage': pr.get('lp_stage_used', ''),
+            'pipeline_stage_reached': pr.get('lp_stage_reached', pr.get('lp_stage_used', '')),
             'pipeline_slack': pr.get('lp_slack', 0.0),
             'pipeline_n_flips': pr.get('lp_n_flips', 0),
+            'pipeline_best_status': pr.get('best_status', ''),
+            'pipeline_direct_feasible_count': pr.get('direct_feasible_count', 0),
+            'pipeline_repaired_feasible_count': pr.get('repaired_feasible_count', 0),
+            'pipeline_direct_feasible_rate': pr.get('direct_feasible_rate', float('nan')),
+            'pipeline_repair_success_rate': pr.get('repair_success_rate', float('nan')),
+            'pipeline_fallback_rate': pr.get('fallback_rate', float('nan')),
+            'pipeline_fallback_used': pr.get('fallback_used', False),
+            'pipeline_time_direct_lp': pr.get('time_direct_lp', 0.0),
+            'pipeline_time_repair': pr.get('time_repair', 0.0),
+            'pipeline_time_fallback': pr.get('time_fallback', 0.0),
+            'pipeline_fallback_warm_start_vars': pr.get('fallback_warm_start_vars', 0),
+            'pipeline_all_repair_flips': pr.get('all_repair_flips', []),
+            'pipeline_all_repair_radii': pr.get('all_repair_radii', []),
+            'pipeline_all_repair_times': pr.get('all_repair_times', []),
+            'pipeline_mean_repair_flips': pr.get('mean_repair_flips', float('nan')),
+            'pipeline_median_repair_flips': pr.get('median_repair_flips', float('nan')),
+            'pipeline_min_repair_flips': pr.get('min_repair_flips', float('nan')),
+            'pipeline_max_repair_flips': pr.get('max_repair_flips', float('nan')),
+            'pipeline_median_repair_radius_used': pr.get('median_repair_radius_used', float('nan')),
+            'pipeline_max_repair_radius_used': pr.get('max_repair_radius_used', float('nan')),
+            'pipeline_mean_repair_time': pr.get('mean_repair_time', float('nan')),
+            'pipeline_median_repair_time': pr.get('median_repair_time', float('nan')),
+            'pipeline_selected_repair_flips': pr.get('selected_repair_flips', float('nan')),
+            'pipeline_selected_repair_radius_used': pr.get('selected_repair_radius_used', float('nan')),
+            'pipeline_selected_repair_time': pr.get('selected_repair_time', float('nan')),
+            'pipeline_top_m_enabled': pr.get('top_m_enabled', False),
+            'pipeline_top_m_score_mode': pr.get('top_m_score_mode', ''),
+            'pipeline_top_m_projected': pr.get('top_m_projected', 0),
+            'pipeline_top_m_selected_indices': pr.get('top_m_selected_indices', []),
+            'pipeline_top_m_skipped_indices': pr.get('top_m_skipped_indices', []),
+            'pipeline_top_m_candidate_scores': pr.get('top_m_candidate_scores', []),
+            'pipeline_n_candidates_generated': pr.get('n_candidates_generated', pr.get('n_samples', 0)),
+            'pipeline_n_candidates_projected': pr.get('n_candidates_projected', timing_views['n_candidates_evaluated']),
+            # Per-stage slack progression (MWh). Non-zero simultaneously for
+            # multiple stages when the cascade reached Stage 4/5.
+            'pipeline_slack_hard_fix':    pr.get('lp_slack_hard_fix', 0.0),
+            'pipeline_slack_repair_20':   pr.get('lp_slack_repair_20', 0.0),
+            'pipeline_slack_repair_100':  pr.get('lp_slack_repair_100', 0.0),
+            'pipeline_slack_full_soft':   pr.get('lp_slack_full_soft', 0.0),
+            'pipeline_slack_round_refix': pr.get('lp_slack_round_refix', 0.0),
+            'pipeline_reached_hard_fix': pr.get('lp_reached_hard_fix', False),
+            'pipeline_reached_repair_20': pr.get('lp_reached_repair_20', False),
+            'pipeline_reached_repair_100': pr.get('lp_reached_repair_100', False),
+            'pipeline_reached_full_soft': pr.get('lp_reached_full_soft', False),
+            'pipeline_reached_round_refix': pr.get('lp_reached_round_refix', False),
             'n_zones': pr.get('n_zones', 0),
             'n_timesteps': pr.get('n_timesteps', 24),
             'criticality_index': pr.get('criticality_index', 0.0),
             'n_samples': pr.get('n_samples', 0),
             'best_sample_idx': pr.get('best_sample_idx', 0),
+            'candidate_mean_hamming': pr.get('sample_mean_pairwise_hamming', float('nan')),
+            'candidate_max_hamming': pr.get('sample_max_pairwise_hamming', float('nan')),
+            'candidate_unique_ratio': pr.get('sample_unique_ratio', float('nan')),
+            'all_stages_reached': pr.get('all_stages_reached', []),
             'success': pr.get('success', True),
             # Timing breakdown
             'time_graph_build': pr.get('time_graph_build', 0.0),
@@ -87,7 +260,23 @@ def build_comparison_dataframe(
     df = pd.DataFrame(rows)
     
     # Derived metrics
-    df['speedup'] = df['milp_solve_time'] / df['pipeline_solve_time']
+    df['speedup'] = df.apply(
+        lambda row: _safe_ratio(row['milp_solve_time'], row['pipeline_solve_time']),
+        axis=1,
+    )
+    df['speedup_actual'] = df['speedup']
+    df['speedup_first_candidate'] = df.apply(
+        lambda row: _safe_ratio(row['milp_solve_time'], row['pipeline_first_candidate_time']),
+        axis=1,
+    )
+    df['speedup_best_candidate_oracle'] = df.apply(
+        lambda row: _safe_ratio(row['milp_solve_time'], row['pipeline_best_candidate_oracle_time']),
+        axis=1,
+    )
+    df['speedup_parallel_ideal'] = df.apply(
+        lambda row: _safe_ratio(row['milp_solve_time'], row['pipeline_parallel_ideal_time']),
+        axis=1,
+    )
     df['cost_gap_pct'] = (
         (df['pipeline_objective'] - df['milp_objective']) / df['milp_objective'].abs() * 100
     )
@@ -135,13 +324,15 @@ def compute_percentile_metrics(df: pd.DataFrame) -> Dict[str, Any]:
 
 def compute_stage_distribution(df: pd.DataFrame) -> Dict[str, Any]:
     """Compute stage distribution statistics."""
-    stage_counts = df['pipeline_stage'].value_counts().to_dict()
+    stage_col = 'pipeline_stage_reached' if 'pipeline_stage_reached' in df.columns else 'pipeline_stage'
+    stage_counts = df[stage_col].value_counts().to_dict()
     total = len(df)
     stage_pct = {k: round(v / total * 100, 1) for k, v in stage_counts.items()}
     return {
         'counts': stage_counts,
         'percentages': stage_pct,
         'total': total,
+        'stage_col': stage_col,
     }
 
 

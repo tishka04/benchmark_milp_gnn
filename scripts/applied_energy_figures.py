@@ -98,6 +98,7 @@ df["problem_size"] = df["n_zones"] * df["n_timesteps"]
 family_order = ["low", "medium", "high"]
 family_colors = {"low": "#2ecc71", "medium": "#f39c12", "high": "#e74c3c"}
 family_labels = {"low": "Low Criticality", "medium": "Medium Criticality", "high": "High Criticality"}
+stage_col = "lp_stage_reached" if "lp_stage_reached" in df.columns else "lp_stage_used"
 
 print(f"\nMerged DataFrame shape: {df.shape}")
 print(f"Families: {df['family'].value_counts().to_dict()}")
@@ -166,16 +167,28 @@ ax.grid(axis="y", alpha=0.3)
 
 # (D) LP stage distribution (stacked bar, normalized)
 ax = axes[1, 0]
-stages = ["hard_fix", "repair_20", "repair_100", "full_soft"]
-stage_labels_map = {"hard_fix": "Hard-Fix", "repair_20": "Repair-20", "repair_100": "Repair-100", "full_soft": "Full-Soft"}
-stage_colors = {"hard_fix": "#2ecc71", "repair_20": "#f39c12", "repair_100": "#e74c3c", "full_soft": "#8e44ad"}
+stages = ["hard_fix", "repair_20", "repair_100", "full_soft", "round_refix"]
+stage_labels_map = {
+    "hard_fix": "Hard-Fix",
+    "repair_20": "Repair-20",
+    "repair_100": "Repair-100",
+    "full_soft": "Full-Soft",
+    "round_refix": "Round-Refix",
+}
+stage_colors = {
+    "hard_fix": "#2ecc71",
+    "repair_20": "#f39c12",
+    "repair_100": "#e74c3c",
+    "full_soft": "#8e44ad",
+    "round_refix": "#9b59b6",
+}
 
 for idx, f in enumerate(family_order):
     fdf = df[df["family"] == f]
     total = len(fdf)
     bottom_val = 0
     for st in stages:
-        count = (fdf["lp_stage_used"] == st).sum()
+        count = (fdf[stage_col] == st).sum()
         pct = count / total * 100
         ax.bar(idx, pct, bottom=bottom_val, color=stage_colors[st], width=0.6,
                label=stage_labels_map[st] if idx == 0 else "")
@@ -254,8 +267,8 @@ ax.text(300, ax.get_ylim()[1] * 0.9, "Pipeline\nvaluable", fontsize=9, color="gr
 
 # (B) Cost gap by LP stage used — identifies which repair stage causes issues
 ax = axes[0, 1]
-stages_present = [s for s in stages if s in df["lp_stage_used"].unique()]
-data_by_stage = [df[df["lp_stage_used"] == s]["cost_gap_pct"].dropna().values for s in stages_present]
+stages_present = [s for s in stages if s in df[stage_col].unique()]
+data_by_stage = [df[df[stage_col] == s]["cost_gap_pct"].dropna().values for s in stages_present]
 bp = ax.boxplot(data_by_stage, positions=range(len(stages_present)), widths=0.6, patch_artist=True,
                 showfliers=True, flierprops=dict(marker="o", markersize=3, alpha=0.4))
 for patch, st in zip(bp["boxes"], stages_present):
@@ -268,7 +281,7 @@ ax.set_title("(B) Cost Gap by LP Stage", fontweight="bold")
 ax.grid(axis="y", alpha=0.3)
 # Add counts
 for i, st in enumerate(stages_present):
-    n = (df["lp_stage_used"] == st).sum()
+    n = (df[stage_col] == st).sum()
     ax.text(i, ax.get_ylim()[0] + 5, f"n={n}", ha="center", fontsize=8, style="italic")
 
 # (C) Speedup vs number of zones — shows size impact
@@ -468,7 +481,7 @@ for f in family_order:
         "Pct_Better": f"{(fdf['pipeline_better'].sum() / len(fdf) * 100):.0f}",
         "Pct_5pct": f"{(fdf['within_5pct'].sum() / len(fdf) * 100):.0f}",
         "Pct_10pct": f"{(fdf['within_10pct'].sum() / len(fdf) * 100):.0f}",
-        "HardFix_Pct": f"{((fdf['lp_stage_used'] == 'hard_fix').sum() / len(fdf) * 100):.0f}",
+        "HardFix_Pct": f"{((fdf[stage_col] == 'hard_fix').sum() / len(fdf) * 100):.0f}",
         "Gap_Wilcoxon_p": f"{p_gap:.2e}",
         "Speedup_Wilcoxon_p": f"{p_spd:.2e}",
     })
@@ -490,7 +503,7 @@ rows_latex.append({
     "Pct_Better": f"{(df['pipeline_better'].sum() / len(df) * 100):.0f}",
     "Pct_5pct": f"{(df['within_5pct'].sum() / len(df) * 100):.0f}",
     "Pct_10pct": f"{(df['within_10pct'].sum() / len(df) * 100):.0f}",
-    "HardFix_Pct": f"{((df['lp_stage_used'] == 'hard_fix').sum() / len(df) * 100):.0f}",
+    "HardFix_Pct": f"{((df[stage_col] == 'hard_fix').sum() / len(df) * 100):.0f}",
     "Gap_Wilcoxon_p": f"{p_gap_all:.2e}",
     "Speedup_Wilcoxon_p": f"{p_spd_all:.2e}",
 })
@@ -551,7 +564,7 @@ for f in family_order + ["all"]:
     print(f"  Pipeline better: {fdf['pipeline_better'].sum()}/{len(fdf)} ({fdf['pipeline_better'].sum()/len(fdf)*100:.0f}%)")
     print(f"  Within 5%: {fdf['within_5pct'].sum()}/{len(fdf)} ({fdf['within_5pct'].sum()/len(fdf)*100:.0f}%)")
     print(f"  Within 10%: {fdf['within_10pct'].sum()}/{len(fdf)} ({fdf['within_10pct'].sum()/len(fdf)*100:.0f}%)")
-    print(f"  Hard-fix: {(fdf['lp_stage_used']=='hard_fix').sum()}/{len(fdf)} ({(fdf['lp_stage_used']=='hard_fix').sum()/len(fdf)*100:.0f}%)")
+    print(f"  Hard-fix: {(fdf[stage_col]=='hard_fix').sum()}/{len(fdf)} ({(fdf[stage_col]=='hard_fix').sum()/len(fdf)*100:.0f}%)")
     print(f"  Time-limited: {fdf['is_timelimit'].sum()}/{len(fdf)}")
     print(f"  Mean pipeline time: {fdf['time_total'].mean():.1f}s, median: {fdf['time_total'].median():.1f}s")
     print(f"  Mean MILP time: {fdf['milp_solve_seconds'].mean():.1f}s, median: {fdf['milp_solve_seconds'].median():.1f}s")

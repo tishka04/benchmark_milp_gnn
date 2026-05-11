@@ -46,6 +46,45 @@ class EconomicAdvantageAnalyzer:
         """Precompute derived columns."""
         self.df['cost_gap'] = self.df['pipeline_objective'] - self.df['milp_objective']
         self.df['time_saved_s'] = self.df['milp_solve_time'] - self.df['pipeline_solve_time']
+
+    @staticmethod
+    def _classify_breakeven_regime(cost_gap: float, time_saved_s: float) -> Tuple[float, str]:
+        """
+        Solve the breakeven condition
+
+            C_pipe + lambda * T_pipe = C_milp + lambda * T_milp
+
+        which gives the dimensionally consistent threshold
+
+            lambda* = (C_pipe - C_milp) / (T_milp - T_pipe)
+
+        when `time_saved_s != 0`.
+
+        Returns:
+            (lambda_star, rule)
+
+        Rules:
+            - pipeline_always
+            - pipeline_if_lambda_gt_lambda_star
+            - pipeline_if_lambda_lt_lambda_star
+            - milp_always
+        """
+        if not np.isfinite(cost_gap) or not np.isfinite(time_saved_s):
+            return (float('nan'), 'undefined')
+
+        if abs(time_saved_s) < 1e-12:
+            return (0.0, 'pipeline_always') if cost_gap <= 0 else (float('inf'), 'milp_always')
+
+        lambda_star = cost_gap / time_saved_s
+        if time_saved_s > 0:
+            if cost_gap <= 0:
+                return (0.0, 'pipeline_always')
+            return (float(max(lambda_star, 0.0)), 'pipeline_if_lambda_gt_lambda_star')
+
+        # time_saved_s < 0: pipeline is slower, so its value is in the low-lambda regime.
+        if cost_gap < 0:
+            return (float(max(lambda_star, 0.0)), 'pipeline_if_lambda_lt_lambda_star')
+        return (float('inf'), 'milp_always')
     
     def compute_advantage(self, lambda_eur_per_sec: float) -> pd.DataFrame:
         """
@@ -76,6 +115,63 @@ class EconomicAdvantageAnalyzer:
         df['pipeline_profitable'] = df['advantage'] > 0
         
         return df
+
+    def compute_breakeven_lambda_per_scenario(self) -> pd.DataFrame:
+        """
+        Compute the per-scenario breakeven lambda and decision rule.
+
+        `lambda_star_eur_per_s` is the minimum time value above which the
+        pipeline becomes preferable when it is faster but costlier.
+        When the pipeline is slower but cheaper, the returned rule makes that
+        explicit via `pipeline_if_lambda_lt_lambda_star`.
+        """
+        df = self.df.copy()
+        rows = [
+            self._classify_breakeven_regime(cost_gap, time_saved)
+            for cost_gap, time_saved in zip(df['cost_gap'], df['time_saved_s'])
+        ]
+        df['lambda_star_eur_per_s'] = [row[0] for row in rows]
+        df['lambda_star_rule'] = [row[1] for row in rows]
+        df['pipeline_faster'] = df['time_saved_s'] > 0
+        df['pipeline_cheaper'] = df['cost_gap'] < 0
+        return df
+
+    def summarize_decision_regimes(
+        self,
+        regime_lambdas: Optional[Dict[str, float]] = None,
+    ) -> pd.DataFrame:
+        """
+        Summarize pipeline preference under representative lambda regimes.
+
+        Args:
+            regime_lambdas: Mapping from regime label to lambda value in EUR/s.
+                Defaults to three paper-style regimes:
+                offline=0.5, screening=5.0, emergency=25.0.
+        """
+        if regime_lambdas is None:
+            regime_lambdas = {
+                'offline': 0.5,
+                'screening': 5.0,
+                'emergency': 25.0,
+            }
+
+        rows = []
+        for regime_name, lam in regime_lambdas.items():
+            df_adv = self.compute_advantage(lam)
+            for family_name, fam_df in df_adv.groupby('family', dropna=False):
+                valid = fam_df.dropna(subset=['advantage'])
+                rows.append({
+                    'regime': regime_name,
+                    'lambda': float(lam),
+                    'family': family_name,
+                    'n_scenarios': int(len(valid)),
+                    'pct_pipeline_preferred': float(valid['pipeline_profitable'].mean() * 100),
+                    'mean_advantage_eur': float(valid['advantage'].mean()),
+                    'median_advantage_eur': float(valid['advantage'].median()),
+                    'mean_time_saved_s': float(valid['time_saved_s'].mean()),
+                    'mean_cost_gap_eur': float(valid['cost_gap'].mean()),
+                })
+        return pd.DataFrame(rows)
     
     def sensitivity_analysis(
         self,

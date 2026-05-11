@@ -67,12 +67,22 @@ class TwoStageResult:
     time_repair_20: float = 0.0
     time_repair_100: float = 0.0
     time_full_soft: float = 0.0
+    time_round_refix: float = 0.0
+    flip_budget_repair_20: int = 0
+    flip_budget_repair_100: int = 0
+    stage_name_repair_20: str = ""
+    stage_name_repair_100: str = ""
+    stage_used_label: str = ""
     
-    # Slack progression (in MWh)
+    # Slack progression (in MWh) — one field per cascade stage.
+    # These are written independently of which stage ends up being `stage_used`,
+    # so a row may carry both `slack_full_soft` and `slack_round_refix` when
+    # Stage 4 was executed and Stage 5 then refixed the rounded binaries.
     slack_hard_fix: float = 0.0
     slack_repair_20: float = 0.0
     slack_repair_100: float = 0.0
     slack_full_soft: float = 0.0
+    slack_round_refix: float = 0.0
     
     # Warm-start diagnostics
     warm_started: bool = False
@@ -87,8 +97,8 @@ class LPWorkerTwoStage:
     Two-Stage LP Worker with hard-fix fast path and minimal soft repair fallback.
     
     Stage 1 (hard_fix): Fix all decoder binaries → pure LP (fast, stable)
-    Stage 2 (repair_20): Unfix K=20 critical vars with flip budget
-    Stage 3 (repair_100): Unfix K=100 critical vars with flip budget  
+    Stage 2: Unfix K=20 critical vars with a configured flip budget
+    Stage 3: Unfix K=100 critical vars with a configured flip budget
     Stage 4 (full_soft): Full soft constraints as last resort
     
     Parameters:
@@ -107,10 +117,14 @@ class LPWorkerTwoStage:
         flip_budget_20: int = 100,
         flip_budget_100: int = 1000,
         flip_budget_full_soft: int = None,  # None = no limit on full_soft
-        time_limit_hard_fix: float = 20.0,
-        time_limit_repair_20: float = 15.0,
-        time_limit_repair_100: float = 120.0,
+        time_limit_hard_fix: float = 300.0,
+        time_limit_repair_20: float = 300.0,
+        time_limit_repair_100: float = 300.0,
         time_limit_full_soft: float = 900.0,  # 5 minutes
+        time_limit_round_refix: float = 900.0,  # Stage 5 budget; needs to be generous
+                                                # so the integer-feasible LP doesn't time out
+                                                # and force a fall-back to fractional Stage 4.
+        repair_poll_interval_seconds: float = 5.0,
         temporal_window: int = 1,
         dt_hours: float = 1.0,  # Timestep duration for MWh conversion
         verbose: bool = True,
@@ -127,7 +141,17 @@ class LPWorkerTwoStage:
             'repair_20': time_limit_repair_20,
             'repair_100': time_limit_repair_100,
             'full_soft': time_limit_full_soft,
+            'round_refix': time_limit_round_refix,
         }
+        self.stage_display_names = {
+            'hard_fix': 'hard_fix',
+            'repair_20': self._repair_stage_name(self.flip_budget_20),
+            'repair_100': self._repair_stage_name(self.flip_budget_100),
+            'full_soft': 'full_soft',
+            'round_refix': 'round_refix',
+            'failed': 'failed',
+        }
+        self.repair_poll_interval_seconds = max(0.1, float(repair_poll_interval_seconds))
         self.temporal_window = temporal_window
         self.dt_hours = dt_hours
         self.verbose = verbose
@@ -154,8 +178,15 @@ class LPWorkerTwoStage:
             print(f"  Slack tolerance: {slack_tol_mwh} MWh (dt={dt_hours}h)")
             print(f"  Deviation penalty (λ): {deviation_penalty}")
             print(f"  Flip budgets: K=20→{flip_budget_20}, K=100→{flip_budget_100}, full_soft→{flip_budget_full_soft}")
+            print(
+                "  Display labels: "
+                f"{self.stage_display_names['repair_20']}, "
+                f"{self.stage_display_names['repair_100']}"
+            )
+            print(f"  Repair incumbent poll interval: {self.repair_poll_interval_seconds}s")
             print(f"  Time limits: TL1={time_limit_hard_fix}s, TL2={time_limit_repair_20}s, "
-                  f"TL3={time_limit_repair_100}s, TL4={time_limit_full_soft}s")
+                  f"TL3={time_limit_repair_100}s, TL4={time_limit_full_soft}s, "
+                  f"TL5={time_limit_round_refix}s")
 
     def _find_scenario_path(self, scenario_id: str) -> Optional[str]:
         """Find the scenario JSON file path."""
@@ -166,6 +197,16 @@ class LPWorkerTwoStage:
             if os.path.exists(path):
                 return path
         return None
+
+    @staticmethod
+    def _repair_stage_name(flip_budget: int) -> str:
+        """Return the user-facing repair stage label for a configured flip budget."""
+        return f"repair_{int(flip_budget)}_flips"
+
+    def _display_stage_name(self, stage: Any) -> str:
+        """Resolve the user-facing stage label from an enum/string stage key."""
+        stage_key = stage.value if hasattr(stage, 'value') else str(stage or '')
+        return self.stage_display_names.get(stage_key, stage_key)
 
     def _get_decoder_targets(
         self,
@@ -464,14 +505,29 @@ class LPWorkerTwoStage:
             'p_thermal', 'p_nuclear', 'p_solar', 'p_wind',
             'b_charge', 'b_discharge', 'b_soc',
             'pumped_charge', 'pumped_discharge', 'pumped_level',
-            'h_release', 'h_level', 'h_spill', 'dr_shed',
+            'h_release', 'h_level', 'h_spill', 'dr_shed', 'dr_rebound',
             'unserved', 'spill_solar', 'spill_wind', 'overgen_spill',
-            'u_thermal',
+            'u_thermal', 'v_thermal_startup',
+            'b_charge_mode', 'pumped_charge_mode', 'dr_active',
         ]
         
         for name in var_names:
             if hasattr(model, name):
                 solution[name] = extract_2d(getattr(model, name))
+
+        def extract_1d(var_obj):
+            arr = np.zeros((n_timesteps,))
+            for t in model.T:
+                try:
+                    val = value(var_obj[t])
+                    arr[t] = val if val is not None else 0.0
+                except:
+                    arr[t] = 0.0
+            return arr
+
+        for name in ['net_import', 'net_export', 'import_mode']:
+            if hasattr(model, name):
+                solution[name] = extract_1d(getattr(model, name))
         
         # Also extract hydro_ror parameter (fixed input, not a variable)
         if hasattr(model, 'hydro_ror'):
@@ -831,6 +887,62 @@ class LPWorkerTwoStage:
 
         return results, elapsed, has_solution
 
+    def _solve_with_early_accept(
+        self,
+        model,
+        stage_key: str,
+        time_limit: float,
+        accept_slack_threshold: Optional[float] = None,
+    ) -> Tuple[Any, float, bool, bool]:
+        """
+        Solve a repair stage in short slices so we can stop as soon as an
+        acceptable incumbent is available instead of always consuming the full
+        stage time limit.
+
+        Returns:
+            (results, total_elapsed, has_solution, accepted_early)
+        """
+        if accept_slack_threshold is None or time_limit <= 0:
+            results, elapsed, has_solution = self._solve_with_timeout(model, time_limit)
+            return results, elapsed, has_solution, False
+
+        total_elapsed = 0.0
+        latest_results = None
+        has_any_solution = False
+        accepted_early = False
+        stage_label = self._display_stage_name(stage_key)
+
+        while total_elapsed < time_limit:
+            remaining = max(0.0, float(time_limit) - total_elapsed)
+            slice_time = min(self.repair_poll_interval_seconds, remaining)
+            if slice_time <= 0:
+                break
+
+            results, elapsed, has_solution = self._solve_with_timeout(model, slice_time)
+            latest_results = results
+            total_elapsed += elapsed
+            has_any_solution = has_any_solution or has_solution
+
+            if has_solution:
+                slack_mwh = self._extract_slack(model)
+                if self.verbose:
+                    print(
+                        f"    {stage_label} incumbent after {total_elapsed:.1f}s: "
+                        f"slack={slack_mwh:.1f} MWh"
+                    )
+                if slack_mwh <= accept_slack_threshold:
+                    accepted_early = True
+                    break
+
+            tc = results.solver.termination_condition
+            if tc != TerminationCondition.maxTimeLimit:
+                break
+
+            if elapsed <= 1e-6:
+                break
+
+        return latest_results, total_elapsed, has_any_solution, accepted_early
+
     def _get_true_objective(self, model) -> float:
         """
         Get the TRUE UC objective value (without penalty terms).
@@ -851,22 +963,35 @@ class LPWorkerTwoStage:
         return 0.0
 
     def _calculate_deviation(self, model, targets: Dict) -> Tuple[float, int]:
-        """Calculate total deviation from decoder and count flips (u_thermal only)."""
+        """Calculate binary deviation and flips across the tracked UC families."""
         deviation = 0.0
         n_flips = 0
-        
-        for (z, t), target in targets['u_thermal'].items():
-            if hasattr(model, 'u_thermal') and (z, t) in model.u_thermal:
+        binary_families = (
+            ("u_thermal", "u_thermal"),
+            ("b_charge_mode", "b_charge_mode"),
+            ("pumped_charge_mode", "pumped_charge_mode"),
+            ("dr_active", "dr_active"),
+        )
+
+        for target_key, attr_name in binary_families:
+            target_dict = targets.get(target_key, {})
+            if not hasattr(model, attr_name):
+                continue
+            model_attr = getattr(model, attr_name)
+            for index, target in target_dict.items():
+                if index not in model_attr:
+                    continue
                 try:
-                    actual = value(model.u_thermal[z, t])
-                    if actual is not None:
-                        diff = abs(actual - target)
-                        deviation += diff
-                        if diff > 0.5:
-                            n_flips += 1
-                except:
+                    actual = value(model_attr[index])
+                    if actual is None:
+                        continue
+                    diff = abs(actual - target)
+                    deviation += diff
+                    if diff > 0.5:
+                        n_flips += 1
+                except Exception:
                     pass
-        
+
         return deviation, n_flips
 
     def _calculate_deviation_relaxed(self, model, targets: Dict) -> Dict[str, float]:
@@ -1084,12 +1209,18 @@ class LPWorkerTwoStage:
             objective_value=float('inf'),
             solve_time=0.0,
             continuous_vars={},
+            flip_budget_repair_20=max(1, int(self.flip_budget_20)),
+            flip_budget_repair_100=max(1, int(self.flip_budget_100)),
+            stage_name_repair_20=self.stage_display_names['repair_20'],
+            stage_name_repair_100=self.stage_display_names['repair_100'],
+            stage_used_label='failed',
         )
         
         # Find scenario file
         scenario_path = self._find_scenario_path(scenario_id)
         if scenario_path is None:
             result.status = 'error'
+            result.stage_used_label = self._display_stage_name(result.stage_used)
             result.message = f"File not found: {scenario_id}"
             return result
         
@@ -1150,6 +1281,7 @@ class LPWorkerTwoStage:
                     result.slack_used = slack1
                     result.decoder_deviation, result.n_flips = 0.0, 0
                     result.n_unfixed = 0
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
                     result.message = f"Hard-fix OK: slack={slack1:.1f} MWh"
                     return result
                 
@@ -1164,18 +1296,17 @@ class LPWorkerTwoStage:
             # STAGE 2: REPAIR-20 (K=20 critical variables)
             # ================================================================
             if self.verbose:
-                print(f"  Stage 2: Repair-20...")
+                print(f"  Stage 2: {self.stage_display_names['repair_20']}...")
             
             model2 = build_uc_model(scenario_data, enable_duals=False)
             targets2 = self._get_decoder_targets(decoder_output, zone_names, n_timesteps)
             self._fix_all_binaries(model2, targets2)
             self._relax_slack_bounds(model2)
             
-            # Dynamic flip budget: 10% of total binaries
             n_binaries = self._count_total_binaries(model2)
-            flip_budget_2 = max(1, int(n_binaries * 0.10))
+            flip_budget_2 = max(1, int(self.flip_budget_20))
             if self.verbose:
-                print(f"    n_binaries={n_binaries}, flip_budget_2={flip_budget_2} (10%)")
+                print(f"    n_binaries={n_binaries}, flip_budget_2={flip_budget_2}")
             
             # Select critical indices from hard-fix solution (Fix #5: pass targets)
             if sol1 is not None:
@@ -1192,7 +1323,12 @@ class LPWorkerTwoStage:
             self._add_deviation_penalty_on_subset(model2, targets2, critical_20, self.deviation_penalty, penalize_all_binaries=True)
             self._add_flip_budget_constraint(model2, targets2, critical_20, flip_budget_2, include_all_binaries=True)
             
-            res2, time2, has2 = self._solve_with_timeout(model2, self.time_limits['repair_20'])
+            res2, time2, has2, accepted2_early = self._solve_with_early_accept(
+                model2,
+                'repair_20',
+                self.time_limits['repair_20'],
+                accept_slack_threshold=self.slack_tol_mwh,
+            )
             result.time_repair_20 = time2
             
             tc2 = res2.solver.termination_condition
@@ -1200,7 +1336,7 @@ class LPWorkerTwoStage:
                 slack2 = self._extract_slack(model2)
                 result.slack_repair_20 = slack2
                 
-                if slack2 <= self.slack_tol_mwh:
+                if accepted2_early or slack2 <= self.slack_tol_mwh:
                     # SUCCESS with repair-20
                     result.status = 'optimal'
                     result.stage_used = SolveStage.REPAIR_20
@@ -1212,7 +1348,14 @@ class LPWorkerTwoStage:
                     result.decoder_deviation, result.n_flips = self._calculate_deviation(model2, targets2)
                     result.n_unfixed = len(critical_20)
                     result.critical_indices = list(critical_20)
-                    result.message = f"Repair-20 OK: slack={slack2:.1f}, flips={result.n_flips}"
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
+                    if accepted2_early:
+                        result.message = (
+                            f"{result.stage_used_label} early accept: "
+                            f"slack={slack2:.1f}, flips={result.n_flips}"
+                        )
+                    else:
+                        result.message = f"{result.stage_used_label} OK: slack={slack2:.1f}, flips={result.n_flips}"
                     return result
                 
                 sol2 = self._extract_solution(model2)
@@ -1235,26 +1378,27 @@ class LPWorkerTwoStage:
                     result.solve_time = time.time() - total_start
                     result.continuous_vars = self._extract_solution(best_model)
                     result.slack_used = best_slack
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
                     result.message = f"Early exit (max_stages={max_stages}): slack={best_slack:.1f}"
                 else:
                     result.status = 'infeasible'
                     result.solve_time = time.time() - total_start
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
                     result.message = f"Stages 1-2 failed (max_stages={max_stages})"
                 return result
             
             if self.verbose:
-                print(f"  Stage 3: Repair-100...")
+                print(f"  Stage 3: {self.stage_display_names['repair_100']}...")
             
             model3 = build_uc_model(scenario_data, enable_duals=False)
             targets3 = self._get_decoder_targets(decoder_output, zone_names, n_timesteps)
             self._fix_all_binaries(model3, targets3)
             self._relax_slack_bounds(model3)
             
-            # Dynamic flip budget: 50% of total binaries
             n_binaries_3 = self._count_total_binaries(model3)
-            flip_budget_3 = max(1, int(n_binaries_3 * 0.50))
+            flip_budget_3 = max(1, int(self.flip_budget_100))
             if self.verbose:
-                print(f"    n_binaries={n_binaries_3}, flip_budget_3={flip_budget_3} (50%)")
+                print(f"    n_binaries={n_binaries_3}, flip_budget_3={flip_budget_3}")
             
             ref_sol = sol2 if sol2 is not None else sol1
             if ref_sol is not None:
@@ -1270,7 +1414,12 @@ class LPWorkerTwoStage:
             self._add_deviation_penalty_on_subset(model3, targets3, critical_100, self.deviation_penalty, penalize_all_binaries=True)
             self._add_flip_budget_constraint(model3, targets3, critical_100, flip_budget_3, include_all_binaries=True)
             
-            res3, time3, has3 = self._solve_with_timeout(model3, self.time_limits['repair_100'])
+            res3, time3, has3, accepted3_early = self._solve_with_early_accept(
+                model3,
+                'repair_100',
+                self.time_limits['repair_100'],
+                accept_slack_threshold=self.slack_tol_mwh,
+            )
             result.time_repair_100 = time3
             
             tc3 = res3.solver.termination_condition
@@ -1279,7 +1428,7 @@ class LPWorkerTwoStage:
                 result.slack_repair_100 = slack3
                 
                 # Relaxed acceptance: slack <= 50 MWh OR significant improvement
-                if slack3 <= 50.0 or slack3 < result.slack_hard_fix * 0.5:
+                if accepted3_early or slack3 <= 50.0 or slack3 < result.slack_hard_fix * 0.5:
                     # SUCCESS or significant improvement
                     result.status = 'optimal'
                     result.stage_used = SolveStage.REPAIR_100
@@ -1291,10 +1440,58 @@ class LPWorkerTwoStage:
                     result.decoder_deviation, result.n_flips = self._calculate_deviation(model3, targets3)
                     result.n_unfixed = len(critical_100)
                     result.critical_indices = list(critical_100)[:50]  # Limit for logging
-                    result.message = f"Repair-100 OK: slack={slack3:.1f}, flips={result.n_flips}"
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
+                    if accepted3_early:
+                        result.message = (
+                            f"{result.stage_used_label} early accept: "
+                            f"slack={slack3:.1f}, flips={result.n_flips}"
+                        )
+                    else:
+                        result.message = f"{result.stage_used_label} OK: slack={slack3:.1f}, flips={result.n_flips}"
                     return result
             else:
                 result.slack_repair_100 = float('inf')
+
+            if max_stages < 4:
+                stage_candidates = []
+                if has1:
+                    stage_candidates.append((model1, SolveStage.HARD_FIX, result.slack_hard_fix))
+                if has2:
+                    stage_candidates.append((model2, SolveStage.REPAIR_20, result.slack_repair_20))
+                if has3:
+                    stage_candidates.append((model3, SolveStage.REPAIR_100, result.slack_repair_100))
+
+                if stage_candidates:
+                    best_model, best_stage, best_slack = min(stage_candidates, key=lambda item: item[2])
+                    result.status = 'feasible_early'
+                    result.stage_used = best_stage
+                    result.objective_value = self._get_true_objective(best_model)
+                    result.solve_time = time.time() - total_start
+                    result.continuous_vars = self._extract_solution(best_model)
+                    result.slack_used = best_slack
+
+                    if best_stage == SolveStage.HARD_FIX:
+                        result.decoder_deviation, result.n_flips = 0.0, 0
+                        result.n_unfixed = 0
+                    elif best_stage == SolveStage.REPAIR_20:
+                        result.deviation_penalty_value = self._get_penalty_value(best_model)
+                        result.decoder_deviation, result.n_flips = self._calculate_deviation(best_model, targets2)
+                        result.n_unfixed = len(critical_20)
+                        result.critical_indices = list(critical_20)
+                    else:
+                        result.deviation_penalty_value = self._get_penalty_value(best_model)
+                        result.decoder_deviation, result.n_flips = self._calculate_deviation(best_model, targets3)
+                        result.n_unfixed = len(critical_100)
+                        result.critical_indices = list(critical_100)[:50]
+
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
+                    result.message = f"Early exit (max_stages={max_stages}): slack={best_slack:.1f}"
+                else:
+                    result.status = 'infeasible'
+                    result.solve_time = time.time() - total_start
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
+                    result.message = f"Stages 1-3 failed (max_stages={max_stages})"
+                return result
             
             # ================================================================
             # STAGE 4: FULL SOFT (all variables unfixed with penalty)
@@ -1338,6 +1535,27 @@ class LPWorkerTwoStage:
                 if self.verbose:
                     print(f"    Stage 4 (relaxed): slack={slack4:.1f}, L1_dev={relaxed_metrics['l1_deviation']:.2f}, "
                           f"rounded_flips={relaxed_metrics['rounded_flips']}")
+
+                # Respect max_stages: callers that cap at Stage 4 should keep
+                # the relaxed full_soft result instead of forcing Stage 5.
+                if max_stages < 5:
+                    result.status = 'feasible_early'
+                    result.stage_used = SolveStage.FULL_SOFT
+                    result.objective_value = self._get_true_objective(model4)
+                    result.deviation_penalty_value = self._get_penalty_value(model4)
+                    result.solve_time = time.time() - total_start
+                    result.continuous_vars = self._extract_solution(model4)
+                    result.slack_used = slack4
+                    result.decoder_deviation = relaxed_metrics['l1_deviation']
+                    result.n_flips = int(relaxed_metrics['rounded_flips'])
+                    result.n_unfixed = len(all_zt)
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
+                    result.message = (
+                        f"Early exit (max_stages={max_stages}): "
+                        f"Stage 4 slack={slack4:.1f}, "
+                        f"rounded_flips={result.n_flips}"
+                    )
+                    return result
                 
                 # ================================================================
                 # STAGE 5: ROUND & REFIX (always used to guarantee integrality)
@@ -1367,10 +1585,15 @@ class LPWorkerTwoStage:
                 TransformationFactory('core.relax_integer_vars').apply_to(model5)
                 self._relax_slack_bounds(model5)
                 
-                res5, time5, has5 = self._solve_with_timeout(model5, self.time_limits['hard_fix'])
+                res5, time5, has5 = self._solve_with_timeout(model5, self.time_limits['round_refix'])
                 
                 if has5:
                     slack5 = self._extract_slack(model5)
+                    # Record Stage 5 slack in its own dedicated field so that
+                    # downstream analyses can compare Stage 4 (fractional) and
+                    # Stage 5 (integer-feasible refix) slack side-by-side.
+                    result.slack_round_refix = slack5
+                    result.time_round_refix = time5
                     if self.verbose:
                         print(f"    Stage 5: slack={slack5:.1f} (vs Stage 4: {slack4:.1f})")
                     
@@ -1383,29 +1606,36 @@ class LPWorkerTwoStage:
                     result.slack_used = slack5
                     result.decoder_deviation, result.n_flips = self._calculate_deviation(model5, rounded_targets)
                     result.n_unfixed = 0  # All binaries fixed to integer values
+                    result.stage_used_label = self._display_stage_name(result.stage_used)
                     result.message = f"Round&Refix: slack={slack5:.1f} (relaxed was {slack4:.1f}), flips={result.n_flips}"
                     return result
                 
-                # Stage 5 solve failed entirely (extremely rare with relaxed slack bounds)
+                # Stage 5 solve failed entirely. We do NOT fall back to
+                # Stage 4's fractional solution: with relaxed integrality it
+                # can appear cheaper than the MILP optimum (phantom-feasible),
+                # which pollutes the cost-gap distribution. Mark infeasible
+                # so downstream analyses exclude the scenario cleanly.
                 if self.verbose:
-                    print(f"    ⚠ Stage 5 solve failed, falling back to Stage 4 (fractional)")
-                result.status = 'feasible_full_soft'
-                result.stage_used = SolveStage.FULL_SOFT
-                result.objective_value = self._get_true_objective(model4)
-                result.deviation_penalty_value = self._get_penalty_value(model4)
+                    print(f"    \u26a0 Stage 5 solve failed; marking scenario infeasible "
+                          f"(Stage 4 fractional slack was {slack4:.1f})")
+                result.status = 'infeasible'
+                result.stage_used = SolveStage.FAILED
+                result.objective_value = float('inf')
                 result.solve_time = time.time() - total_start
-                result.continuous_vars = self._extract_solution(model4)
-                result.slack_used = slack4
-                result.decoder_deviation = relaxed_metrics['l1_deviation']
-                result.n_flips = relaxed_metrics['rounded_flips']
+                result.slack_used = slack4  # keep Stage-4 slack for diagnostics
                 result.n_unfixed = len(all_zt)
-                result.message = f"Full soft fallback (Stage 5 failed): slack={slack4:.1f}"
+                result.stage_used_label = self._display_stage_name(result.stage_used)
+                result.message = (
+                    f"Infeasible: Stage 5 round_refix failed after Stage 4 "
+                    f"(Stage 4 slack={slack4:.1f})"
+                )
                 return result
             
             # All stages failed
             result.status = 'infeasible'
             result.stage_used = SolveStage.FAILED
             result.solve_time = time.time() - total_start
+            result.stage_used_label = self._display_stage_name(result.stage_used)
             result.message = "All stages failed"
             return result
             
@@ -1414,6 +1644,7 @@ class LPWorkerTwoStage:
             result.status = 'error'
             result.stage_used = SolveStage.FAILED
             result.solve_time = time.time() - total_start
+            result.stage_used_label = self._display_stage_name(result.stage_used)
             result.message = f"Error: {str(e)[:200]}"
             if self.verbose:
                 traceback.print_exc()
@@ -1454,6 +1685,7 @@ def run_lp_worker_batch_two_stage(
                 objective_value=float('inf'),
                 solve_time=0.0,
                 continuous_vars={},
+                stage_used_label='failed',
                 message="Decoder output is None"
             ))
             continue
@@ -1464,7 +1696,8 @@ def run_lp_worker_batch_two_stage(
         
         if i <= 50:
             emoji = '✓' if result.status in ['optimal', 'feasible_full_soft'] else '✗'
-            print(f"  {emoji} {sc_id}: {result.stage_used.value} | "
+            stage_label = result.stage_used_label or lp_worker._display_stage_name(result.stage_used)
+            print(f"  {emoji} {sc_id}: {stage_label} | "
                   f"obj={result.objective_value:.0f} | slack={result.slack_used:.1f} | "
                   f"flips={result.n_flips} | {result.solve_time:.2f}s")
     
@@ -1476,7 +1709,8 @@ def run_lp_worker_batch_two_stage(
     print(f"\n  Stage distribution:")
     for stage in SolveStage:
         pct = 100 * stage_counts[stage] / len(results) if results else 0
-        print(f"    {stage.value:15s}: {stage_counts[stage]:4d} ({pct:5.1f}%)")
+        stage_label = lp_worker._display_stage_name(stage)
+        print(f"    {stage_label:20s}: {stage_counts[stage]:4d} ({pct:5.1f}%)")
     
     success_results = [r for r in results if r.status in ['optimal', 'feasible_full_soft']]
     if success_results:

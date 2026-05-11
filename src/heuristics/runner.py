@@ -19,6 +19,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import numpy as np
 import torch
 
 try:
@@ -35,6 +36,16 @@ from src.heuristics.rolling_horizon import (
     HeuristicConfig,
     rolling_horizon_heuristic,
 )
+
+_LP_STAGE_ORDER = ['hard_fix', 'repair_20', 'repair_100', 'full_soft', 'round_refix']
+
+
+def _display_stage_name(lp_result, stage: str) -> str:
+    if stage == 'repair_20':
+        return str(getattr(lp_result, 'stage_name_repair_20', '') or stage)
+    if stage == 'repair_100':
+        return str(getattr(lp_result, 'stage_name_repair_100', '') or stage)
+    return str(stage or '')
 
 
 @dataclass
@@ -53,9 +64,23 @@ class HeuristicResult:
     # LP outputs
     lp_status: str = ""
     lp_stage_used: str = ""
+    lp_stage_reached: str = ""
     lp_objective: float = float("nan")
     lp_slack: float = 0.0
     lp_n_flips: int = 0
+
+    # Per-stage slack progression (MWh). Non-zero simultaneously for multiple
+    # stages when the cascade reached Stage 4/5 (full_soft + round_refix).
+    lp_slack_hard_fix: float = 0.0
+    lp_slack_repair_20: float = 0.0
+    lp_slack_repair_100: float = 0.0
+    lp_slack_full_soft: float = 0.0
+    lp_slack_round_refix: float = 0.0
+    lp_reached_hard_fix: bool = False
+    lp_reached_repair_20: bool = False
+    lp_reached_repair_100: bool = False
+    lp_reached_full_soft: bool = False
+    lp_reached_round_refix: bool = False
 
     # Scenario metadata
     n_zones: int = 0
@@ -84,6 +109,32 @@ def _binary_stats(u_bin: torch.Tensor) -> Dict[str, float]:
     for i, name in enumerate(names):
         out[name] = float(u_bin[..., i].mean().item())
     return out
+
+
+def _normalize_stage_name(stage) -> str:
+    return stage.value if hasattr(stage, "value") else str(stage or "")
+
+
+def _extract_stage_flags(lp_result) -> Dict[str, bool]:
+    final_stage = _normalize_stage_name(getattr(lp_result, "stage_used", ""))
+    flags = {}
+    for stage in _LP_STAGE_ORDER:
+        time_val = float(getattr(lp_result, f"time_{stage}", 0.0) or 0.0)
+        slack_val = getattr(lp_result, f"slack_{stage}", 0.0)
+        flags[stage] = bool(
+            time_val > 0.0
+            or final_stage == stage
+            or (slack_val is not None and float(slack_val) > 0.0)
+        )
+    return flags
+
+
+def _deepest_stage_reached(lp_result) -> str:
+    flags = _extract_stage_flags(lp_result)
+    for stage in reversed(_LP_STAGE_ORDER):
+        if flags[stage]:
+            return _display_stage_name(lp_result, stage)
+    return _display_stage_name(lp_result, _normalize_stage_name(getattr(lp_result, "stage_used", "")))
 
 
 class HeuristicRunner:
@@ -168,12 +219,27 @@ class HeuristicRunner:
 
             stage_used = lp_res.stage_used
             result.lp_status = str(lp_res.status)
-            result.lp_stage_used = (
-                stage_used.value if hasattr(stage_used, "value") else str(stage_used)
-            )
+            stage_key = stage_used.value if hasattr(stage_used, "value") else str(stage_used)
+            result.lp_stage_used = _display_stage_name(lp_res, stage_key)
+            result.lp_stage_reached = _deepest_stage_reached(lp_res)
             result.lp_objective = float(lp_res.objective_value)
             result.lp_slack = float(getattr(lp_res, "slack_used", 0.0))
             result.lp_n_flips = int(getattr(lp_res, "n_flips", 0) or 0)
+            # Per-stage slack progression (0.0 if that stage didn't run)
+            result.lp_slack_hard_fix    = float(getattr(lp_res, "slack_hard_fix", 0.0))
+            result.lp_slack_repair_20   = float(getattr(lp_res, "slack_repair_20", 0.0))
+            result.lp_slack_repair_100  = float(getattr(lp_res, "slack_repair_100", 0.0))
+            result.lp_slack_full_soft   = float(getattr(lp_res, "slack_full_soft", 0.0))
+            result.lp_slack_round_refix = float(getattr(lp_res, "slack_round_refix", 0.0))
+            stage_flags = _extract_stage_flags(lp_res)
+            result.lp_reached_hard_fix = stage_flags["hard_fix"]
+            result.lp_reached_repair_20 = stage_flags["repair_20"]
+            result.lp_reached_repair_100 = stage_flags["repair_100"]
+            result.lp_reached_full_soft = stage_flags["full_soft"]
+            result.lp_reached_round_refix = stage_flags["round_refix"]
+            result.success = bool(np.isfinite(result.lp_objective)) and result.lp_status not in {
+                'infeasible', 'error', 'pending'
+            }
 
         except Exception as exc:
             result.success = False

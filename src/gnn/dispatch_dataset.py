@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import json
 import glob
+import re
 import numpy as np
 import torch
 import torch.nn.functional as F_nn
@@ -31,6 +32,14 @@ FEAT_DR = 4
 FEAT_THERMAL_SU = 5
 FEAT_THERMAL = 6
 N_BINARY_FEATURES = 7
+
+
+def extract_scenario_id(value: str) -> Optional[str]:
+    """Extract a scenario id from nested or flattened embedding filenames."""
+    match = re.search(r"(scenario_\d{5})(?!\d)", value)
+    if match is None:
+        return None
+    return match.group(1)
 
 
 def extract_binaries_from_report(
@@ -204,12 +213,12 @@ class DispatchDataset(Dataset):
                 if ext not in (".npz", ".pt", ".npy"):
                     continue
                 stem = os.path.splitext(fname)[0]
-                parts = stem.replace("\\", "/").split("/")
-                scenario_part = parts[-1]
-                if scenario_part.startswith("scenario_"):
-                    full_path = os.path.join(root, fname)
-                    self._embedding_lookup[scenario_part] = full_path
-                    n_found += 1
+                scenario_id = extract_scenario_id(stem)
+                if scenario_id is None:
+                    continue
+                full_path = os.path.join(root, fname)
+                self._embedding_lookup[scenario_id] = full_path
+                n_found += 1
 
         if n_found > 0:
             print(f"  Found {n_found} embedding files")

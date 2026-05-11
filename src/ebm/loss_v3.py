@@ -100,6 +100,7 @@ class PreferenceLoss(nn.Module):
         self,
         E_better: torch.Tensor,
         E_worse: torch.Tensor,
+        margin: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         """
         Args:
@@ -111,8 +112,15 @@ class PreferenceLoss(nn.Module):
             metrics: dict
         """
         # Margin ranking: E_better should be < E_worse by at least margin
+        if margin is None:
+            margin = torch.full_like(E_better, self.margin)
+        elif not torch.is_tensor(margin):
+            margin = torch.full_like(E_better, float(margin))
+        else:
+            margin = margin.to(device=E_better.device, dtype=E_better.dtype)
+
         pref_loss = torch.clamp(
-            E_better - E_worse + self.margin, min=0.0
+            E_better - E_worse + margin, min=0.0
         ).mean()
 
         # Fraction of correctly ordered pairs
@@ -123,6 +131,8 @@ class PreferenceLoss(nn.Module):
             "pref_accuracy": correct,
             "E_better_mean": E_better.mean().item(),
             "E_worse_mean": E_worse.mean().item(),
+            "margin_mean": margin.mean().item(),
+            "E_margin_gap_mean": (E_worse - E_better).mean().item(),
         }
 
         return pref_loss, metrics
@@ -156,6 +166,7 @@ class CombinedLoss(nn.Module):
         E_neg: torch.Tensor,
         E_better: Optional[torch.Tensor] = None,
         E_worse: Optional[torch.Tensor] = None,
+        pair_margins: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Dict[str, float]]:
         """
         Compute combined loss.
@@ -171,7 +182,7 @@ class CombinedLoss(nn.Module):
         metrics["loss_cd_weighted"] = (self.lambda_cd * cd_val).item()
 
         if E_better is not None and E_worse is not None and len(E_better) > 0:
-            pref_val, pref_metrics = self.pref_loss(E_better, E_worse)
+            pref_val, pref_metrics = self.pref_loss(E_better, E_worse, margin=pair_margins)
             total = total + self.lambda_pref * pref_val
             metrics.update({f"pref/{k}": v for k, v in pref_metrics.items()})
             metrics["loss_pref_weighted"] = (self.lambda_pref * pref_val).item()

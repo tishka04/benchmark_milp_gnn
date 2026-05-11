@@ -44,7 +44,7 @@
 
 
 \title{Coordinating Multilayer Power System Flexibility:\\
-A Hybrid MILP--GNN--EBM Framework for Large-Scale Scenario Exploration}
+From Mathematical Optimization to Compute-Bounded Stochastic Scenario Exploration}
 \author{Théotime Coudray* \\ Stéphane Goutte*\\[2pt]
 \normalsize *Université de Versailles Saint-Quentin-en-Yvelines (UVSQ), UMI SOURCE}
 \date{}
@@ -54,7 +54,7 @@ A Hybrid MILP--GNN--EBM Framework for Large-Scale Scenario Exploration}
 \maketitle
 
 \begin{abstract}
-The ongoing integration of European electricity markets toward a single wholesale price zone, coupled with the proliferation of cross-border interconnections, is creating increasingly large multi-scale power systems that must be operated and planned as a whole. At the same time, the growing frequency of black-swan events---extreme heat waves, prolonged wind droughts, cascading grid failures---demands the ability to solve unit-commitment and dispatch problems very rapidly under unprecedented stress conditions. Power-system flexibility studies therefore increasingly demand \emph{scenario exploration} rather than single-shot optimisation: analysts must evaluate large ensembles of ``what-if'' cases that combine multi-scale resources (storage, demand response, inter-area exchanges), network limits, evolving topology, and correlated uncertainty. Mixed-integer linear programming (MILP) provides rigorous and auditable answers, but repeated solves quickly become prohibitive as scenario volume and complexity grow. We propose a hybrid \textbf{MILP--GNN--EBM} methodology designed for near-real-time exploration. A multi-layer MILP oracle is first solved on a diversity-maximising scenario set to generate optimal labels. Each instance is then represented as a heterogeneous temporal graph and processed by a topology-consistent graph neural network (GNN) that produces compact scenario embeddings. Conditioned on these embeddings, an energy-based model (EBM) learns an energy landscape over binary activation/commitment decisions and enables fast sampling of multiple high-quality candidates via Langevin dynamics. A lightweight feasibility decoder repairs residual violations, and a conditional LP worker recovers the continuous dispatch to produce complete, economically meaningful operating plans. We evaluate speed, feasibility, and optimality across scenario families of increasing difficulty, testing whether the MILP--GNN--EBM stack provides larger benefits as scenarios become more complex.
+The ongoing integration of European electricity markets toward a single wholesale price zone, coupled with the proliferation of cross-border interconnections, is creating increasingly large multi-scale power systems that must be operated and planned as a whole. At the same time, the growing frequency of extreme events such as heat waves, prolonged wind droughts, or cascading grid failures, demands the ability to solve unit-commitment and dispatch problems very rapidly under unprecedented stress conditions. Power-system flexibility studies therefore increasingly require scenario exploration rather than single-shot optimisation: analysts must evaluate large ensembles of “what-if” cases that combine multi-scale resources (storage, demand response, inter-area exchanges), network limits, evolving topology, and correlated uncertainty. Mixed-integer linear programming (MILP) provides rigorous and auditable answers, but repeated solves quickly become prohibitive as scenario volume and complexity grow. To address this limitation, we propose a hybrid MILP–GNN–EBM methodology that transforms the original optimisation problem into a compute-bounded stochastic exploration process. Rather than computing a single optimal solution, the framework enables the generation of multiple high-quality feasible operating plans under a controllable computational budget. A multi-layer MILP oracle is first solved on a diversity-maximising scenario set to generate optimal labels. Each instance is then represented as a heterogeneous temporal graph and processed by a topology-consistent graph neural network (GNN) that produces compact scenario embeddings. Conditioned on these embeddings, an energy-based model (EBM) learns a structured energy landscape over binary activation/commitment decisions and enables efficient sampling of multiple candidate solutions via Langevin dynamics. A lightweight feasibility decoder repairs residual violations, and a conditional LP worker recovers the continuous dispatch to produce complete, economically meaningful operating plans. The framework allows explicit control over the trade-off between computational effort and solution quality through the sampling budget. We evaluate speed, feasibility, and optimality across scenario families of increasing difficulty, and show that the relative performance of the proposed approach improves as scenario complexity increases, making it particularly suitable for large-scale stress testing and planning under uncertainty.
 \end{abstract}
 
 \noindent\textbf{Keywords:} Power System; Multi-Scale Modelling; MILP; Graph Neural Networks; Energy-Based Models; Scenario Exploration.
@@ -100,17 +100,27 @@ In parallel, differentiable satisfiability and projection layers have been devel
 
 \paragraph{}
 The central research question is therefore:
-\emph{Can a hybrid MILP--GNN--EBM methodology enable near-real-time exploration of multi-scale flexibility scenarios---and remain effective as scenarios become increasingly complex (heterogeneous layers, discrete decisions, uncertainty, and topology change)?}
+\emph{Can a hybrid MILP--GNN--EBM methodology recast large-scale power system optimisation as a compute-bounded stochastic exploration process that enables near-real-time generation of high-quality feasible solutions, and does its relative performance improve as scenario complexity increases (heterogeneous layers, discrete decisions, uncertainty, and topology change)?}
 
 \subsection{Contributions}
 Our main contributions are:
 \begin{enumerate}[label=\textbf{C\arabic*}, leftmargin=*, itemsep=2pt]
-  \item \textbf{A flexibility scenario generator with diversity maximisation and complexity indexing.} We sample a wide range of techno-economic parameters to maximise scenario diversity and compute a scenario-specific complexity indicator that ranks instances by expected difficulty.
-  \item \textbf{A multi-layer MILP oracle for coordinated flexibility.} We formulate and solve a high-fidelity MILP that coordinates multi-scale flexibility resources under network and inter-temporal constraints, producing auditable primal schedules (and optional dual signals).
-  \item \textbf{A projection of scenario instances to hierarchical multi-layer temporal graphs.} Each scenario is encoded as a heterogeneous temporal graph that mirrors the nested physical/aggregation structure (assets $\to$ zones $\to$ regions $\to$ system) while preserving time-coupled constraints.
-  \item \textbf{A topology-consistent GNN encoder for scenario embeddings.} We learn a GNN encoder that captures scenario structure and maps each instance into an embedding space that preserves the hierarchical, multi-layer, and temporal organisation of the system.
-  \item \textbf{A graph EBM sampler with feasibility-preserving decoding.} Conditioned on scenario embeddings, an EBM learns an energy landscape over binary decisions and enables fast sampling; a lightweight decoder repairs residual violations, and a conditional LP worker recovers continuous dispatch.
-  \item \textbf{An evaluation protocol for large-scale scenario exploration.} We quantify speed, feasibility, and optimality across scenario families of increasing complexity, testing how performance evolves as the exploration ``complexity knob'' is increased.
+
+  \item \textbf{A compute-bounded stochastic exploration framework for power system flexibility.} 
+  We introduce a novel paradigm that transforms the traditional optimisation problem into a compute-bounded stochastic exploration process, enabling the generation of multiple high-quality feasible solutions under a fixed computational budget.
+
+  \item \textbf{A hybrid MILP--GNN--EBM architecture for structured generation of commitment decisions.} 
+  We propose a coherent pipeline combining a multi-layer MILP oracle, a topology-consistent graph encoder, and a graph-based energy model to learn and sample high-quality commitment decisions in large-scale, multi-layer systems.
+
+  \item \textbf{A hierarchical spatio-temporal graph representation of flexibility scenarios.} 
+  We develop a representation that captures the multi-scale structure (assets $\to$ zones $\to$ regions $\to$ system) and temporal dependencies of power systems, enabling effective learning and generalisation across diverse scenarios.
+
+  \item \textbf{A sampling-and-repair mechanism ensuring feasibility and economic consistency.} 
+  We introduce a combined EBM sampling, feasibility decoding, and conditional LP reconstruction process that produces complete and physically consistent operating plans.
+
+  \item \textbf{An evaluation framework demonstrating improved scalability with scenario complexity.} 
+  We design a systematic evaluation protocol and show that the proposed approach achieves increasing relative performance gains as scenario complexity grows under fixed computational budgets, making it particularly suitable for large-scale stress testing and planning under uncertainty.
+
 \end{enumerate}
 
 \subsection{Paper Organization}
@@ -1256,23 +1266,38 @@ All pipeline evaluations (graph construction, HTE encoding, EBM sampling, feasib
 \subsection{Evaluation Protocol}
 \label{sec:eval_protocol}
 
-For each of the 300 evaluation scenarios, the pipeline executes the full inference path described in Section~\ref{sec:ebm_inference}:
+\subsubsection{Rolling-horizon merit-order heuristic baseline}
+\label{sec:rhmo_baseline}
 
-\begin{enumerate}[noitemsep]
-  \item Build the heterogeneous temporal graph from the scenario JSON.
-  \item Generate zone-level embeddings via the trained HTE encoder (3.2M parameters).
-  \item Run 5 independent Langevin chains (100 steps each, Bernoulli initialisation, temperature annealing from $\tau=1.0$ to $\tau=0.1$) to produce 5 binary candidates.
-  \item For each candidate: run the feasibility decoder, then the two-stage LP worker.
-  \item Select the candidate with the lowest LP objective as the pipeline's solution.
+To put the GNN--EBM pipeline's empirical advantage in context, we introduce a third method---a deliberately simple, learning-free baseline---and run it on the same 300 scenarios. This \emph{Rolling-Horizon Merit-Order + LP} baseline (RH-MO+LP) shares the pipeline's reconstruct-then-optimise structure but replaces the learned binary sampler (HTE encoder + EBM + Langevin chains) with a hand-crafted scheduling rule, while reusing the same feasibility decoder and two-stage LP worker downstream.
+
+\paragraph{Stage A: rolling-horizon merit-order scheduler.}
+The scheduler sweeps forward in time and produces the same binary tensor $\hat{u} \in \{0,1\}^{Z \times T \times 7}$ consumed by the feasibility decoder (battery and pumped-hydro charge/discharge modes, demand-response activation, thermal commitment, thermal start-up). At each step $t$ and each zone $z$, it (i)~computes the residual load $\mathrm{RL}_{z,t} = D_{z,t} - (\nu^{\mathrm{must}}_z + R^{\mathrm{ror}}_{z,t} + R^{\mathrm{sol}}_{z,t} + R^{\mathrm{wnd}}_{z,t})$ left after must-run nuclear and free renewables, and (ii)~looks $W = 6$ hours ahead to compute window quantiles ($q_{0.7}$, $q_{0.8}$) and a future-stress indicator that drives storage SOC targets. Resources are then dispatched in merit order---nuclear modulation headroom, reservoir hydro (with a $\beta = 0.5$ reserve fraction for upcoming peaks), battery and pumped-hydro discharge (only above $q_{0.7}$ and above an SOC floor), interconnector imports at the anchor zone, thermal commitment (with a 2-step pseudo minimum-on time and a window-deficit threshold of 20\,\% of capacity to avoid flapping), and finally demand response as a last lever above $q_{0.8}$ and within the DR-duration budget. Surplus residual load is absorbed by storage charging up to a future-stress-dependent SOC target. Crucially, the heuristic uses \emph{no} MILP labels, no learned embeddings, and no EBM gradients; it depends only on the scenario physics already exposed in \texttt{ScenarioPhysics}.
+
+\paragraph{Stage B: LP reconstruction.}
+The binary schedule produced by Stage A is passed through the same feasibility decoder (Section~\ref{sec:feasibility_decoder}) and the same two-stage LP worker (Section~\ref{sec:lp_worker}) used by the pipeline. This is intentional: it isolates the contribution of the \emph{binary predictor} (learned EBM versus hand-crafted rule) and ensures any cost or feasibility difference between the two methods is attributable to the quality of the binary schedule rather than to a different reconstruction strategy.
+
+\paragraph{Role in the evaluation.}
+RH-MO+LP serves as a strong-but-naive lower bar: it is fast (no GPU, no model loading, no Langevin chains) and produces feasible plans for the same scenarios, but it has no awareness of cross-zonal couplings, transmission limits, or learned cost structure. Comparing the pipeline against both the MILP oracle (upper bar) and RH-MO+LP (lower bar) lets us quantify the share of the pipeline's advantage that comes from the learned representation rather than from the LP-based reconstruction shared by both methods.
+
+\subsubsection{Per-scenario protocol}
+\label{sec:per_scenario_protocol}
+
+For each of the 300 evaluation scenarios, three methods are executed independently and their outputs are recorded under the same metric definitions:
+
+\begin{enumerate}[noitemsep,label=(\roman*)]
+  \item \textbf{MILP oracle.} The full multi-layer MILP of Section~\ref{sec:milp_oracle} is solved with HiGHS under a 10-minute time limit; the resulting objective $C_{\mathrm{MILP}}$ and wall-clock time $T_{\mathrm{MILP}}$ define the reference point.
+  \item \textbf{GNN--EBM pipeline.} The full inference path described in Section~\ref{sec:ebm_inference}: (1)~build the heterogeneous temporal graph from the scenario JSON; (2)~generate zone-level embeddings via the trained HTE encoder (3.2\,M parameters); (3)~run 5 independent Langevin chains (100 steps each, Bernoulli initialisation, temperature annealing from $\tau = 1.0$ to $\tau = 0.1$) to produce 5 binary candidates; (4)~run the feasibility decoder and two-stage LP worker on each candidate; (5)~select the candidate with the lowest LP objective. The total wall-clock time $T_{\mathrm{pipe}}$ covers all five steps.
+  \item \textbf{RH-MO+LP heuristic baseline.} The rolling-horizon merit-order scheduler (Section~\ref{sec:rhmo_baseline}) produces a single binary candidate, which is then passed through the same feasibility decoder and two-stage LP worker as the pipeline. The total wall-clock time $T_{\mathrm{heur}}$ covers the heuristic sweep, the decoder call, and the LP solve.
 \end{enumerate}
 
-The following metrics are computed for each scenario:
+The following metrics are computed for each scenario, separately for the pipeline and for the heuristic, both relative to the same MILP reference:
 
 \begin{itemize}[noitemsep]
-  \item \textbf{Cost gap (\%).} Relative deviation of the pipeline objective from the MILP objective: $\Delta C = (C_{\mathrm{pipe}} - C_{\mathrm{MILP}}) / |C_{\mathrm{MILP}}| \times 100$. A negative gap indicates the pipeline found a \emph{better} solution than the MILP (possible when the MILP hit its time limit).
-  \item \textbf{Speedup.} Ratio of MILP solve time to pipeline total time: $S = T_{\mathrm{MILP}} / T_{\mathrm{pipe}}$, where $T_{\mathrm{pipe}}$ is the wall-clock time for the full best-of-5 pipeline (i.e.\ graph build + HTE encoding + EBM sampling + $5\times$ decoder + $5\times$ LP solve + selection). Values $>1$ indicate the pipeline is faster.
-  \item \textbf{Slack (MWh).} Total unserved energy and overgeneration in the pipeline solution, a direct measure of constraint satisfaction.
-  \item \textbf{LP stage used.} Which stage of the LP worker was needed (hard-fix, repair-20, repair-100, or full-soft), indicating the quality of the EBM's binary predictions.
+  \item \textbf{Cost gap (\%).} Relative deviation of the method's objective from the MILP objective, $\Delta C_{\bullet} = (C_{\bullet} - C_{\mathrm{MILP}}) / |C_{\mathrm{MILP}}| \times 100$ for $\bullet \in \{\mathrm{pipe},\, \mathrm{heur}\}$. A negative gap indicates the method found a \emph{better} solution than the MILP (possible when the MILP hit its time limit).
+  \item \textbf{Speedup.} Ratio of MILP solve time to method total time, $S_{\bullet} = T_{\mathrm{MILP}} / T_{\bullet}$. For the pipeline, $T_{\mathrm{pipe}}$ is the wall-clock time for the full best-of-5 pipeline (i.e.\ graph build + HTE encoding + EBM sampling + $5\times$ decoder + $5\times$ LP solve + selection); for the heuristic, $T_{\mathrm{heur}}$ is the rule sweep + $1\times$ decoder + $1\times$ LP solve. Values $>1$ indicate the method is faster than the MILP.
+  \item \textbf{Slack (MWh).} Total unserved energy and overgeneration in the method's solution, a direct measure of constraint satisfaction.
+  \item \textbf{LP stage used.} Which stage of the LP worker was needed (hard-fix, repair-20, repair-100, or full-soft), indicating the quality of the binary schedule fed to the reconstruction step.
 \end{itemize}
 
 
@@ -1749,7 +1774,7 @@ Figure~\ref{fig:persona_radar} visualises the persona fingerprints on the ten mo
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.7\textwidth]{fig15_persona_radar.png}
+  \includegraphics[width=0.7\textwidth]{fig3_persona_radar.png}
   \caption{Persona fingerprints: radar chart of the ten most discriminative criticality components (ranked by cross-persona variance). Each vertex shows the normalised mean value $\in [0,1]$ across 100 scenarios per persona.}
   \label{fig:persona_radar}
 \end{figure}
@@ -1780,7 +1805,7 @@ Figure~\ref{fig:persona_dashboard} presents the full cross-persona comparison da
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=\textwidth]{fig16_persona_dashboard.png}
+  \includegraphics[width=\textwidth]{fig1_persona_dashboard.png}
   \caption{Cross-persona comparison dashboard. (A)~Pipeline solve time distribution. (B)~Cost gap distribution. (C)~Speedup distribution (red dashed line = break-even). (D)~Pipeline vs MILP solve time (log--log). (E)~MILP MaxTimeLimit rate. (F)~LP stage distribution.}
   \label{fig:persona_dashboard}
 \end{figure}
@@ -3218,3 +3243,4 @@ The GNN Dispatch ablation demonstrates a clear \emph{speed--quality Pareto point
 
 
 \end{document}
+

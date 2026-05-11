@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, Tuple
 
+import numpy as np
 from pyomo.environ import SolverFactory, TerminationCondition, value
 from pyomo.core import TransformationFactory
 from pyomo.opt import SolverStatus
@@ -157,6 +158,208 @@ def _compute_cost_components(model) -> Dict[str, float]:
     return components
 
 
+def _coerce_array(values: Any) -> np.ndarray | None:
+    if values is None:
+        return None
+    if hasattr(values, "detach"):
+        values = values.detach().cpu().numpy()
+    try:
+        return np.asarray(values, dtype=float)
+    except Exception:
+        return None
+
+
+def _set_warm_value(var_obj, key, raw_value: Any, *, binary: bool = False) -> int:
+    try:
+        var = var_obj[key]
+    except Exception:
+        return 0
+    if getattr(var, "is_fixed", lambda: False)():
+        return 0
+    try:
+        value_f = float(raw_value)
+    except (TypeError, ValueError):
+        return 0
+    if not np.isfinite(value_f):
+        return 0
+    if binary:
+        value_f = 1.0 if value_f >= 0.5 else 0.0
+    lb = getattr(var, "lb", None)
+    ub = getattr(var, "ub", None)
+    if lb is not None:
+        value_f = max(float(lb), value_f)
+    if ub is not None:
+        value_f = min(float(ub), value_f)
+    var.value = value_f
+    return 1
+
+
+def _apply_mip_warm_start(model, warm_start_data: Dict[str, Any] | None) -> int:
+    """
+    Seed the exact MILP with values from a previous projected candidate.
+
+    Supports:
+    - `continuous_vars`: output of LPWorkerTwoStage._extract_solution()
+    - `binary_sample`: raw sampled EBM tensor [Z, T, 7] as a fallback source
+    """
+    if not warm_start_data:
+        return 0
+
+    continuous_vars = warm_start_data.get("continuous_vars", warm_start_data)
+    if not isinstance(continuous_vars, dict):
+        continuous_vars = {}
+    binary_sample = _coerce_array(warm_start_data.get("binary_sample"))
+
+    zones = list(model.Z)
+    periods = list(model.T)
+    n_zones = len(zones)
+    n_timesteps = len(periods)
+    n_set = 0
+
+    def get_2d(name: str) -> np.ndarray | None:
+        arr = _coerce_array(continuous_vars.get(name))
+        if arr is None or arr.ndim != 2:
+            return None
+        if arr.shape[0] < n_zones or arr.shape[1] < n_timesteps:
+            return None
+        return arr
+
+    def get_1d(name: str) -> np.ndarray | None:
+        arr = _coerce_array(continuous_vars.get(name))
+        if arr is None:
+            return None
+        arr = arr.reshape(-1)
+        if arr.shape[0] < n_timesteps:
+            return None
+        return arr
+
+    two_d_continuous = [
+        "p_thermal", "p_nuclear", "p_solar", "p_wind",
+        "b_charge", "b_discharge", "b_soc",
+        "pumped_charge", "pumped_discharge", "pumped_level",
+        "h_release", "h_level", "h_spill",
+        "dr_shed", "dr_rebound", "unserved",
+        "spill_solar", "spill_wind", "overgen_spill",
+    ]
+    two_d_binary = [
+        "u_thermal", "v_thermal_startup",
+        "b_charge_mode", "pumped_charge_mode", "dr_active",
+    ]
+    one_d_continuous = ["net_import", "net_export"]
+    one_d_binary = ["import_mode"]
+
+    for name in two_d_continuous:
+        arr = get_2d(name)
+        if arr is None or not hasattr(model, name):
+            continue
+        var_obj = getattr(model, name)
+        for z_idx, zone in enumerate(zones):
+            for t in periods:
+                n_set += _set_warm_value(var_obj, (zone, t), arr[z_idx, t], binary=False)
+
+    for name in two_d_binary:
+        arr = get_2d(name)
+        if arr is None or not hasattr(model, name):
+            continue
+        var_obj = getattr(model, name)
+        for z_idx, zone in enumerate(zones):
+            for t in periods:
+                n_set += _set_warm_value(var_obj, (zone, t), arr[z_idx, t], binary=True)
+
+    for name in one_d_continuous:
+        arr = get_1d(name)
+        if arr is None or not hasattr(model, name):
+            continue
+        var_obj = getattr(model, name)
+        for t in periods:
+            n_set += _set_warm_value(var_obj, t, arr[t], binary=False)
+
+    for name in one_d_binary:
+        arr = get_1d(name)
+        if arr is None or not hasattr(model, name):
+            continue
+        var_obj = getattr(model, name)
+        for t in periods:
+            n_set += _set_warm_value(var_obj, t, arr[t], binary=True)
+
+    if binary_sample is not None and binary_sample.ndim == 3 and binary_sample.shape[0] >= n_zones and binary_sample.shape[1] >= n_timesteps:
+        if hasattr(model, "u_thermal") and "u_thermal" not in continuous_vars:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    n_set += _set_warm_value(model.u_thermal, (zone, t), binary_sample[z_idx, t, 6], binary=True)
+        if hasattr(model, "dr_active") and "dr_active" not in continuous_vars:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    n_set += _set_warm_value(model.dr_active, (zone, t), binary_sample[z_idx, t, 4], binary=True)
+        if hasattr(model, "b_charge_mode") and "b_charge_mode" not in continuous_vars:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    charge_mode = 1.0 if binary_sample[z_idx, t, 0] >= binary_sample[z_idx, t, 1] else 0.0
+                    n_set += _set_warm_value(model.b_charge_mode, (zone, t), charge_mode, binary=True)
+        if hasattr(model, "pumped_charge_mode") and "pumped_charge_mode" not in continuous_vars:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    charge_mode = 1.0 if binary_sample[z_idx, t, 2] >= binary_sample[z_idx, t, 3] else 0.0
+                    n_set += _set_warm_value(model.pumped_charge_mode, (zone, t), charge_mode, binary=True)
+        if hasattr(model, "v_thermal_startup") and "v_thermal_startup" not in continuous_vars:
+            for z_idx, zone in enumerate(zones):
+                prev_u = 0.0
+                for t in periods:
+                    current_u = 1.0 if binary_sample[z_idx, t, 6] >= 0.5 else 0.0
+                    startup = 1.0 if current_u > prev_u else 0.0
+                    n_set += _set_warm_value(model.v_thermal_startup, (zone, t), startup, binary=True)
+                    prev_u = current_u
+
+    # Derive binary helpers from continuous warm-start if they were absent.
+    u_thermal = get_2d("u_thermal")
+    if u_thermal is not None and hasattr(model, "v_thermal_startup") and "v_thermal_startup" not in continuous_vars:
+        for z_idx, zone in enumerate(zones):
+            prev_u = 0.0
+            for t in periods:
+                current_u = 1.0 if u_thermal[z_idx, t] >= 0.5 else 0.0
+                startup = 1.0 if current_u > prev_u else 0.0
+                n_set += _set_warm_value(model.v_thermal_startup, (zone, t), startup, binary=True)
+                prev_u = current_u
+
+    if hasattr(model, "b_charge_mode") and "b_charge_mode" not in continuous_vars:
+        b_charge = get_2d("b_charge")
+        b_discharge = get_2d("b_discharge")
+        if b_charge is not None and b_discharge is not None:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    charge_mode = 1.0 if b_charge[z_idx, t] >= b_discharge[z_idx, t] else 0.0
+                    n_set += _set_warm_value(model.b_charge_mode, (zone, t), charge_mode, binary=True)
+
+    if hasattr(model, "pumped_charge_mode") and "pumped_charge_mode" not in continuous_vars:
+        p_charge = get_2d("pumped_charge")
+        p_discharge = get_2d("pumped_discharge")
+        if p_charge is not None and p_discharge is not None:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    charge_mode = 1.0 if p_charge[z_idx, t] >= p_discharge[z_idx, t] else 0.0
+                    n_set += _set_warm_value(model.pumped_charge_mode, (zone, t), charge_mode, binary=True)
+
+    if hasattr(model, "dr_active") and "dr_active" not in continuous_vars:
+        dr_shed = get_2d("dr_shed")
+        if dr_shed is not None:
+            for z_idx, zone in enumerate(zones):
+                for t in periods:
+                    active = 1.0 if dr_shed[z_idx, t] >= 0.05 else 0.0
+                    n_set += _set_warm_value(model.dr_active, (zone, t), active, binary=True)
+
+    if hasattr(model, "import_mode") and "import_mode" not in continuous_vars:
+        net_import = get_1d("net_import")
+        net_export = get_1d("net_export")
+        if net_import is not None or net_export is not None:
+            for t in periods:
+                imp = float(net_import[t]) if net_import is not None else 0.0
+                exp = float(net_export[t]) if net_export is not None else 0.0
+                import_mode = 1.0 if imp >= exp else 0.0
+                n_set += _set_warm_value(model.import_mode, t, import_mode, binary=True)
+
+    return n_set
+
+
 def _collect_duals_zone_time(model, constraint) -> Dict[Tuple[str, int], float]:
     duals: Dict[Tuple[str, int], float] = {}
     for z in model.Z:
@@ -294,6 +497,7 @@ def solve_scenario(
     capture_detail: bool = False,
     export_csv_prefix: Path | None = None,
     export_hdf: Path | None = None,
+    warm_start_data: Dict[str, Any] | None = None,
     time_limit_seconds: float | None = DEFAULT_TIME_LIMIT_SECONDS,
 ) -> Dict[str, Any]:
     data: ScenarioData = load_scenario_data(Path(scenario_path))
@@ -304,6 +508,11 @@ def solve_scenario(
         _configure_solver_time_limit(solver, solver_name, time_limit_seconds)
 
     mip_model = build_uc_model(data, enable_duals=False)
+    warm_start_count = 0
+    if warm_start_data:
+        if hasattr(solver, "config") and hasattr(solver.config, "warmstart"):
+            solver.config.warmstart = True
+        warm_start_count = _apply_mip_warm_start(mip_model, warm_start_data)
     mip_start = time.perf_counter()
     mip_results = solver.solve(mip_model, tee=tee)
     mip_elapsed = time.perf_counter() - mip_start
@@ -465,6 +674,11 @@ def solve_scenario(
         "zones": data.zones,
         "detail": detail_payload,
     }
+    if warm_start_data:
+        result["warm_start"] = {
+            "requested": True,
+            "n_initialized_vars": int(warm_start_count),
+        }
     
     # Add timeout classification if applicable
     if mip_timed_out:
