@@ -1,0 +1,80 @@
+# UC autoencoder — Phase 1 MVP (variant B: strategy tokens).
+# Used by `python -m src.uc_jepa.training.train_autoencoder --config configs/uc_jepa/autoencoder.yaml`.
+
+data:
+  # Training data: scenarios_v3 (gold + silver tiers).
+  # Eval data (criticality families) is intentionally NOT included here.
+  roots:
+    - outputs/uc_jepa/dataset_train
+  # If null, all families found under roots are used.
+  # Restrict to specific tiers via e.g. ["gold"] or ["gold", "silver"].
+  families: null
+  max_samples: null
+  val_split: 0.1
+  seed: 42
+  num_workers: 0
+  batch_size: 8
+  n_timesteps: 24
+
+model:
+  variant: strategy_tokens   # informational (variant B)
+  n_features: 8
+  # Capacity bumped (was hidden=256, n_tokens=16, latent=128).
+  # Hard symmetric features (battery/pumped charge) showed signs of bottleneck
+  # saturation at the smaller size — z_uc could not memorize zone-level
+  # placement choices that are multi-modal under the MILP solution.
+  hidden_dim: 384
+  n_tokens: 32
+  latent_dim: 192
+  n_heads: 6
+  gru_layers: 1
+  dropout: 0.1
+  # Z_max observed: scenarios_v3 train -> 132, eval high_criticality -> 170.
+  # 300 gives margin for both training and downstream eval with the same model.
+  n_zones_max: 300
+  n_timesteps_max: 24
+  # Per-(zone, time) scenario context (h_scenario) injected into the decoder.
+  # Without it, the decoder can only distinguish zones by integer index and
+  # therefore reconstructs the marginal mean across scenarios — leading to
+  # high recall / catastrophic precision after pos_weight rebalancing.
+  # Set to the embedding dim produced by the upstream scenario encoder.
+  scenario_dim: 128
+  # Decoder cross-attention blocks. 2 layers help the model refine its
+  # predictions using zone-level context after a first global pass.
+  decoder_layers: 2
+
+loss:
+  bce: 1.0
+  # Temporal smoothness and startup consistency are auxiliary priors. They
+  # tend to bias predictions toward "no transitions" → push the sparse
+  # positive class even lower. Disabled for now; re-enable once base F1 is
+  # solid if you observe noisy/oscillating predictions.
+  temporal: 0.0
+  consistency: 0.0
+  # Class-imbalance correction. UC binaries are very sparse (~0.3-5% positive)
+  # so raw BCE collapses to predicting all zeros (high precision, ~0 recall).
+  #   "auto" : per-feature pos_weight = neg/pos, computed on the train loader.
+  #   "none" : disable (raw BCE).
+  #    [w0,...,w7] : manual per-feature weights.
+  pos_weight: auto
+  # Cap=5 leaves enough push to escape the all-zeros collapse but lets logits
+  # stay calibrated (a 0.5 threshold separates well). With cap=15 the model
+  # over-shoots and precision collapses below 0.3 on most features.
+  pos_weight_cap: 5.0
+
+optim:
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  epochs: 60
+  patience: 10
+  grad_clip: 1.0
+  warmup_epochs: 2
+  # Checkpoint / early-stopping selection metric.
+  # "macro_f1" (default) tracks the actual reconstruction quality on rare
+  # positives. Use "loss" if you want the legacy behaviour.
+  best_metric: macro_f1
+
+logging:
+  output_dir: outputs/uc_jepa/autoencoder
+  save_every: 5
+  log_every: 50

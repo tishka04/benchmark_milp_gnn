@@ -147,7 +147,7 @@ class HeuristicRunner:
         slack_tol_mwh: float = 1.0,
         deviation_penalty: float = 10000.0,
         warm_start: bool = True,
-        max_stages: int = 5,
+        max_stages: int = 3,
         verbose: bool = False,
     ):
         self.heuristic_config = heuristic_config or HeuristicConfig()
@@ -326,7 +326,7 @@ def _build_argparser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the pass-through decoder warm start (faster but may be slower LP).",
     )
-    p.add_argument("--max-stages", type=int, default=5)
+    p.add_argument("--max-stages", type=int, default=3)
     p.add_argument("--verbose", "-v", action="store_true")
     return p
 

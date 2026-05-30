@@ -60,7 +60,7 @@ def build_notebook() -> dict:
         code(
             rf"""
             import os, sys, json, math, time, pickle, shutil, logging
-            from dataclasses import asdict
+            from dataclasses import asdict, replace
             from pathlib import Path
             from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -163,16 +163,37 @@ def build_notebook() -> dict:
         code(
             """
             EXPERIMENT_NAME = 'final_ebm_conditioned_film'
-            OUTPUT_DIR = REPO_PATH / 'outputs' / 'pipeline_eval_final_conditioned'
-            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-            CONDITIONED_EBM_PATH = REPO_PATH / 'outputs' / 'ebm_models' / EXPERIMENT_NAME / 'final_conditioned_ebm.pt'
-            PIPELINE_RESULTS_PATH = OUTPUT_DIR / 'pipeline_eval_all_families_exact_projection.pkl'
-            GRAPH_CACHE_ROOT = OUTPUT_DIR / 'graphs'
+            DEFAULT_OUTPUT_DIR_NAME = 'pipeline_eval_final_conditioned'
+            PROJECTION_FIRST_OUTPUT_DIR_NAME = 'projection_first_pipeline_eval'
+            COMPUTE_BOUNDED_OUTPUT_DIR_NAME = 'compute_bounded_pipeline_eval'
 
             RUN_PIPELINE = False
             CLEAR_GRAPH_CACHE = False
             MAX_SCENARIOS_PER_FAMILY = None
+            COMPUTE_BOUNDED_EXPERIMENT = False
+            PROJECTION_FIRST_EXPERIMENT = False
+
+            assert not (
+                COMPUTE_BOUNDED_EXPERIMENT and PROJECTION_FIRST_EXPERIMENT
+            ), 'Select only one preset at a time.'
+
+            OUTPUT_DIR_NAME = DEFAULT_OUTPUT_DIR_NAME
+            if PROJECTION_FIRST_EXPERIMENT:
+                OUTPUT_DIR_NAME = PROJECTION_FIRST_OUTPUT_DIR_NAME
+            elif COMPUTE_BOUNDED_EXPERIMENT:
+                OUTPUT_DIR_NAME = COMPUTE_BOUNDED_OUTPUT_DIR_NAME
+
+            OUTPUT_DIR = REPO_PATH / 'outputs' / OUTPUT_DIR_NAME
+            OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+            CONDITIONED_EBM_PATH = REPO_PATH / 'outputs' / 'ebm_models' / EXPERIMENT_NAME / 'final_conditioned_ebm.pt'
+            PIPELINE_RESULTS_FILE = 'pipeline_eval_all_families_exact_projection.pkl'
+            if PROJECTION_FIRST_EXPERIMENT:
+                PIPELINE_RESULTS_FILE = 'pipeline_eval_all_families_projection_first.pkl'
+            elif COMPUTE_BOUNDED_EXPERIMENT:
+                PIPELINE_RESULTS_FILE = 'pipeline_eval_all_families_compute_bounded.pkl'
+            PIPELINE_RESULTS_PATH = OUTPUT_DIR / PIPELINE_RESULTS_FILE
+            GRAPH_CACHE_ROOT = OUTPUT_DIR / 'graphs'
 
             HEURISTIC_FILES = {
                 'low': REPO_PATH / 'outputs' / 'rhmo_low.json',
@@ -199,6 +220,7 @@ def build_notebook() -> dict:
             CHECKPOINT_META = torch.load(CONDITIONED_EBM_PATH, map_location='cpu', weights_only=False)
 
             print(f"Conditioned EBM checkpoint: {CONDITIONED_EBM_PATH}")
+            print(f"Output directory: {OUTPUT_DIR}")
             print(f"Model kind: {CHECKPOINT_META.get('model_kind')}")
             print(f"Conditioning mode: {CHECKPOINT_META.get('conditioning_mode')}")
             print(f"Scenario feature names: {CHECKPOINT_META.get('scenario_feature_names')}")
@@ -710,6 +732,10 @@ def build_notebook() -> dict:
                         repair_flips: List[int] = []
                         repair_radii: List[float] = []
                         repair_times: List[float] = []
+                        stop_on_first_strict = bool(
+                            getattr(self.config, 'stop_on_first_strict_feasible', False)
+                        )
+                        evaluated_projection_indices: List[int] = []
                         for sample_idx, u_bin in enumerate(all_samples):
                             sample_decoder_time = 0.0
                             sample_lp_time = 0.0
@@ -749,6 +775,7 @@ def build_notebook() -> dict:
                                     sample_result = lp_result
 
                                 if sample_result is not None:
+                                    evaluated_projection_indices.append(int(sample_idx))
                                     raw_objective = float(getattr(sample_result, 'objective_value', float('inf')))
                                     projection_meta = self._classify_projection_result(sample_result)
                                     projection_results.append((sample_idx, sample_result, projection_meta))
@@ -783,6 +810,23 @@ def build_notebook() -> dict:
                                             float(getattr(sample_result, 'time_repair_20', 0.0) or 0.0)
                                             + float(getattr(sample_result, 'time_repair_100', 0.0) or 0.0)
                                         )
+                                    if stop_on_first_strict and projection_meta['accepted']:
+                                        for remaining_idx in range(sample_idx + 1, len(all_samples)):
+                                            result.all_objectives_raw.append(float('nan'))
+                                            result.all_objectives.append(float('inf'))
+                                            result.all_stages.append('early_stop_skipped')
+                                            result.all_stages_reached.append('early_stop_skipped')
+                                            result.all_sample_slacks.append(float('nan'))
+                                            result.all_sample_statuses.append('early_stop_skipped')
+                                            remaining_sampling_time = (
+                                                sample_sampling_times[remaining_idx]
+                                                if remaining_idx < len(sample_sampling_times)
+                                                else 0.0
+                                            )
+                                            result.all_sample_decoder_times.append(0.0)
+                                            result.all_sample_lp_solve_times.append(0.0)
+                                            result.all_sample_total_times.append(float(remaining_sampling_time))
+                                        break
 
                             except Exception as e:
                                 logging.warning(f"[{sc_id}] sample {sample_idx} failed: {type(e).__name__}: {e}")
@@ -806,6 +850,9 @@ def build_notebook() -> dict:
 
                         result.time_decoder = float(sum(result.all_sample_decoder_times))
                         result.time_lp_solve = float(sum(result.all_sample_lp_solve_times))
+                        if stop_on_first_strict and evaluated_projection_indices:
+                            result.n_candidates_projected = int(len(evaluated_projection_indices))
+                            result.top_m_selected_indices = [int(idx) for idx in evaluated_projection_indices]
                         result.all_repair_flips = [int(v) for v in repair_flips]
                         result.all_repair_radii = [float(v) for v in repair_radii]
                         result.all_repair_times = [float(v) for v in repair_times]
@@ -897,6 +944,10 @@ def build_notebook() -> dict:
                             result.lp_objective = fallback_objective
                             result.lp_slack = 0.0 if np.isfinite(fallback_objective) else float('inf')
                             result.lp_n_flips = 0
+                            result.fallback_milp_objective = fallback_objective
+                            result.fallback_milp_termination = fallback_termination
+                            result.fallback_milp_status = fallback_solver_status
+                            result.fallback_milp_solver_name = fallback_solver_name
 
                             if np.isfinite(fallback_objective):
                                 result.success = True
@@ -975,13 +1026,82 @@ def build_notebook() -> dict:
                 flip_budget_repair_100=1000,
                 lp_worker_max_stages=3,
                 strict_feasibility_tol_mwh=1.0,
+                stop_on_first_strict_feasible=False,
                 enable_exact_fallback=True,
                 fallback_solver_name='appsi_highs',
                 fallback_milp_time_limit_seconds=1200.0,
+                lp_time_limit_hard_fix=300.0,
+                lp_time_limit_repair_20=300.0,
+                lp_time_limit_repair_100=300.0,
+                lp_time_limit_full_soft=900.0,
+                lp_time_limit_round_refix=900.0,
+                lp_repair_poll_interval_seconds=5.0,
                 decoder_passthrough=True,
                 device=DEVICE,
                 seed=42,
             )
+
+            if COMPUTE_BOUNDED_EXPERIMENT:
+                config = replace(
+                    config,
+                    init_mode='bernoulli',
+                    infer_binarize='threshold',
+                    infer_threshold=0.45,
+                    init_p=0.15,
+                    prior_p=0.05,
+                    prior_strength=0.0,
+                    noise_scale=0.50,
+                    init_temp=1.0,
+                    final_temp=0.1,
+                    n_samples=3,
+                    diversity_priority=False,
+                    diversity_temperature_scale_min=1.0,
+                    diversity_temperature_scale_max=1.0,
+                    diversity_noise_scale_min=1.0,
+                    diversity_noise_scale_max=1.0,
+                    diversity_similarity_lambda=0.0,
+                    lp_worker_max_stages=3,
+                    lp_time_limit_hard_fix=2.0,
+                    lp_time_limit_repair_20=2.0,
+                    lp_time_limit_repair_100=4.0,
+                    lp_repair_poll_interval_seconds=0.5,
+                    stop_on_first_strict_feasible=True,
+                    enable_exact_fallback=False,
+                    fallback_milp_time_limit_seconds=0.0,
+                    top_m_enabled=False,
+                )
+                print('Applied compute-bounded preset (K<=3, early-stop on first strict feasible candidate).')
+
+            if PROJECTION_FIRST_EXPERIMENT:
+                config = replace(
+                    config,
+                    init_mode='bernoulli',
+                    infer_binarize='bernoulli',
+                    init_p=0.15,
+                    prior_p=0.05,
+                    prior_strength=0.0,
+                    noise_scale=0.50,
+                    step_size=0.05,
+                    init_temp=1.0,
+                    final_temp=0.1,
+                    n_samples=5,
+                    diversity_priority=False,
+                    diversity_temperature_scale_min=1.0,
+                    diversity_temperature_scale_max=1.0,
+                    diversity_noise_scale_min=1.0,
+                    diversity_noise_scale_max=1.0,
+                    diversity_similarity_lambda=0.0,
+                    lp_worker_max_stages=5,
+                    strict_feasibility_tol_mwh=1.0,
+                    stop_on_first_strict_feasible=False,
+                    enable_exact_fallback=True,
+                    fallback_milp_time_limit_seconds=1200.0,
+                    top_m_enabled=False,
+                )
+                print(
+                    'Applied projection-first preset '
+                    '(conservative sampler, K=5, diversity disabled, full LP projection, fallback audit enabled).'
+                )
 
             STAGE_COLORS = build_stage_color_map(config)
             PIPELINE_STAGE_ORDER = [
@@ -1851,7 +1971,315 @@ def build_notebook() -> dict:
         ),
         md(
             """
-            ## 12. Stage Distribution and Timing Breakdown
+            ## 12. High-Criticality Time-Limit Analysis
+            """
+        ),
+        code(
+            """
+            def _is_time_limit_termination(values: pd.Series) -> pd.Series:
+                normalized = (
+                    values.fillna('')
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                    .str.replace(r'[^a-z0-9]+', '', regex=True)
+                )
+                return normalized.isin({
+                    'maxtimelimit',
+                    'timelimit',
+                    'maxtime',
+                    'timelimitreached',
+                    'maxruntime',
+                })
+
+
+            high_df = df[df['family'] == 'high'].copy()
+            high_timeout_summary = {}
+            high_timeout_summary_df = pd.DataFrame()
+            high_timeout_overlap_table = pd.DataFrame()
+            high_timeout_crosstab_fallback = pd.DataFrame()
+            high_timeout_crosstab_fallback_milp = pd.DataFrame()
+            high_timeout_scenarios = pd.DataFrame()
+
+            if len(high_df) == 0:
+                print('No high-criticality scenarios found in the current evaluation run.')
+            else:
+                high_df['standalone_milp_timeout'] = _is_time_limit_termination(high_df['milp_termination'])
+                high_df['pipeline_used_fallback'] = high_df['pipeline_fallback_used'].fillna(False).astype(bool)
+                fallback_time_limit_seconds = float(
+                    getattr(config, 'fallback_milp_time_limit_seconds', 1200.0) or 1200.0
+                )
+                high_df['pipeline_fallback_timeout'] = (
+                    high_df['pipeline_used_fallback']
+                    & high_df['pipeline_time_fallback'].fillna(0.0).astype(float).ge(fallback_time_limit_seconds - 1e-9)
+                )
+
+                has_fallback_timeout_logging = (
+                    'pipeline_fallback_milp_termination' in high_df.columns
+                    and high_df['pipeline_fallback_milp_termination'].fillna('').astype(str).str.len().gt(0).any()
+                )
+                if has_fallback_timeout_logging:
+                    high_df['pipeline_fallback_timeout_by_termination'] = (
+                        high_df['pipeline_used_fallback']
+                        & _is_time_limit_termination(high_df['pipeline_fallback_milp_termination'])
+                    )
+                else:
+                    high_df['pipeline_fallback_timeout_by_termination'] = False
+
+                standalone_timeout_ids = set(high_df.loc[high_df['standalone_milp_timeout'], 'scenario_id'])
+                pipeline_fallback_ids = set(high_df.loc[high_df['pipeline_used_fallback'], 'scenario_id'])
+                fallback_timeout_ids = set(high_df.loc[high_df['pipeline_fallback_timeout'], 'scenario_id'])
+                fallback_timeout_term_ids = set(high_df.loc[high_df['pipeline_fallback_timeout_by_termination'], 'scenario_id'])
+
+                standalone_and_fallback = standalone_timeout_ids & pipeline_fallback_ids
+                standalone_and_fallback_timeout = standalone_timeout_ids & fallback_timeout_ids
+                standalone_only = standalone_timeout_ids - pipeline_fallback_ids
+                fallback_only = pipeline_fallback_ids - standalone_timeout_ids
+                neither = set(high_df['scenario_id']) - (standalone_timeout_ids | pipeline_fallback_ids)
+                standalone_timeout_without_fallback_timeout = standalone_timeout_ids - fallback_timeout_ids
+                fallback_timeout_without_standalone_timeout = fallback_timeout_ids - standalone_timeout_ids
+
+                high_timeout_summary = {
+                    'n_high_scenarios': int(len(high_df)),
+                    'fallback_time_limit_seconds': float(fallback_time_limit_seconds),
+                    'standalone_milp_timeout_count': int(len(standalone_timeout_ids)),
+                    'standalone_milp_timeout_rate_pct': float(100.0 * len(standalone_timeout_ids) / max(len(high_df), 1)),
+                    'pipeline_fallback_used_count': int(len(pipeline_fallback_ids)),
+                    'pipeline_fallback_used_rate_pct': float(100.0 * len(pipeline_fallback_ids) / max(len(high_df), 1)),
+                    'pipeline_fallback_timeout_count': int(len(fallback_timeout_ids)),
+                    'pipeline_fallback_timeout_rate_pct': float(100.0 * len(fallback_timeout_ids) / max(len(high_df), 1)),
+                    'pipeline_fallback_timeout_rate_among_fallback_pct': float(100.0 * len(fallback_timeout_ids) / max(len(pipeline_fallback_ids), 1)),
+                    'standalone_timeout_and_pipeline_fallback_count': int(len(standalone_and_fallback)),
+                    'standalone_timeout_and_fallback_timeout_count': int(len(standalone_and_fallback_timeout)),
+                    'standalone_timeout_only_count': int(len(standalone_only)),
+                    'pipeline_fallback_only_count': int(len(fallback_only)),
+                    'standalone_timeout_without_fallback_timeout_count': int(len(standalone_timeout_without_fallback_timeout)),
+                    'fallback_timeout_without_standalone_timeout_count': int(len(fallback_timeout_without_standalone_timeout)),
+                    'neither_timeout_nor_fallback_count': int(len(neither)),
+                    'fallback_milp_timeout_logged': bool(has_fallback_timeout_logging),
+                }
+
+                if has_fallback_timeout_logging:
+                    high_timeout_summary.update({
+                        'pipeline_fallback_timeout_by_termination_count': int(len(fallback_timeout_term_ids)),
+                        'pipeline_fallback_timeout_by_termination_rate_pct': float(100.0 * len(fallback_timeout_term_ids) / max(len(high_df), 1)),
+                        'pipeline_fallback_timeout_mismatch_count': int(len(fallback_timeout_ids.symmetric_difference(fallback_timeout_term_ids))),
+                    })
+
+                high_timeout_summary_df = pd.DataFrame([high_timeout_summary])
+                display(high_timeout_summary_df.round(3))
+
+                if not has_fallback_timeout_logging:
+                    print(
+                        f'Pipeline fallback time limits are detected here by time budget: '
+                        f'pipeline_time_fallback >= {fallback_time_limit_seconds:.0f} s.'
+                    )
+                else:
+                    print(
+                        f'Pipeline fallback time limits are detected primarily by time budget: '
+                        f'pipeline_time_fallback >= {fallback_time_limit_seconds:.0f} s. '
+                        'The fallback termination flag is shown as a secondary audit field.'
+                    )
+
+                high_timeout_overlap_table = pd.DataFrame([
+                    {'group': 'Standalone MILP time limit + pipeline fallback', 'count': int(len(standalone_and_fallback))},
+                    {'group': 'Standalone MILP time limit only', 'count': int(len(standalone_only))},
+                    {'group': 'Pipeline fallback only', 'count': int(len(fallback_only))},
+                    {'group': 'Standalone MILP time limit + fallback hit time budget', 'count': int(len(standalone_and_fallback_timeout))},
+                    {'group': 'Standalone MILP time limit without fallback time budget', 'count': int(len(standalone_timeout_without_fallback_timeout))},
+                    {'group': 'Fallback hit time budget without standalone time limit', 'count': int(len(fallback_timeout_without_standalone_timeout))},
+                    {'group': 'Neither', 'count': int(len(neither))},
+                ])
+                display(high_timeout_overlap_table)
+
+                high_timeout_crosstab_fallback = pd.crosstab(
+                    pd.Series(
+                        np.where(
+                            high_df['standalone_milp_timeout'],
+                            'Standalone MILP time limit',
+                            'Standalone MILP optimal/other',
+                        ),
+                        name='Standalone MILP',
+                    ),
+                    pd.Series(
+                        np.where(
+                            high_df['pipeline_used_fallback'],
+                            'Pipeline used fallback',
+                            'No pipeline fallback',
+                        ),
+                        name='Pipeline',
+                    ),
+                    dropna=False,
+                )
+                display(high_timeout_crosstab_fallback)
+
+                high_timeout_crosstab_fallback_milp = pd.crosstab(
+                    pd.Series(
+                        np.where(
+                            high_df['standalone_milp_timeout'],
+                            'Standalone MILP time limit',
+                            'Standalone MILP optimal/other',
+                        ),
+                        name='Standalone MILP',
+                    ),
+                    pd.Series(
+                        np.where(
+                            high_df['pipeline_fallback_timeout'],
+                            f'Fallback reached {fallback_time_limit_seconds:.0f}s budget',
+                            np.where(
+                                high_df['pipeline_used_fallback'],
+                                f'Fallback below {fallback_time_limit_seconds:.0f}s',
+                                'No pipeline fallback',
+                            ),
+                        ),
+                        name='Pipeline fallback',
+                    ),
+                    dropna=False,
+                )
+                display(high_timeout_crosstab_fallback_milp)
+
+                scenario_cols = [
+                    'scenario_id',
+                    'criticality_index',
+                    'standalone_milp_timeout',
+                    'milp_termination',
+                    'milp_solve_time',
+                    'pipeline_best_status',
+                    'pipeline_used_fallback',
+                    'pipeline_fallback_timeout',
+                    'pipeline_fallback_timeout_by_termination',
+                    'pipeline_time_fallback',
+                    'pipeline_solve_time',
+                    'pipeline_selected_repair_flips',
+                    'pipeline_selected_repair_radius_used',
+                    'pipeline_fallback_warm_start_vars',
+                    'cost_gap_pct',
+                ]
+                extra_cols = [
+                    col for col in [
+                        'pipeline_fallback_milp_termination',
+                        'pipeline_fallback_milp_status',
+                        'pipeline_fallback_milp_solver_name',
+                        'pipeline_fallback_milp_objective',
+                    ]
+                    if col in high_df.columns
+                ]
+                high_timeout_scenarios = (
+                    high_df[scenario_cols + extra_cols]
+                    .sort_values(
+                        ['standalone_milp_timeout', 'pipeline_used_fallback', 'milp_solve_time'],
+                        ascending=[False, False, False],
+                    )
+                    .reset_index(drop=True)
+                )
+                display(high_timeout_scenarios.head(25).round(3))
+
+                fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+                rate_labels = ['Standalone MILP time limit', 'Pipeline fallback used']
+                rate_values = [
+                    high_timeout_summary['standalone_milp_timeout_rate_pct'],
+                    high_timeout_summary['pipeline_fallback_used_rate_pct'],
+                ]
+                rate_colors = ['#8e44ad', '#e67e22']
+                rate_labels.append(f'Fallback >= {fallback_time_limit_seconds:.0f}s')
+                rate_values.append(high_timeout_summary['pipeline_fallback_timeout_rate_pct'])
+                rate_colors.append('#c0392b')
+
+                bars = axes[0].bar(rate_labels, rate_values, color=rate_colors, alpha=0.88)
+                axes[0].set_ylabel('Share of high-criticality scenarios (%)', fontweight='bold')
+                axes[0].set_ylim(0, min(105, max(rate_values + [5]) * 1.18))
+                axes[0].set_title('(A) High-Criticality Time-Limit Rates', fontweight='bold')
+                axes[0].tick_params(axis='x', rotation=16)
+                for bar, value in zip(bars, rate_values):
+                    axes[0].text(
+                        bar.get_x() + bar.get_width() / 2.0,
+                        value + 1.0,
+                        f'{value:.1f}%',
+                        ha='center',
+                        va='bottom',
+                        fontsize=10,
+                    )
+
+                sns.heatmap(
+                    high_timeout_crosstab_fallback_milp,
+                    annot=True,
+                    fmt='d',
+                    cmap='Blues',
+                    cbar=False,
+                    ax=axes[1],
+                )
+                axes[1].set_title('(B) Standalone Timeout vs Fallback Time Budget', fontweight='bold')
+                axes[1].set_xlabel('')
+                axes[1].set_ylabel('')
+
+                fallback_scatter_df = high_df[high_df['pipeline_used_fallback']].copy()
+                if len(fallback_scatter_df):
+                    if has_fallback_timeout_logging:
+                        fallback_scatter_df['timeout_group'] = np.where(
+                            fallback_scatter_df['pipeline_fallback_timeout'],
+                            f'Fallback hit {fallback_time_limit_seconds:.0f}s budget',
+                            np.where(
+                                fallback_scatter_df['standalone_milp_timeout'],
+                                'Standalone-only MILP time limit',
+                                'Fallback without MILP time limit',
+                            ),
+                        )
+                        palette = {
+                            f'Fallback hit {fallback_time_limit_seconds:.0f}s budget': '#c0392b',
+                            'Standalone-only MILP time limit': '#8e44ad',
+                            'Fallback without MILP time limit': '#27ae60',
+                        }
+                    else:
+                        fallback_scatter_df['timeout_group'] = np.where(
+                            fallback_scatter_df['pipeline_fallback_timeout'],
+                            f'Fallback hit {fallback_time_limit_seconds:.0f}s budget',
+                            np.where(
+                            fallback_scatter_df['standalone_milp_timeout'],
+                            'Standalone MILP time limit',
+                            'Standalone MILP optimal/other',
+                            ),
+                        )
+                        palette = {
+                            f'Fallback hit {fallback_time_limit_seconds:.0f}s budget': '#c0392b',
+                            'Standalone MILP time limit': '#8e44ad',
+                            'Standalone MILP optimal/other': '#27ae60',
+                        }
+
+                    for label, sub in fallback_scatter_df.groupby('timeout_group'):
+                        axes[2].scatter(
+                            sub['milp_solve_time'],
+                            sub['pipeline_time_fallback'],
+                            s=70,
+                            alpha=0.8,
+                            color=palette.get(label, '#34495e'),
+                            edgecolors='white',
+                            linewidth=0.7,
+                            label=label,
+                        )
+                    diag_data = np.concatenate([
+                        fallback_scatter_df['milp_solve_time'].to_numpy(dtype=float),
+                        fallback_scatter_df['pipeline_time_fallback'].to_numpy(dtype=float),
+                    ])
+                    diag_max = float(np.nanmax(diag_data)) if np.isfinite(diag_data).any() else 1.0
+                    axes[2].plot([0, diag_max], [0, diag_max], 'k--', alpha=0.4, linewidth=1.2)
+                    axes[2].legend(fontsize=8, loc='best')
+                else:
+                    axes[2].text(0.5, 0.5, 'No fallback scenarios', ha='center', va='center')
+                    axes[2].axis('off')
+
+                axes[2].set_xlabel('Standalone MILP solve time (s)', fontweight='bold')
+                axes[2].set_ylabel('Pipeline fallback MILP time (s)', fontweight='bold')
+                axes[2].set_title('(C) Fallback vs Standalone MILP Time', fontweight='bold')
+
+                plt.tight_layout()
+                plt.savefig(OUTPUT_DIR / 'fig_high_criticality_timeout_overlap.png', dpi=300, bbox_inches='tight')
+                plt.show()
+            """
+        ),
+        md(
+            """
+            ## 13. Stage Distribution and Timing Breakdown
             """
         ),
         code(
@@ -1926,7 +2354,7 @@ def build_notebook() -> dict:
         ),
         md(
             """
-            ## 13. Final Summary and Save Outputs
+            ## 14. Final Summary and Save Outputs
             """
         ),
         code(
@@ -1979,6 +2407,7 @@ def build_notebook() -> dict:
                 'selector_bottleneck_summary': globals().get('selector_bottleneck_summary', {}),
                 'h2_stats': globals().get('h2_stats', {}),
                 'projection_diagnostics_summary': globals().get('projection_diagnostics_summary', {}),
+                'high_criticality_time_limit_summary': globals().get('high_timeout_summary', {}),
                 'scaling_law_summary': scaling_models.get('summary', {}) if globals().get('scaling_models') else {},
             }
 
@@ -2008,6 +2437,16 @@ def build_notebook() -> dict:
                 df_scaling.to_csv(OUTPUT_DIR / 'full_comparison_with_physical_features.csv', index=False)
             if 'physical_robustness_df' in globals() and len(physical_robustness_df):
                 physical_robustness_df.to_csv(OUTPUT_DIR / 'physical_feature_robustness.csv', index=False)
+            if 'high_timeout_summary_df' in globals() and len(high_timeout_summary_df):
+                high_timeout_summary_df.to_csv(OUTPUT_DIR / 'high_criticality_timelimit_summary.csv', index=False)
+            if 'high_timeout_overlap_table' in globals() and len(high_timeout_overlap_table):
+                high_timeout_overlap_table.to_csv(OUTPUT_DIR / 'high_criticality_timeout_overlap.csv', index=False)
+            if 'high_timeout_crosstab_fallback' in globals() and len(high_timeout_crosstab_fallback):
+                high_timeout_crosstab_fallback.to_csv(OUTPUT_DIR / 'high_criticality_timeout_vs_fallback_crosstab.csv')
+            if 'high_timeout_crosstab_fallback_milp' in globals() and len(high_timeout_crosstab_fallback_milp):
+                high_timeout_crosstab_fallback_milp.to_csv(OUTPUT_DIR / 'high_criticality_timeout_vs_fallback_milp_crosstab.csv')
+            if 'high_timeout_scenarios' in globals() and len(high_timeout_scenarios):
+                high_timeout_scenarios.to_csv(OUTPUT_DIR / 'high_criticality_timeout_scenarios.csv', index=False)
 
             with open(OUTPUT_DIR / 'hypothesis_summary.json', 'w', encoding='utf-8') as f:
                 json.dump(hypothesis_summary, f, indent=2, default=str)

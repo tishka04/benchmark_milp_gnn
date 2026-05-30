@@ -139,6 +139,128 @@ def _stage_rank(stage: str) -> int:
         return 0
 
 
+def _classify_sample_status(stage_label: str, objective_value: float) -> str:
+    """
+    Classify a per-sample LP outcome into a coarse status used by the
+    projection diagnostics:
+
+    - 'direct_feasible'   : sample was strictly feasible at hard_fix
+    - 'repaired_feasible' : sample needed a 100/1000-flip repair
+    - 'soft_feasible'     : sample only succeeded under full_soft / round_refix
+    - 'infeasible'        : sample produced no finite objective
+    """
+    if not np.isfinite(objective_value):
+        return 'infeasible'
+    stage_norm = str(stage_label or '').lower()
+    if stage_norm == 'hard_fix':
+        return 'direct_feasible'
+    if stage_norm.startswith('repair_'):
+        return 'repaired_feasible'
+    if stage_norm in {'full_soft', 'round_refix'}:
+        return 'soft_feasible'
+    return 'infeasible'
+
+
+def backfill_projection_diagnostics(results: List[Any]) -> List[Any]:
+    """
+    Public helper to backfill `best_status`, `direct_feasible_count`,
+    `repaired_feasible_count`, `direct_feasible_rate` and
+    `repair_success_rate` on a list of cached pipeline results.
+
+    Accepts either a list of `PipelineResult` instances or a list of dicts
+    (the form produced by `PipelineRunner.load_results`). Mutates dict items
+    in place and returns the same list.
+    """
+    for rec in results:
+        if isinstance(rec, dict):
+            shim = _DictResultShim(rec)
+            _finalize_projection_diagnostics(shim)
+            rec.update({
+                'best_status': shim.best_status,
+                'direct_feasible_count': shim.direct_feasible_count,
+                'repaired_feasible_count': shim.repaired_feasible_count,
+                'direct_feasible_rate': shim.direct_feasible_rate,
+                'repair_success_rate': shim.repair_success_rate,
+            })
+        else:
+            _finalize_projection_diagnostics(rec)
+    return results
+
+
+class _DictResultShim:
+    """Minimal shim exposing the attributes that `_finalize_projection_diagnostics` reads/writes."""
+
+    __slots__ = (
+        'all_objectives_raw', 'all_stages', 'n_samples', 'success',
+        'lp_stage_used', 'lp_objective',
+        'direct_feasible_count', 'repaired_feasible_count',
+        'direct_feasible_rate', 'repair_success_rate', 'best_status',
+    )
+
+    def __init__(self, rec: Dict[str, Any]):
+        self.all_objectives_raw = rec.get('all_objectives_raw', []) or []
+        self.all_stages = rec.get('all_stages', []) or []
+        self.n_samples = rec.get('n_samples', len(self.all_stages))
+        self.success = bool(rec.get('success', False))
+        self.lp_stage_used = rec.get('lp_stage_used', '') or ''
+        lp_obj = rec.get('lp_objective', float('nan'))
+        try:
+            self.lp_objective = float(lp_obj) if lp_obj is not None else float('nan')
+        except (TypeError, ValueError):
+            self.lp_objective = float('nan')
+        self.direct_feasible_count = int(rec.get('direct_feasible_count', 0) or 0)
+        self.repaired_feasible_count = int(rec.get('repaired_feasible_count', 0) or 0)
+        self.direct_feasible_rate = float(rec.get('direct_feasible_rate', float('nan')))
+        self.repair_success_rate = float(rec.get('repair_success_rate', float('nan')))
+        self.best_status = rec.get('best_status', '') or ''
+
+
+def _finalize_projection_diagnostics(result: 'PipelineResult') -> None:
+    """
+    Backfill projection-diagnostic fields that the vanilla runner does not
+    set explicitly: `best_status`, `direct_feasible_count`,
+    `repaired_feasible_count`, `direct_feasible_rate`, `repair_success_rate`.
+
+    Derived from `result.all_stages` and `result.all_objectives_raw` so the
+    accounting agrees with the LP-worker's own stage labelling. This function
+    is idempotent and safe to call once at the end of `evaluate_scenario`.
+    """
+    raw_objs = list(result.all_objectives_raw or [])
+    stages = list(result.all_stages or [])
+    n = max(len(raw_objs), len(stages))
+
+    direct = 0
+    repaired = 0
+    for i in range(n):
+        stage = stages[i] if i < len(stages) else ''
+        raw_val = raw_objs[i] if i < len(raw_objs) else float('nan')
+        try:
+            raw_val_f = float(raw_val)
+        except (TypeError, ValueError):
+            raw_val_f = float('nan')
+        kind = _classify_sample_status(stage, raw_val_f)
+        if kind == 'direct_feasible':
+            direct += 1
+        elif kind == 'repaired_feasible':
+            repaired += 1
+
+    result.direct_feasible_count = int(direct)
+    result.repaired_feasible_count = int(repaired)
+    n_total = int(result.n_samples or n)
+    if n_total > 0:
+        result.direct_feasible_rate = float(direct) / float(n_total)
+        repair_attempts = max(n_total - direct, 0)
+        result.repair_success_rate = (
+            float(repaired) / float(repair_attempts) if repair_attempts > 0 else float('nan')
+        )
+
+    if not result.success:
+        result.best_status = 'projection_failed'
+    else:
+        best_kind = _classify_sample_status(result.lp_stage_used, result.lp_objective)
+        result.best_status = best_kind if best_kind != 'infeasible' else 'projection_failed'
+
+
 def _diagnostic_result_key(lp_result: Any) -> Tuple[int, int, float]:
     """
     Sort key for fallback diagnostics when no finite objective exists.
@@ -221,7 +343,14 @@ class PipelineConfig:
     flip_budget_repair_20: int = 100
     flip_budget_repair_100: int = 1000
     lp_worker_max_stages: int = 5
+    lp_time_limit_hard_fix: float = 300.0
+    lp_time_limit_repair_20: float = 300.0
+    lp_time_limit_repair_100: float = 300.0
+    lp_time_limit_full_soft: float = 900.0
+    lp_time_limit_round_refix: float = 900.0
+    lp_repair_poll_interval_seconds: float = 5.0
     strict_feasibility_tol_mwh: Optional[float] = None
+    stop_on_first_strict_feasible: bool = False
     enable_exact_fallback: bool = False
     fallback_solver_name: Optional[str] = None
     fallback_milp_time_limit_seconds: float = 600.0
@@ -327,6 +456,10 @@ class PipelineResult:
     time_repair: float = 0.0
     time_fallback: float = 0.0
     fallback_warm_start_vars: int = 0
+    fallback_milp_objective: float = float('nan')
+    fallback_milp_termination: str = ''
+    fallback_milp_status: str = ''
+    fallback_milp_solver_name: str = ''
     all_repair_flips: List[int] = field(default_factory=list)
     all_repair_radii: List[float] = field(default_factory=list)
     all_repair_times: List[float] = field(default_factory=list)
@@ -884,6 +1017,12 @@ class PipelineRunner:
             deviation_penalty=cfg.deviation_penalty,
             flip_budget_20=cfg.flip_budget_repair_20,
             flip_budget_100=cfg.flip_budget_repair_100,
+            time_limit_hard_fix=float(getattr(cfg, 'lp_time_limit_hard_fix', 300.0) or 300.0),
+            time_limit_repair_20=float(getattr(cfg, 'lp_time_limit_repair_20', 300.0) or 300.0),
+            time_limit_repair_100=float(getattr(cfg, 'lp_time_limit_repair_100', 300.0) or 300.0),
+            time_limit_full_soft=float(getattr(cfg, 'lp_time_limit_full_soft', 900.0) or 900.0),
+            time_limit_round_refix=float(getattr(cfg, 'lp_time_limit_round_refix', 900.0) or 900.0),
+            repair_poll_interval_seconds=float(getattr(cfg, 'lp_repair_poll_interval_seconds', 5.0) or 5.0),
             verbose=False,
         )
 
@@ -933,6 +1072,51 @@ class PipelineRunner:
             result.best_sample_total_time = float(result.all_sample_total_times[sample_idx])
         if result.all_sample_total_times:
             result.first_sample_total_time = float(result.all_sample_total_times[0])
+
+    def extract_binary_candidate(
+        self,
+        scenario_path: Path,
+        graphs_dir: Path,
+        select: str = 'energy',
+    ):
+        """Return the pipeline's selected commitment binaries for a scenario.
+
+        Runs the scenario-to-binary half of the pipeline (graph build, embedding,
+        EBM + Langevin sampling, energy scoring) and selects one candidate WITHOUT
+        the LP cascade. Used by the partial-grid recovery protocol (arms C/D) where
+        only the committed binaries are needed; feasibility is judged downstream by
+        the contingency redispatch.
+
+        Args:
+            scenario_path: Path to the scenario JSON.
+            graphs_dir: Directory used to cache the temporal-graph ``.npz``.
+            select: ``'energy'`` keeps the lowest-energy candidate; ``'first'``
+                keeps the first sample.
+
+        Returns:
+            ``numpy.ndarray`` of shape ``[Z, T, F]`` (F = 7 binary features) for the
+            selected candidate, or ``None`` if sampling failed.
+        """
+        import numpy as np
+
+        sc_id = scenario_path.stem
+        graphs_dir = Path(graphs_dir)
+        graphs_dir.mkdir(parents=True, exist_ok=True)
+        graph_path = graphs_dir / f"{sc_id}.npz"
+        self._build_graph(scenario_path, graph_path, graph_path)
+        zone_emb, n_zones, T = self._generate_embedding(str(graph_path))
+        all_samples, _ = self._run_ebm_sampling(zone_emb, n_zones, T)
+        if not all_samples:
+            return None
+        if select == 'first':
+            chosen = all_samples[0]
+        else:
+            energies = self._score_ebm_samples(all_samples, zone_emb)
+            finite = [(e, i) for i, e in enumerate(energies) if np.isfinite(e)]
+            best_idx = min(finite)[1] if finite else 0
+            chosen = all_samples[best_idx]
+        u = (chosen > 0.5).detach().cpu().numpy().astype(float)
+        return u[:n_zones]
 
     def evaluate_scenario(
         self,
@@ -1145,6 +1329,17 @@ class PipelineRunner:
         except Exception as e:
             result.success = False
             result.error_message = str(e)
+
+        # Backfill projection-diagnostic summaries (best_status, direct/repair
+        # counts and rates). The conditioned runner sets these inline; the
+        # vanilla runner used to leave them blank, which caused
+        # `projection_diagnostics_summary` in the eval notebooks to report
+        # 0% direct/repaired feasibility regardless of the actual stage mix.
+        try:
+            _finalize_projection_diagnostics(result)
+        except Exception:
+            # Diagnostics must never mask a real evaluation failure.
+            pass
 
         result.time_total = time.perf_counter() - t_total_start
         return result

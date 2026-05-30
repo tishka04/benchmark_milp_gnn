@@ -60,20 +60,58 @@ def _zone_names(report: dict) -> List[str]:
 
 
 def _import_mode(report: dict, zone_names: Sequence[str], n_timesteps: int) -> torch.Tensor:
-    """Binary import_mode[z, t] = 1 if net_import[z, t] > 0 else 0."""
+    """Binary import_mode[z, t].
+
+    The MILP report stores ``import_mode`` and ``net_import`` as a *system-level*
+    time series at ``detail.<key>.values`` (length T), not per zone. We
+    broadcast the system-level binary to every zone:
+        out[z, t] = 1 if (import_mode.values[t] >= 0.5) else 0
+    Falls back to ``net_import.values[t] > 0`` if ``import_mode`` is missing.
+    Per-zone storage is also supported (in case future reports add it).
+    """
     detail = report.get("detail", {}) or report.get("pre_dispatch", {})
-    net = detail.get("net_import", {}) if isinstance(detail, dict) else {}
     Z = len(zone_names)
     out = torch.zeros(Z, n_timesteps)
-    if not isinstance(net, dict):
+    if not isinstance(detail, dict):
         return out
-    for z_idx, zone in enumerate(zone_names):
-        series = net.get(zone, []) if isinstance(net, dict) else []
-        for t in range(min(n_timesteps, len(series))):
-            try:
-                out[z_idx, t] = 1.0 if float(series[t]) > 1e-3 else 0.0
-            except (TypeError, ValueError):
-                out[z_idx, t] = 0.0
+
+    im = detail.get("import_mode", None)
+    ni = detail.get("net_import", None)
+
+    def _series_from(block, threshold_fn) -> Optional[List[float]]:
+        if not isinstance(block, dict):
+            return None
+        if "values" in block and isinstance(block["values"], list):
+            return [1.0 if threshold_fn(v) else 0.0 for v in block["values"]]
+        return None
+
+    # 1) Prefer the dedicated import_mode binary (system-level).
+    sys_series = _series_from(im, lambda v: float(v) >= 0.5)
+    if sys_series is None:
+        # 2) Fallback: derive from net_import sign.
+        sys_series = _series_from(ni, lambda v: float(v) > 1e-3)
+
+    if sys_series is not None:
+        for t in range(min(n_timesteps, len(sys_series))):
+            out[:, t] = float(sys_series[t])
+        return out
+
+    # 3) Per-zone storage (legacy / future-proof).
+    src = im if isinstance(im, dict) and any(z in im for z in zone_names) else ni
+    if isinstance(src, dict):
+        for z_idx, zone in enumerate(zone_names):
+            series = src.get(zone, [])
+            if not isinstance(series, list):
+                continue
+            for t in range(min(n_timesteps, len(series))):
+                try:
+                    val = float(series[t])
+                except (TypeError, ValueError):
+                    val = 0.0
+                if src is im:
+                    out[z_idx, t] = 1.0 if val >= 0.5 else 0.0
+                else:
+                    out[z_idx, t] = 1.0 if val > 1e-3 else 0.0
     return out
 
 
@@ -141,9 +179,57 @@ def _load_embedding(path: str) -> Optional[np.ndarray]:
     return None
 
 
+# Directory names that should NOT be used as a family label. ``gold`` and
+# ``silver`` are intentionally kept as legitimate families because they
+# encode the MILP-tier classification used by the EBM training pipeline.
+_GENERIC_DIRS = {"reports", "report", "json", ""}
+
+
 def _family_from_path(report_path: str) -> str:
-    """Use the immediate parent directory of the JSON as the family tag."""
-    return Path(report_path).parent.name or "unknown"
+    """Resolve the family tag from a report path.
+
+    Walks up only over generic buckets like ``reports``. Concrete tiers such
+    as ``gold``/``silver`` are preserved as their own family.
+    """
+    p = Path(report_path).parent
+    while p.name and p.name in _GENERIC_DIRS:
+        p = p.parent
+    return p.name or "unknown"
+
+
+def _load_criticality(report_path: str, report: dict) -> float:
+    """Resolve scenario criticality_index.
+
+    Priority:
+        1. Field directly in the report.
+        2. Sibling scenario input file at ``<family_dir>/<scenario_id>.json``
+           (the input definition where ``criticality_index`` is stored).
+    """
+    if "criticality_index" in report:
+        try:
+            return float(report["criticality_index"])
+        except (TypeError, ValueError):
+            pass
+    # Walk up only over generic buckets to find the family root, but ALSO
+    # try one extra level up because some layouts nest reports under
+    # ``family/reports/<tier>/scenario.json`` and the input scenario lives at
+    # ``family/scenario.json`` (i.e. above the tier directory).
+    family_dir = Path(report_path).parent
+    while family_dir.name in _GENERIC_DIRS:
+        family_dir = family_dir.parent
+    sid = extract_scenario_id(Path(report_path).stem) or Path(report_path).stem
+    candidates = [family_dir / f"{sid}.json", family_dir.parent / f"{sid}.json"]
+    for candidate in candidates:
+        if not candidate.exists():
+            continue
+        try:
+            with open(candidate, "r") as f:
+                inp = json.load(f)
+            if "criticality_index" in inp:
+                return float(inp["criticality_index"])
+        except Exception:  # noqa: BLE001
+            continue
+    return float("nan")
 
 
 def process_one(
@@ -167,7 +253,7 @@ def process_one(
 
     sid = extract_scenario_id(Path(report_path).stem) or Path(report_path).stem
     family = _family_from_path(report_path)
-    criticality = float(report.get("criticality_index", float("nan")))
+    criticality = _load_criticality(report_path, report)
     objective = float(report.get("mip", {}).get("objective", float("nan")))
 
     h_scenario: Optional[np.ndarray] = None
@@ -232,7 +318,12 @@ def run(
         )
         if max_per_family is not None:
             report_files = report_files[:max_per_family]
-        family = Path(rdir).name
+        # Resolve family by walking up generic buckets like ``reports``.
+        # Tiers like ``gold``/``silver`` are kept as families.
+        fam_dir = Path(rdir).resolve()
+        while fam_dir.name in _GENERIC_DIRS and fam_dir.parent != fam_dir:
+            fam_dir = fam_dir.parent
+        family = fam_dir.name or Path(rdir).name or "unknown"
         family_out = Path(out_dir) / family
         family_out.mkdir(parents=True, exist_ok=True)
         print(f"[{family}] {len(report_files)} reports -> {family_out}")

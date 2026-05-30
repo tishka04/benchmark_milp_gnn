@@ -1,0 +1,14 @@
+{
+  "persona_vre_battery_scenarios": {
+    "scenarios_dir": "outputs/persona_vre_battery_scenarios",
+    "reports_dir": "outputs/persona_vre_battery_scenarios/reports"
+  },
+  "persona_network_operator_scenarios": {
+    "scenarios_dir": "outputs/persona_network_operator_scenarios",
+    "reports_dir": "outputs/persona_network_operator_scenarios/reports"
+  },
+  "persona_mathematician_scenarios": {
+    "scenarios_dir": "outputs/persona_mathematician_scenarios",
+    "reports_dir": "outputs/persona_mathematician_scenarios/reports"
+  }
+}

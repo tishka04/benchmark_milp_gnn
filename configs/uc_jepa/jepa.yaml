@@ -1,0 +1,104 @@
+# Phase 2 JEPA: train h_scenario -> z_uc predictor.
+# Target is the frozen AE encoder (phase 1) applied to u_star.
+
+data:
+  roots:
+    - outputs/uc_jepa/dataset_train
+  families: null
+  max_samples: null
+  val_split: 0.1
+  seed: 42
+  num_workers: 0
+  batch_size: 8
+
+ae:
+  # Frozen phase-1 autoencoder used as the JEPA target encoder.
+  checkpoint: outputs/uc_jepa/autoencoder/uc_ae_best.pt
+
+model:
+  scenario_dim: 128         # h_scenario per-(zone, time) embedding dim
+  hidden_dim: 384
+  # n_tokens / latent_dim MUST match the loaded AE — checked at startup.
+  n_tokens: 32
+  latent_dim: 192
+  n_heads: 6
+  gru_layers: 1
+  dropout: 0.1
+  # Predict a scenario-specific latent delta around a learned base template
+  # instead of regressing the full latent from scratch.
+  residual_latent: true
+  # Multi-task JEPA: keep the latent target, but add direct UC heads.
+  aux_heads: true
+  derive_startup_from_thermal: true
+  import_head_global: true
+
+loss:
+  mse: 1.0                  # invariance term (alignment with frozen target)
+  variance: 0.1             # lighter anti-collapse: keep some spread, don't dominate fit
+  variance_target: 1.0      # gamma: each dim should reach std >= gamma
+  covariance: 0.0           # ablation: disable decorrelation until decoded UC improves
+  # Make decoded UC quality matter more than latent geometry alone.
+  uc_weight: 5.0
+  # Direct UC heads for rare but MILP-critical actions.
+  aux_weight: 2.0
+  # Per-family class weighting: enough recall pressure without the global cap=5 bias.
+  pos_weight:
+    battery_charge_mode: 3.0
+    battery_discharge_mode: 4.0
+    pumped_charge_mode: 3.0
+    pumped_discharge_mode: 3.0
+    dr_active: 2.0
+    thermal_startup: 4.0
+    thermal_on: 2.0
+    import_mode: 2.0
+  pos_weight_cap: 3.0
+  # Keep the rare-event shaping mild for this ablation.
+  focal_gamma: 0.0
+  # First ablation pass: no latent noise so we can see the pure UC effect.
+  target_noise_std: 0.0
+  # Encourage coherent temporal strategies instead of isolated spikes.
+  temporal_weight: 0.05
+  temporal_feature_weights:
+    battery_discharge_mode: 1.0
+    dr_active: 1.0
+    thermal_on: 1.0
+  # Let startup be learned through the auxiliary derived head / consistency,
+  # rather than pushing the frozen decoder to match it directly.
+  decoded_feature_weights:
+    thermal_startup: 0.0
+  aux_feature_weights:
+    battery_charge_mode: 1.0
+    battery_discharge_mode: 1.0
+    pumped_charge_mode: 1.0
+    pumped_discharge_mode: 1.0
+    dr_active: 1.0
+    thermal_startup: 1.0
+    thermal_on: 1.0
+    import_mode: 1.0
+
+optim:
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  epochs: 50
+  patience: 8
+  grad_clip: 1.0
+  warmup_epochs: 2
+  # Select checkpoints on decoded UC quality, not just latent alignment.
+  best_metric: uc_macro_f1
+
+eval:
+  threshold: 0.5
+  # Less aggressive starting thresholds; validation search can still refine them.
+  feature_thresholds:
+    battery_discharge_mode: 0.35
+    dr_active: 0.35
+    thermal_on: 0.45
+  threshold_search: true
+  threshold_search_min: 0.20
+  threshold_search_max: 0.80
+  threshold_search_step: 0.05
+
+logging:
+  output_dir: outputs/uc_jepa/jepa
+  save_every: 5
+  log_every: 50

@@ -1,20 +1,18 @@
 """UC-JEPA-MILP hybrid pipeline.
 
-Roadmap:
-    Scenario graph -> HTE -> latent UC strategy -> UC decoder -> MILP worker (warm-started).
-
-Phase 1 MVP (this package, current state):
-    - data.extract_uc_labels:    materialize (u_star, h_scenario, family, criticality) per scenario.
-    - models.uc_autoencoder:     UC autoencoder with strategy-token latent (variant B).
+Implemented pieces:
+    - data.extract_uc_labels: materialize (u_star, h_scenario, family, criticality) per scenario.
+    - models.uc_autoencoder: UC autoencoder with strategy-token latent.
+    - models.scenario_to_uc_latent: h_scenario -> z_uc predictor (JEPA-style).
+    - models.latent_ebm: energy model on z_uc conditioned by JEPA + scenario context.
+    - sampling.latent_langevin: latent-space Langevin dynamics with best-of-K sampling.
+    - workers.milp_warm_worker: thin wrapper around LPWorkerTwoStage for decoded candidates.
     - training.train_autoencoder: train the UC autoencoder.
-    - evaluation.sanity_check_ae: BCE / Hamming / startup-consistency + optional LP worker check.
-
-Later phases (not yet implemented):
-    - models.scenario_to_uc_latent : h_scenario -> z_uc predictor.
-    - models.latent_ebm            : energy on z_uc | h_scenario.
-    - sampling.latent_langevin     : Langevin in latent space + best-of-K.
-    - workers.milp_warm_worker     : unified hard / soft / local-repair wrapper around LPWorkerTwoStage.
-    - evaluation.evaluate_uc_jepa  : full ablation suite.
+    - training.train_jepa: train the scenario -> latent predictor.
+    - training.train_latent_ebm: train the latent EBM on frozen AE + JEPA latents.
+    - evaluation.sanity_check_ae: AE reconstruction + optional LP worker check.
+    - evaluation.eval_jepa: direct JEPA decode evaluation.
+    - evaluation.eval_latent_ebm: JEPA direct vs latent EBM + latent SGLD evaluation.
 """
 
 # Number of UC binary features (F).

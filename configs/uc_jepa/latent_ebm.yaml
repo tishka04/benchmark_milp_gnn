@@ -1,0 +1,74 @@
+# Latent EBM on top of the frozen UC-JEPA stack.
+# Usage:
+#   python -m src.uc_jepa.training.train_latent_ebm --config configs/uc_jepa/latent_ebm.yaml
+
+data:
+  roots:
+    - outputs/uc_jepa/dataset_train
+  families: null
+  max_samples: null
+  val_split: 0.1
+  seed: 42
+  num_workers: 0
+  batch_size: 8
+
+ae:
+  checkpoint: outputs/uc_jepa/autoencoder/uc_ae_best.pt
+
+jepa:
+  checkpoint: outputs/uc_jepa/jepa/jepa_best.pt
+
+model:
+  hidden_dim: 256
+  token_hidden_dim: 256
+  dropout: 0.1
+  use_scenario_context: true
+  energy_bound: 50.0
+
+sampler:
+  num_steps: 20
+  step_size: 0.02
+  noise_scale: 0.05
+  temperature: 1.0
+  clip_grad: 1.0
+  normalize_grad: true
+  init_mode: mixed
+  init_noise_std: 0.25
+  drift_weight: 0.02
+  prior_mix_prob: 0.50
+  anneal_schedule: cosine
+  latent_clip: 6.0
+
+loss:
+  objective: softplus
+  rank_margin: 1.0
+  energy_reg: 0.001
+  energy_margin: 30.0
+  cd_clamp: 10.0
+  neg_init_noise: 0.10
+  neg_from_pos_prob: 0.25
+
+optim:
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  epochs: 20
+  patience: 6
+  grad_clip: 1.0
+  warmup_epochs: 2
+  best_metric: E_gap
+
+eval:
+  threshold: 0.5
+  feature_thresholds:
+    battery_discharge_mode: 0.30
+    dr_active: 0.25
+    thermal_on: 0.25
+    import_mode: 0.80
+  decode_num_samples: 4
+  decode_eval_batches: 10
+  prior_estimation_batches: 0
+
+logging:
+  output_dir: outputs/uc_jepa/latent_ebm
+  save_every: 5
+  log_every: 50

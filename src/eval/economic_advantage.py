@@ -89,31 +89,51 @@ class EconomicAdvantageAnalyzer:
     def compute_advantage(self, lambda_eur_per_sec: float) -> pd.DataFrame:
         """
         Compute economic advantage for a given lambda.
-        
+
+        Scenarios where any of `pipeline_objective`, `milp_objective`,
+        `pipeline_solve_time` or `milp_solve_time` is non-finite (e.g. when
+        the pipeline failed to return a feasible solution and `lp_objective`
+        is `inf`) are flagged via `economic_valid=False` and have all
+        advantage / profitability columns set to NaN / False, so that
+        downstream `dropna(subset=['advantage'])` cleanly excludes them
+        instead of poisoning family means with `+/-inf`.
+
         Args:
             lambda_eur_per_sec: Cost of time in EUR/second
-            
+
         Returns:
             DataFrame with advantage columns added
         """
         df = self.df.copy()
         df['lambda'] = lambda_eur_per_sec
-        
+
         # Total cost = solution cost + time cost
         df['total_cost_milp'] = df['milp_objective'] + lambda_eur_per_sec * df['milp_solve_time']
         df['total_cost_pipeline'] = df['pipeline_objective'] + lambda_eur_per_sec * df['pipeline_solve_time']
-        
+
         # Advantage = MILP total - Pipeline total (positive = pipeline better)
         df['advantage'] = df['total_cost_milp'] - df['total_cost_pipeline']
         df['advantage_pct'] = df['advantage'] / df['total_cost_milp'].abs() * 100
-        
+
         # Decomposition
         df['advantage_from_time'] = lambda_eur_per_sec * df['time_saved_s']
         df['advantage_from_cost'] = -df['cost_gap']  # Negative gap = pipeline cheaper
-        
-        # Is pipeline profitable?
-        df['pipeline_profitable'] = df['advantage'] > 0
-        
+
+        # Mask scenarios with non-finite inputs so they don't poison aggregates.
+        finite_inputs = (
+            np.isfinite(df['pipeline_objective'])
+            & np.isfinite(df['milp_objective'])
+            & np.isfinite(df['pipeline_solve_time'])
+            & np.isfinite(df['milp_solve_time'])
+        )
+        df['economic_valid'] = finite_inputs
+        for col in ['advantage', 'advantage_pct', 'advantage_from_time', 'advantage_from_cost',
+                    'total_cost_milp', 'total_cost_pipeline']:
+            df.loc[~finite_inputs, col] = np.nan
+
+        # Is pipeline profitable? (NaN > 0 -> False, so failed scenarios are not counted)
+        df['pipeline_profitable'] = (df['advantage'] > 0).astype(bool)
+
         return df
 
     def compute_breakeven_lambda_per_scenario(self) -> pd.DataFrame:
@@ -239,26 +259,51 @@ class EconomicAdvantageAnalyzer:
         
         return results
     
-    def find_breakeven_lambda(self, target_pct_profitable: float = 50.0) -> float:
+    def find_breakeven_lambda(
+        self,
+        target_pct_profitable: float = 50.0,
+        upper: float = 1000.0,
+    ) -> float:
         """
-        Find the lambda value where target_pct_profitable% of scenarios 
+        Find the lambda value where target_pct_profitable% of scenarios
         become profitable for the pipeline.
-        
-        Uses binary search.
+
+        Returns `float('inf')` when even at `upper` the target percentage is
+        not reached (e.g. when most scenarios have a large positive cost gap
+        that no realistic time-value monetisation can offset). Returns 0.0
+        when the pipeline already beats the target at lambda=0.
+
+        Uses binary search. Note this assumes pct_profitable is monotone
+        non-decreasing in lambda; for mixed scenarios where the pipeline is
+        sometimes slower, that assumption can fail, so callers should treat
+        the result as a coarse threshold.
         """
-        lo, hi = 0.0, 1000.0
-        
+        # Cheap monotonicity bookends.
+        df_lo = self.compute_advantage(0.0)
+        valid_lo = df_lo.dropna(subset=['advantage'])
+        if len(valid_lo) == 0:
+            return float('nan')
+        pct_lo = valid_lo['pipeline_profitable'].mean() * 100
+        if pct_lo >= target_pct_profitable:
+            return 0.0
+
+        df_hi = self.compute_advantage(upper)
+        valid_hi = df_hi.dropna(subset=['advantage'])
+        pct_hi = valid_hi['pipeline_profitable'].mean() * 100
+        if pct_hi < target_pct_profitable:
+            return float('inf')
+
+        lo, hi = 0.0, float(upper)
         for _ in range(50):
             mid = (lo + hi) / 2
             df_adv = self.compute_advantage(mid)
             valid = df_adv.dropna(subset=['advantage'])
             pct = valid['pipeline_profitable'].mean() * 100
-            
             if pct < target_pct_profitable:
                 lo = mid
             else:
                 hi = mid
-        
+
         return (lo + hi) / 2
     
     def find_breakeven_lambda_by_family(

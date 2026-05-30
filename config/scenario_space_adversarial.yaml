@@ -1,0 +1,156 @@
+# scenario_space_adversarial.yaml
+#
+# Designed to maximize MILP time-to-first-feasible while keeping the
+# encoder feature space identical to training (n_timesteps = 24,
+# n_features = 7, same asset types). The horizon is intentionally NOT
+# changed: the pipeline's HTE encoder was trained at T=24, so OOD on
+# horizon length would conflate encoder generalization with the
+# tractability claim. Hardness is achieved through:
+#
+#   - High thermal_per_zone + nuclear_per_region -> many binaries,
+#     each with non-trivial startup costs.
+#   - Tight ramp limits (low thermal_ramp_pct) -> very few commitment
+#     patterns are LP-feasible, so the LP relaxation is far from
+#     integer and incumbent search is slow.
+#   - Tight reserves: low battery / DR / pumped capacity relative to
+#     demand, low import-export, "block" cross-border policy on a
+#     fraction of scenarios.
+#   - Stormy/cold-snap exogenous mix -> high net-demand volatility,
+#     plenty of ramp events.
+#   - High value_of_lost_load -> strong incentive to avoid load
+#     shedding, which forces more commitments active and makes the
+#     feasible region narrow.
+#
+# Target: MILP TTF >> pipeline wall-clock. If we cannot move the TTF
+# distribution above ~30s on this family, the pipeline cannot win
+# anywhere and the negative result is settled.
+
+global:
+  seed: 7777
+  horizon_hours: 24
+  dt_minutes: 60
+  target_scenarios: 20
+  max_scenarios_per_hour_per_core: 0.5
+  cpu_cores: 12
+  max_compute_hours: 168
+
+structure:
+  # Moderate topology to keep the encoder forward pass tractable
+  # but enough binaries to stress the MILP.
+  regions: [4, 8]
+  zones_per_region: [4, 8]
+  intertie_density: [0.45, 0.75]
+  neighbor_nations: [3, 6]
+
+assets:
+  thermal_per_zone: [3, 5]      # many thermals -> many u/v binaries
+  solar_per_zone: [1, 3]
+  wind_per_zone: [1, 3]
+  battery_per_zone: [0, 1]      # almost no flexibility from batteries
+  dr_per_zone: [0, 2]           # almost no DR
+  nuclear_per_region: [1, 2]    # heavy startup penalties
+  hydro_reservoir_per_region: [1, 3]
+  hydro_ror_per_zone: [0, 1]
+  hydro_pumped_per_region: [0, 1]
+
+unit_capacities:
+  thermal_unit_mw: [200, 400]
+  nuclear_unit_mw: [1000, 1600]
+  solar_unit_mw: [40, 200]
+  wind_unit_mw: [60, 250]
+  battery_power_unit_mw: [10, 30]      # weak storage
+  hydro_reservoir_power_unit_mw: [200, 350]
+  hydro_reservoir_energy_hours: [4.0, 7.0]
+  hydro_ror_unit_mw: [40, 80]
+  pumped_power_unit_mw: [80, 200]
+  pumped_energy_hours: [4.0, 8.0]
+
+transport_capacities:
+  transmission_base_mw: [600, 2500]    # lower than base -> congestion
+  import_export_base_mw: [800, 2500]   # tight imports
+
+economics_policy:
+  co2_price_eur_per_t: [80, 250]
+  price_cap_eur_per_mwh: [800, 3000]
+  cross_border_policy: ["cap", "block"]    # never "allow"
+  import_export_caps_factor: [0.4, 0.9]    # tight
+
+techno_params_scalers:
+  thermal_marg_cost: [4, 10]
+  thermal_ramp_pct: [0.2, 0.5]             # tight ramps -> hard MIP
+  battery_roundtrip_eff: [0.8, 0.9]
+  battery_e_to_p_hours: [1.0, 3.0]
+  dr_max_shed_share: [0.05, 0.12]          # very low DR
+  dr_duration_hours: [1, 3]
+  dr_num_blocks: [2, 3]
+  dr_rebound_decay: [0.05, 0.15]
+  dr_rebound_tolerance: [0.5, 3.0]
+  dr_max_events: [2, 5]
+  dr_min_duration: [1, 2]
+  dr_ramp_limit_factor: [0.4, 1.0]
+  hydro_reservoir_head_eff: [0.78, 0.92]
+  battery_initial_soc_fraction: [0.40, 0.60]
+  battery_final_soc_tolerance: [0.05, 0.12]
+  battery_self_discharge_per_hour: [0.0005, 0.002]
+  pumped_initial_level_fraction: [0.45, 0.65]
+  pumped_final_level_tolerance: [0.05, 0.12]
+  pumped_self_discharge_per_hour: [0.0001, 0.0008]
+
+operation_costs:
+  thermal_fuel_eur_per_mwh: [55, 90]
+  nuclear_fuel_eur_per_mwh: [18, 28]
+  thermal_startup_cost_eur: [4000, 12000]   # painful warm starts
+  nuclear_startup_cost_eur: [25000, 60000]  # painful nuclear restarts
+  demand_response_cost_eur_per_mwh: [200, 700]
+  value_of_lost_load_eur_per_mwh: [9000, 14000]   # very high VOLL
+  renewable_spill_cost_eur_per_mwh: [3, 18]
+  hydro_spill_cost_eur_per_mwh: [8, 22]
+  overgen_spill_cost_eur_per_mwh: [50, 600]
+  battery_cycle_cost_eur_per_mwh: [70, 130]
+  pumped_cycle_cost_eur_per_mwh: [55, 95]
+
+exogenous:
+  # Use only canonical profiles known to the encoder; bias toward stormy/winter.
+  weather_profiles: ["stormy_winter", "stormy_winter", "calm_winter", "mixed"]
+  weather_spread_intensity: [0.9, 1.5]
+  demand_profiles: ["cold_snap", "wkday_peak", "heatwave"]
+  demand_scale_factor: [1.05, 1.35]         # high load -> tight margin
+  inflow_factor: [0.4, 0.9]                 # low hydro -> less flex
+  zone_profile_variants:
+    evening_peak: 0.30
+    double_peak: 0.20
+    industrial: 0.20
+    night_shift: 0.15
+    residential_morning: 0.15
+  zone_profile_mix_weight: [0.4, 0.8]
+  zone_profile_phase_shift_hours: [-2.5, 2.5]
+  zone_profile_noise_std: [0.03, 0.07]
+  zone_profile_curvature_exp: [0.9, 1.18]
+
+diversity:
+  selection_method: "greedy_cover"
+  cover_metric: [
+    "regions",
+    "weather_profiles",
+    "demand_scale_factor",
+    "inflow_factor",
+    "intertie_density",
+    "cross_border_policy",
+    "thermal_ramp_pct",
+    "battery_e_to_p_hours",
+    "co2_price_eur_per_t",
+  ]
+  min_pairwise_distance: 0.30
+
+budget_guard:
+  max_vars_per_scenario: 200000
+  max_cons_per_scenario: 250000
+  max_binary_vars_per_scenario: 30000
+  mip_gap_target: [0.6, 1.5]
+  time_estimator:
+    base_intercept_sec: 240
+    per_1k_vars_sec: 15
+    per_1k_cons_sec: 18
+    per_1k_binary_sec: 80
+    branching_penalty: 1.4
+  reject_if_est_cpu_hours_gt: 4

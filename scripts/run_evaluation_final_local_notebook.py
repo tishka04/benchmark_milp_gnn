@@ -43,6 +43,11 @@ def main() -> None:
     )
     parser.add_argument("--run-pipeline", action="store_true", help="Force RUN_PIPELINE = True")
     parser.add_argument(
+        "--compute-bounded",
+        action="store_true",
+        help="Force COMPUTE_BOUNDED_EXPERIMENT = True in the notebook.",
+    )
+    parser.add_argument(
         "--max-scenarios-per-family",
         type=int,
         default=None,
@@ -64,6 +69,7 @@ def main() -> None:
     overrides = {
         "RUN_PIPELINE": True if args.run_pipeline else False,
         "MAX_SCENARIOS_PER_FAMILY": args.max_scenarios_per_family,
+        "COMPUTE_BOUNDED_EXPERIMENT": True if args.compute_bounded else False,
     }
     if args.output_dir_name:
         overrides["OUTPUT_DIR"] = RawExpression(
