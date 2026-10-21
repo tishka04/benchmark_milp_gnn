@@ -8,6 +8,8 @@
 # Strategy C: Flip budget constraint limits total deviations from decoder
 # ==============================================================================
 
+from src.demand_response import DR_FORMULATION, shifting_metrics
+
 import os
 import sys
 import time
@@ -51,6 +53,20 @@ class TwoStageResult:
     objective_value: float  # True UC objective (without penalty)
     solve_time: float
     continuous_vars: Dict[str, np.ndarray]
+    dr_formulation: str = DR_FORMULATION
+
+    @property
+    def dr_metrics(self):
+        v = self.continuous_vars
+        if not v:
+            return {"dr_feasible": False}
+        return shifting_metrics(
+            v["dr_shed"], v["dr_recover"], v["dt_hours"],
+            backlog=v["dr_rebound"], active=v["dr_active"],
+            down_limit=v["dr_limit"], up_limit=v["dr_recovery_limit"],
+            max_periods=v["dr_max_active_periods"], ramp=v["dr_ramp"],
+            tolerance=1e-3,
+        )
     
     # Slack and deviation metrics (in MWh, accounting for dt)
     slack_used: float = 0.0
@@ -175,6 +191,9 @@ class LPWorkerTwoStage:
         
         if self.solver is None or not self.solver.available():
             raise RuntimeError("No LP/MILP solver available")
+
+        from .solver_resources import configure_highs_threads
+        self.solver_resources = configure_highs_threads(self.solver, self.solver_name)
         
         # Enable warm-start so APPSI HiGHS passes .value to setSolution()
         if hasattr(self.solver, 'config') and hasattr(self.solver.config, 'warmstart'):
@@ -301,6 +320,8 @@ class LPWorkerTwoStage:
             'pumped_level':    plan.pumped_level[:Z, 1:T + 1].cpu().numpy(),
             'h_release':       plan.hydro_dispatch[:Z, :T].cpu().numpy(),
             'dr_shed':         plan.demand_response[:Z, :T].cpu().numpy(),
+            'dr_recover':      plan.dr_recover[:Z, :T].cpu().numpy(),
+            'dr_rebound':      plan.dr_rebound[:Z, :T].cpu().numpy(),
             'unserved':        plan.unserved_energy[:Z, :T].cpu().numpy(),
         }
 
@@ -409,7 +430,7 @@ class LPWorkerTwoStage:
         
         for (z, t), val in targets['dr_active'].items():
             if hasattr(model, 'dr_active') and (z, t) in model.dr_active:
-                has_cap = hasattr(model, 'dr_max') and value(model.dr_max[z]) > eps
+                has_cap = value(model.dr_limit[z, t]) > eps
                 if has_cap or val == 0.0:
                     if not model.dr_active[z, t].is_fixed():
                         model.dr_active[z, t].fix(val)
@@ -513,7 +534,7 @@ class LPWorkerTwoStage:
             'p_thermal', 'p_nuclear', 'p_solar', 'p_wind',
             'b_charge', 'b_discharge', 'b_soc',
             'pumped_charge', 'pumped_discharge', 'pumped_level',
-            'h_release', 'h_level', 'h_spill', 'dr_shed', 'dr_rebound',
+            'h_release', 'h_level', 'h_spill', 'dr_shed', 'dr_recover', 'dr_rebound',
             'unserved', 'spill_solar', 'spill_wind', 'overgen_spill',
             'u_thermal', 'v_thermal_startup',
             'b_charge_mode', 'pumped_charge_mode', 'dr_active',
@@ -537,6 +558,12 @@ class LPWorkerTwoStage:
             if hasattr(model, name):
                 solution[name] = extract_1d(getattr(model, name))
         
+        solution["dt_hours"] = np.array(value(model.dt_hours))
+        for name in ("dr_limit", "dr_recovery_limit"):
+            solution[name] = extract_2d(getattr(model, name))
+        solution["dr_max_active_periods"] = np.array([value(model.dr_max_events[z]) for z in zones])
+        solution["dr_ramp"] = np.array([value(model.dr_ramp_limit[z]) for z in zones])
+
         # Also extract hydro_ror parameter (fixed input, not a variable)
         if hasattr(model, 'hydro_ror'):
             solution['hydro_ror'] = extract_2d(model.hydro_ror)

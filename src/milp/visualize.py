@@ -89,6 +89,7 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
 
     # === Slack & adjustments data ===
     demand_response = _sum_over_zones(detail["demand_response"], zones)
+    dr_recover = _sum_over_zones(detail.get("dr_recover", {}), zones)
     unserved = _sum_over_zones(detail["unserved"], zones)
     overgen = _sum_over_zones(detail["overgen_spill"], zones)
     solar_spill = _sum_over_zones(detail.get("solar_spill", {}), zones)
@@ -153,6 +154,9 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
     colors = [comp[2] for comp in components]
     axes[0].stackplot(time_hours, stacks, labels=labels, colors=colors, alpha=0.85)
     axes[0].plot(time_hours, demand_total, color="black", linewidth=2, label="Demand")
+    if dr_recover:
+        shifted_demand = [d - down + up for d, down, up in zip(demand_total, demand_response, dr_recover)]
+        axes[0].plot(time_hours, shifted_demand, color="#1b9e77", linestyle="--", label="Demand after shifting")
     if net_exchange:
         axes[0].plot(time_hours, net_exchange, color="gray", linestyle="--", linewidth=1.5, label="Net Import")
     axes[0].set_ylabel("Power (MW)")
@@ -212,8 +216,11 @@ def _plot_dispatch(detail: Dict[str, object], scenario_id: str, out_path: Path) 
     
     # Plot Demand Response on left axis (area fill)
     if demand_response and any(v > 0 for v in demand_response):
-        ax_dr.fill_between(time_hours, demand_response, alpha=0.7, color="#66c2a5", label="Demand Response")
+        dr_label = "Deferred load" if dr_recover else "Demand Response"
+        ax_dr.fill_between(time_hours, demand_response, alpha=0.7, color="#66c2a5", label=dr_label)
         ax_dr.plot(time_hours, demand_response, color="#66c2a5", linewidth=1.5)
+    if dr_recover and any(v > 0 for v in dr_recover):
+        ax_dr.plot(time_hours, dr_recover, color="#1b9e77", linestyle="--", linewidth=1.5, label="Recovered load")
     ax_dr.set_ylabel("Demand Response (MW)", color="#66c2a5")
     ax_dr.tick_params(axis='y', labelcolor="#66c2a5")
     

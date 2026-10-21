@@ -10,8 +10,9 @@ from pyomo.environ import SolverFactory, TerminationCondition, value
 from pyomo.core import TransformationFactory
 from pyomo.opt import SolverStatus
 
-from .model import build_uc_model
+from .model import DR_FORMULATION, build_uc_model
 from .scenario_loader import ScenarioData, load_scenario_data
+from .solver_resources import configure_highs_threads
 
 # Default time limit: 2 hours in seconds
 DEFAULT_TIME_LIMIT_SECONDS = 60 * 10 # 10 minutes
@@ -238,7 +239,7 @@ def _apply_mip_warm_start(model, warm_start_data: Dict[str, Any] | None) -> int:
         "b_charge", "b_discharge", "b_soc",
         "pumped_charge", "pumped_discharge", "pumped_level",
         "h_release", "h_level", "h_spill",
-        "dr_shed", "dr_rebound", "unserved",
+        "dr_shed", "dr_recover", "dr_rebound", "unserved",
         "spill_solar", "spill_wind", "overgen_spill",
     ]
     two_d_binary = [
@@ -403,6 +404,9 @@ def _build_zone_dispatch_df(detail: Dict[str, Any]):
         "pumped_discharge",
         "pumped_level",
         "demand_response",
+        "dr_recover",
+        "dr_rebound",
+        "demand_response_net",
         "unserved",
         "overgen_spill",
     ]
@@ -411,6 +415,7 @@ def _build_zone_dispatch_df(detail: Dict[str, Any]):
         hour = float(time_hours[idx])
         for zone in zones:
             row = {
+                "dr_formulation": DR_FORMULATION,
                 "time_step": int(step),
                 "time_hours": hour,
                 "zone": zone,
@@ -439,6 +444,9 @@ def _build_system_dispatch_df(detail: Dict[str, Any]):
         "pumped_discharge_total": _aggregate_zone_series(detail, "pumped_discharge"),
         "demand_total": _aggregate_zone_series(detail, "demand"),
         "demand_response_total": _aggregate_zone_series(detail, "demand_response"),
+        "dr_recover_total": _aggregate_zone_series(detail, "dr_recover"),
+        "dr_rebound_total": _aggregate_zone_series(detail, "dr_rebound"),
+        "demand_response_net_total": _aggregate_zone_series(detail, "demand_response_net"),
         "unserved_total": _aggregate_zone_series(detail, "unserved"),
         "solar_spill_total": _aggregate_zone_series(detail, "solar_spill"),
         "wind_spill_total": _aggregate_zone_series(detail, "wind_spill"),
@@ -454,6 +462,7 @@ def _build_system_dispatch_df(detail: Dict[str, Any]):
     records = []
     for idx, step in enumerate(time_steps):
         row = {
+            "dr_formulation": DR_FORMULATION,
             "time_step": int(step),
             "time_hours": float(time_hours[idx]),
             "net_import": float(net_import[idx]),
@@ -502,6 +511,7 @@ def solve_scenario(
 ) -> Dict[str, Any]:
     data: ScenarioData = load_scenario_data(Path(scenario_path))
     solver = SolverFactory(solver_name)
+    solver_resources = configure_highs_threads(solver, solver_name)
     
     # Configure time limit if specified
     if time_limit_seconds is not None and time_limit_seconds > 0:
@@ -555,6 +565,7 @@ def solve_scenario(
         solar_spill = {zone: [float(value(mip_model.spill_solar[zone, t])) for t in periods] for zone in zones}
         wind_spill = {zone: [float(value(mip_model.spill_wind[zone, t])) for t in periods] for zone in zones}
         detail_payload = {
+            "dr_formulation": DR_FORMULATION,
             "time_steps": [int(t) for t in periods],
             "time_hours": [float(t * data.dt_hours) for t in periods],
             "dt_hours": float(data.dt_hours),
@@ -581,6 +592,11 @@ def solve_scenario(
             "pumped_discharge": {zone: [float(value(mip_model.pumped_discharge[zone, t])) for t in periods] for zone in zones},
             "pumped_level": {zone: [float(value(mip_model.pumped_level[zone, t])) for t in periods] for zone in zones},
             "demand_response": {zone: [float(value(mip_model.dr_shed[zone, t])) for t in periods] for zone in zones},
+            "dr_recover": {zone: [float(value(mip_model.dr_recover[zone, t])) for t in periods] for zone in zones},
+            "demand_response_net": {
+                zone: [float(value(mip_model.dr_shed[zone, t] - mip_model.dr_recover[zone, t])) for t in periods]
+                for zone in zones
+            },
             "dr_rebound": {zone: [float(value(mip_model.dr_rebound[zone, t])) for t in periods] for zone in zones},
             "dr_active": {zone: [float(value(mip_model.dr_active[zone, t])) for t in periods] for zone in zones},
             "unserved": {zone: [float(value(mip_model.unserved[zone, t])) for t in periods] for zone in zones},
@@ -620,6 +636,8 @@ def solve_scenario(
             "hydro_release": {zone: list(values) for zone, values in detail_payload["hydro_release"].items()},
             "hydro_ror": {zone: [float(value(mip_model.hydro_ror[zone, t])) for t in periods] for zone in zones},
             "demand_response": {zone: list(values) for zone, values in detail_payload["demand_response"].items()},
+            "dr_recover": {zone: list(values) for zone, values in detail_payload["dr_recover"].items()},
+            "demand_response_net": {zone: list(values) for zone, values in detail_payload["demand_response_net"].items()},
             "battery_charge": {zone: list(values) for zone, values in detail_payload["battery_charge"].items()},
             "battery_discharge": {zone: list(values) for zone, values in detail_payload["battery_discharge"].items()},
             "pumped_charge": {zone: list(values) for zone, values in detail_payload["pumped_charge"].items()},
@@ -666,6 +684,8 @@ def solve_scenario(
     # Build result with timeout classification
     result = {
         "scenario_id": data.scenario_id,
+        "dr_formulation": DR_FORMULATION,
+        "solver_resources": solver_resources,
         "mip": mip_summary,
         "lp": lp_summary,
         "cost_components": cost_components,

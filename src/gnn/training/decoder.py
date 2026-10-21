@@ -22,6 +22,7 @@ PUMPED_CHARGE_IDX = 9
 PUMPED_DISCHARGE_IDX = 10
 NET_IMPORT_IDX = 11
 UNSERVED_IDX = 12
+DR_RECOVER_IDX = 13
 
 @dataclass
 class DecoderState:
@@ -30,6 +31,7 @@ class DecoderState:
 
 
 class FeasibilityDecoder:
+    """Per-period power-balance repair; temporal DR feasibility needs a full-horizon check."""
     def __init__(self, config: DecoderConfig) -> None:
         self.config = config
         self._iterations = max(1, int(config.balance_iterations))
@@ -138,7 +140,7 @@ class FeasibilityDecoder:
         wind_avail = torch.minimum(node_static[:, 2], torch.relu(node_time[:, 2]))
         hydro_release_avail = torch.minimum(node_static[:, 6], torch.relu(node_time[:, 3]))
         hydro_ror_avail = torch.relu(node_time[:, 4])
-        dr_limit = torch.minimum(node_static[:, 4], demand)
+        dr_limit = torch.relu(node_time[:, 18])
         bounds: Dict[int, torch.Tensor] = {
             THERMAL_IDX: torch.relu(node_static[:, 0]),
             NUCLEAR_IDX: torch.relu(node_static[:, 5]),
@@ -147,6 +149,7 @@ class FeasibilityDecoder:
             HYDRO_RELEASE_IDX: hydro_release_avail,
             HYDRO_ROR_IDX: hydro_ror_avail,
             DEMAND_RESPONSE_IDX: torch.relu(dr_limit),
+            DR_RECOVER_IDX: torch.relu(node_time[:, 19]),
             UNSERVED_IDX: torch.relu(demand),
         }
         battery_power_cap = torch.relu(node_static[:, 3])
@@ -194,7 +197,7 @@ class FeasibilityDecoder:
             + pumped_discharge
             + net_import
         )
-        demand_side = demand + battery_charge + pumped_charge
+        demand_side = demand + battery_charge + pumped_charge + decoded[:, DR_RECOVER_IDX]
         balance = demand_side - supply
 
         shortage = torch.relu(balance)
@@ -273,7 +276,7 @@ class FeasibilityDecoder:
             + decoded[:, PUMPED_DISCHARGE_IDX]
             + decoded[:, NET_IMPORT_IDX]
         )
-        demand_side = demand + decoded[:, BATTERY_CHARGE_IDX] + decoded[:, PUMPED_CHARGE_IDX]
+        demand_side = demand + decoded[:, BATTERY_CHARGE_IDX] + decoded[:, PUMPED_CHARGE_IDX] + decoded[:, DR_RECOVER_IDX]
         residual = demand_side - (supply + decoded[:, UNSERVED_IDX])
         tolerance = float(self.config.residual_tolerance)
         needs_more = residual > tolerance

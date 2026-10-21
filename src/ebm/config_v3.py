@@ -22,7 +22,7 @@ class EBMv3Config:
 
     @property
     def reports_dir(self) -> str:
-        return os.path.join(self.base_dir, "outputs", "scenarios_v3", "reports")
+        return os.path.join(self.base_dir, "outputs", "load_shifting_v1", "scenarios_v3", "reports")
 
     @property
     def scenarios_dir(self) -> str:
@@ -35,13 +35,13 @@ class EBMv3Config:
     @property
     def embeddings_dir(self) -> str:
         return os.path.join(
-            self.base_dir, "outputs", "encoders",
+            self.base_dir, "outputs", "load_shifting_v1", "encoders",
             "hierarchical_temporal_v3", "embeddings_v3",
         )
 
     @property
     def output_dir(self) -> str:
-        return os.path.join(self.base_dir, "outputs", "ebm_models", "ebm_v3")
+        return os.path.join(self.base_dir, "outputs", "load_shifting_v1", "ebm_models", "ebm_v3")
 
     # ── Data dimensions ──
     n_timesteps: int = 24

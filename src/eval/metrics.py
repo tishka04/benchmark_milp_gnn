@@ -10,6 +10,8 @@ Computes:
 """
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation, shifting_metrics
+
 import json
 import numpy as np
 import pandas as pd
@@ -137,7 +139,21 @@ def load_milp_reports(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
         sc_id = report_file.stem
         with open(report_file, 'r') as f:
             report = json.load(f)
+        require_current_formulation(report, str(report_file))
+        detail = report.get("detail")
+        dr_metrics = {}
+        if detail and detail.get("zones"):
+            zones = detail["zones"]
+            dr_metrics = shifting_metrics(
+                [detail["demand_response"][z] for z in zones],
+                [detail["dr_recover"][z] for z in zones],
+                detail["dt_hours"],
+                backlog=[detail["dr_rebound"][z] for z in zones],
+                tolerance=1e-3,
+            )
         milp_data[sc_id] = {
+            'dr_formulation': DR_FORMULATION,
+            'dr_metrics': dr_metrics,
             'milp_objective': report.get('mip', {}).get('objective', float('nan')),
             'milp_solve_time': report.get('mip', {}).get('solve_seconds', float('nan')),
             'milp_status': report.get('mip', {}).get('status', 'unknown'),
@@ -162,19 +178,30 @@ def build_comparison_dataframe(
     """
     rows = []
     for pr in pipeline_results:
+        require_current_formulation(pr, 'pipeline result')
         sc_id = pr['scenario_id']
         family = pr.get('family', '')
         # Try family-prefixed key first, fall back to plain sc_id
         milp = milp_data.get(f"{family}/{sc_id}", milp_data.get(sc_id, {}))
+        if milp:
+            require_current_formulation(milp, 'MILP reference')
         timing_views = _pipeline_timing_views(pr)
         
         row = {
+            'dr_formulation': DR_FORMULATION,
+            **dict(pr.get('dr_metrics', {})),
+            **{f"milp_{key}": val for key, val in milp.get('dr_metrics', {}).items()},
             # Pipeline
             'scenario_id': sc_id,
             'family': pr.get('family', ''),
             'pipeline_objective': pr.get('lp_objective', float('nan')),
             'pipeline_solve_time': timing_views['actual_wall_clock'],
             'pipeline_wall_clock_time': timing_views['actual_wall_clock'],
+            'pipeline_timing_protocol': pr.get('timing_protocol', ''),
+            'pipeline_budget_seconds': pr.get('budget_seconds', float('nan')),
+            'pipeline_hard_timeout': pr.get('hard_timeout', False),
+            'pipeline_cleanup_wall_s': pr.get('cleanup_wall_s', 0.0),
+            'pipeline_deadline_detection_lag_s': pr.get('deadline_detection_lag_s', 0.0),
             'pipeline_candidate_cumulative_time': timing_views['cumulative_candidates'],
             'pipeline_first_candidate_time': timing_views['first_candidate'],
             'pipeline_best_candidate_oracle_time': timing_views['best_candidate_oracle'],

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import csv
 from dataclasses import asdict
@@ -110,15 +112,10 @@ class _BasePointwiseLoss:
         if self.balance_penalty_weight <= 0.0:
             return None
         demand = batch.node_time[:, 0]
-        supply = (
-            predictions[:, 0]
-            + predictions[:, 1]
-            + predictions[:, 4]
-            + predictions[:, 5]
-            + predictions[:, 6]
-            + predictions[:, 7]
-        )
-        residual = supply - demand
+        # Label order is shared with graph_dataset / training.metrics.
+        supply = predictions[:, [0, 1, 2, 3, 4, 5, 6, 8, 10, 11, 12]].sum(dim=1)
+        consumption = demand + predictions[:, 7] + predictions[:, 9] + predictions[:, 13]
+        residual = supply - consumption
         if self.reduction == 'sum':
             penalty = residual.pow(2).sum()
         elif self.reduction == 'mean':
@@ -442,7 +439,7 @@ def train(config: TrainingConfig) -> None:
             if score < best_val:
                 best_val = score
                 best_epoch = epoch
-                torch.save(model.state_dict(), best_path)
+                torch.save({"dr_formulation": DR_FORMULATION, "model_state_dict": model.state_dict()}, best_path)
                 print(f"  New best model saved at {best_path}")
                 is_best = True
             history_entry['val_weighted_score'] = float(score)
@@ -489,11 +486,12 @@ def train(config: TrainingConfig) -> None:
     final_path = output_dir / 'final_model.pt'
     if best_path.exists():
         state_dict = torch.load(best_path, map_location=device)
-        model.load_state_dict(state_dict)
+        require_current_formulation(state_dict, str(best_path))
+        model.load_state_dict(state_dict["model_state_dict"])
         torch.save(state_dict, final_path)
         print(f'Training complete. Restored best checkpoint to {final_path}')
     else:
-        torch.save(model.state_dict(), final_path)
+        torch.save({"dr_formulation": DR_FORMULATION, "model_state_dict": model.state_dict()}, final_path)
         print(f'Training complete. Final weights saved to {final_path}')
 
     if config.data.test_split:

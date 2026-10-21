@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import json
 from pathlib import Path
 from typing import Dict, Iterable, Iterator
@@ -60,6 +62,7 @@ def iter_split(index: Dict, split: str | float, train_split: float = 0.7, val_sp
 def load_graph(entry: Dict) -> Dict[str, np.ndarray]:
     graph_path = Path(entry["graph_file"])
     with np.load(graph_path, allow_pickle=False) as data:
+        require_current_formulation(data, graph_path)
         return {key: data[key] for key in data.files}
 
 

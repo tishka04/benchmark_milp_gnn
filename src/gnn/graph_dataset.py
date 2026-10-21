@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, validate_dr_report
+
 import argparse
 import json
 from pathlib import Path
@@ -197,6 +199,7 @@ def _node_labels(dispatch: Dict[str, Dict[str, List[float]]], zones: List[str], 
                     pumped_discharge,
                     net_import,
                     unserved,
+                    dispatch["dr_recover"][zone],
                 ],
                 axis=1,
             )
@@ -264,11 +267,18 @@ def build_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray
     detail = report.get("detail")
     if detail is None:
         raise RuntimeError("Report missing 'detail'; rerun MILP with --save-json")
+    validate_dr_report(report)
     zones = detail["zones"]
-    record: Dict[str, np.ndarray] = {}
+    record: Dict[str, np.ndarray] = {"dr_formulation": np.array(DR_FORMULATION)}
     anchor_zone = getattr(data, "import_anchor_zone", None)
     record["node_static"] = _node_static_features(data, zones)
-    record["node_time"] = _node_time_features(detail, zones, anchor_zone)
+    base_time = _node_time_features(detail, zones, anchor_zone)
+    dr_limits = np.asarray([[data.dr_limit[z, t] for z in zones] for t in data.periods], dtype=np.float32)
+    # Inputs describe capacity; the observed recovery belongs only to labels.
+    record["node_time"] = np.concatenate([
+        base_time, dr_limits[:, :, None],
+        (dr_limits * data.dr_recovery_limit_factor)[:, :, None],
+    ], axis=2)
     record["node_labels"] = _node_labels(detail, zones, anchor_zone)
     zone_region_index, zone_to_region = _zone_region_indices(data, zones)
     record["zone_region_index"] = zone_region_index
@@ -279,6 +289,7 @@ def build_graph_record(data: ScenarioData, report: Dict) -> Dict[str, np.ndarray
     record["edge_flows"] = edge_flows
     record["time_steps"] = np.asarray(detail["time_steps"], dtype=np.int64)
     record["time_hours"] = np.asarray(detail["time_hours"], dtype=np.float32)
+    record["dt_hours"] = np.array(data.dt_hours, dtype=np.float64)
     pre_dispatch = detail.get("pre_dispatch")
     if pre_dispatch:
         pre_labels = _node_labels(pre_dispatch, zones, anchor_zone)

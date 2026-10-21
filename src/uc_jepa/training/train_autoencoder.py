@@ -8,6 +8,8 @@ The config is YAML with sections ``data``, ``model``, ``loss``, ``optim``, ``log
 """
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import json
 import math
@@ -272,6 +274,7 @@ def _save_checkpoint(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({
+        "dr_formulation": DR_FORMULATION,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "epoch": epoch,

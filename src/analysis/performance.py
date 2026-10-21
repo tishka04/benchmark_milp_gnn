@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation, shifting_metrics
+
 import json
 import math
 import time
@@ -30,6 +32,7 @@ COMPONENT_ORDER = [
     'pumped_discharge',
     'net_import',
     'unserved',
+    'dr_recover',
 ]
 
 
@@ -94,6 +97,7 @@ def build_milp_summary(index_path: Path | str, split: str = 'test', train_fracti
         report_path = _ensure_path(entry['report_file'])
         scenario = _load_json(scenario_path)
         report = _load_json(report_path)
+        require_current_formulation(report, report_path)
 
         estimates = scenario.get('estimates', {}) or {}
         meta = scenario.get('meta', {}) or {}
@@ -115,6 +119,7 @@ def build_milp_summary(index_path: Path | str, split: str = 'test', train_fracti
         lp_solve_seconds = lp_info.get('solve_seconds')
 
         records.append({
+            'dr_formulation': DR_FORMULATION,
             'scenario_id': scenario_id,
             'scenario_file': str(scenario_path),
             'report_file': str(report_path),
@@ -168,6 +173,9 @@ def _initial_stat_record(metadata: Dict[str, Any]) -> Dict[str, Any]:
         'node_count': 0,
         'inference_seconds': 0.0,
         'time_steps': set(),
+        'dr_predictions': {},
+        'dt_hours': metadata['dt_hours'],
+        'n_timesteps': metadata['n_timesteps'],
     }
 
 
@@ -205,7 +213,8 @@ def evaluate_gnn_performance(
     model.to(device_obj)
     checkpoint_path = _resolve_checkpoint(run_path, checkpoint)
     state_dict = torch.load(checkpoint_path, map_location=device_obj)
-    model.load_state_dict(state_dict)
+    require_current_formulation(state_dict, "checkpoint")
+    model.load_state_dict(state_dict["model_state_dict"])
     model.eval()
 
     decoder = build_decoder(cfg.decoder)
@@ -250,6 +259,7 @@ def evaluate_gnn_performance(
                 pred_graph = decoded_cpu[mask]
                 target_graph = target_cpu[mask]
                 demand_graph = demand_cpu[mask]
+                stats['dr_predictions'][metadata['time_position']] = pred_graph[:, [6, 13]]
 
                 diff = torch.abs(pred_graph[:, component_indices] - target_graph[:, component_indices])
                 stats['dispatch_abs_sum'] += float(diff.sum().item())
@@ -290,7 +300,7 @@ def evaluate_gnn_performance(
                     + pumped_discharge
                     + net_import
                 )
-                demand_side = demand_graph + battery_charge + pumped_charge
+                demand_side = demand_graph + battery_charge + pumped_charge + pred_graph[:, idx_map["dr_recover"]]
                 served = supply + unserved
                 shortage = demand_side - served
                 violation_mask = (shortage.abs() > tolerance)
@@ -299,6 +309,11 @@ def evaluate_gnn_performance(
 
     records: List[Dict[str, Any]] = []
     for stats in scenario_stats.values():
+        if set(stats['dr_predictions']) != set(range(stats['n_timesteps'])):
+            raise ValueError("DR metrics require a complete scenario horizon")
+        dr = torch.stack([stats['dr_predictions'][t] for t in range(stats['n_timesteps'])], dim=1)
+        dr_metrics = shifting_metrics(dr[:, :, 0], dr[:, :, 1], stats['dt_hours'])
+
         dispatch_count = max(1, stats['dispatch_count'])
         mae = stats['dispatch_abs_sum'] / dispatch_count
         rmse = math.sqrt(stats['dispatch_sq_sum'] / dispatch_count) if stats['dispatch_sq_sum'] else 0.0
@@ -313,6 +328,8 @@ def evaluate_gnn_performance(
         violation_rate = stats['violation_count'] / max(1, stats['node_count'])
 
         records.append({
+            'dr_formulation': DR_FORMULATION,
+            **dr_metrics,
             'scenario_id': stats['scenario_id'],
             'split': stats['split'],
             'objective': objective,

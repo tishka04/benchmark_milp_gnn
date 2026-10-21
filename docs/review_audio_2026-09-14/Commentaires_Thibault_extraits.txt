@@ -1,0 +1,67 @@
+Commentaires textuels extraits du PDF MILP_GNN_v5 (Thibault_reviewed).pdf.
+Attribution à Thibault selon votre indication ; champ auteur interne Unknown.
+21 annotations textuelles, certaines comprenant plusieurs demandes. Les repères PAGE correspondent aux pages du PDF.
+
+PAGE 1 /Text: pas clair
+
+
+PAGE 1 /Highlight: This makes me wonder whether the two algorithms are aligned ? Why does the MILP enforce robustness, is there a constraint ?
+
+
+PAGE 1 /Highlight: maybe define precisely what you are allowed to use as "demand response" ? I understand what you do, but it's a bit vague in my opinion.
+
+PAGE 2 /Highlight: not defined
+
+
+PAGE 3 /Highlight: more than expensive, it becomes intractable for larger instances/more challengingproblems
+
+PAGE 4 /Highlight: there are approach that are good at doing that, see "decision focused learning", but the predictors are expensive to train (it requires solving a very large number of milp at training time), and i think it would be not suited for your problem, at least the classical approaches, as DFL often assumes the uncertainty is only in the objective function, which is not the case here.
+
+
+PAGE 8 /Highlight: remark : the amount of variables/constraints are definitly correlated to the difficulty of a MIP instance, but you are missing additional features if you wanted to capture the difficulty of an instance (ie structure of the problem, how constrained it is). I don't see it as a problem here, your goal is just to have a rough, easy to train, predictor to discard too expensive scenarios, not to have a very good predictor of solving time, but you may explain it in a sentence in the manuscript.
+Also, why are you not using your difficulty predictor described in the next page as a proxy for solving time ?
+
+PAGE 12 /Highlight: how did you choose the big M ? It could have a large impact on solver performance (ie they need to be large enough for the constraints to be valid, but if they are way too large it creates problems)
+
+PAGE 12 /Highlight: is this the presolve done by the solver, or something you have implemented on top of that ?
+
+PAGE 14 /Text: looking at the figure, visually it seems that you don't have a balance between production and consumption (ie the net import part size seems not to correspond exactly to the gap between production and consumption)
+
+PAGE 14 /Text: why is there demand adjustement only at the start of the scenario ? And why so much unserved demand ? It looks that the model lowers demand response too early, which in turn create unserved demand that could be served (ie by keeping demand response higher) ? Is it cheaper to not serve some customer, even if it was feasible ?
+
+PAGE 15 /Text: something is not very clear to me reading your manuscript (not particular to this section, but i just thought of it now), are all your scenarios generated for the same area ? Do they all have the same spatial graph ? Approximately the same size ?
+
+Related : do you need to redo all the learning for a new region, or is it tranferable to another region ? If yes, have you tried to see if it works well for out of distribution regions ? (this could strenghten the robustnes/generalization claim of your pipeline)
+
+PAGE 21 /Highlight: I did not understand well this section at first read. At first it seems you enever repair your binary decisions when infeasible. When you talk about "LP solver" or "LP worker" its sounds like it is only one solve of a LP (by fixing all binary variables) but it's actually more sophisticated. I would suggest changing the name "LP worker" by something along the line "power dispatch routine" or equivalent (while explaining clearly when introducing the pipeline that it only solves a couple of LP problems, ie, easy problems).
+
+PAGE 24 /Text: in your experiment section you should mention: on which machine the tests were run, especially which CPU, number of threads and frequency. Speify which version of python and highs you are using. It increases reproducibility and an OR reviewer will definitly ask for it.
+
+Something else you should consider: currenty you are benchmarking compared to the solver highs (which is open source). There are commercial MIP solvers that are far better than highs, namely CPLEX and Gurobi. (as an academic you can get a free licence for both). In the OR community, when you compare to a solver it is expected to compare against CPLEX or Gurobi, and a reviewer could ask you this. If you test with these solvers, expect the performances to be way better.
+
+PAGE 25 /Text: It's a gooid idea to have added this heuristic, to isolate the performance of your learning pipeline compared to a simple policy.
+
+PAGE 25 /Text: "unconstrained MILP 120s reference" that is not clear what this algorithm is.
+
+In OR papers, you could use two baselines to do that
+- the linear relaxation of the base model, providing a lower bound
+- the gap to the best known primal feasible solution (ie the best solution among your 3 heuristics). I guess that is what you are using since the MILP is always at 0 gap, which means it finds the best solution no matter the scenario ?
+
+Something else that is not very clear, do you evaluate the gap on all scenarios where both the 3 methods provided a solution (the good way of doing that) ? Or for each method you compute the gap on the scenarios solved by the method (which would mean that the metrics for the 3 methods are not evaluated on the same set of scenarios)  Do you include infeasible solutions in your mean gap computation ?
+
+PAGE 26 /Text: The benchmark is, in my opinion, biased in favor of your pipeline. A fair design would be to launch experiments with different time limits (eg, 5s, 10s, 30s, 1min) to see how each method competes with different time regimes.
+
+PAGE 26 /Text: same remark as the other plot above, it is not exactly clear how you compute the figures in "median gap", in my opinion you should be precise about how you compute the figures. Also i am not convinced about using a logarithmic scale here. The pipeline is very close to optimum for low instances, and far from high ones, but the plot doesn't make it very visible.
+
+Also i think it would be interesting to compute the cost gap (compared to optimal) with lower time budget for everyone (eg 1s or 5s). This would allow to see that for easy instances your pipelines is fast AND produce close to optimal solutions. To be blunt, your results are not that good compared to MILP and heuristic, I think you should emphasize your setting "in the dispatching center, decision makers needs to evaluate multiple scenarios quasi instantly for fast decision making, so the appropriate time frame is 2s, where our algo is good"
+
+PAGE 26 /Highlight: so the gap is the gap compared to the optimal solution ? Not just the best known one ? This is not very clear.
+
+PAGE 26 /Text: just so you know, in state of the art MILP solvers (ie gurobi or cplex) you can tune a parameter to emphasize finding feaisble solutions quickly (instead of focusing on optimality). Not sure if this setting exists in highs. I expect gurobi + aggressive emphasize on finding solution quickly to be much better than highs.
+
+Related to that, if the goal is to find a feasible solution quickly (few seconds) with a solver, there are other setting that could help, like disabling the presolve.
+
+PAGE 28 /Text: There is an important note here. If i understand correctly, you run 5 runs of your pipeline in parallel and keep the best one. In that case you reduce the per run time to 24s, I guess to ensure a fair comparison.
+The thing is that highs is probably already running in parralel (apart if you disabled the function), probably up to the ~20 availables cores of your machine. We could discuss a bit more the details to see what would be considered fair or not, but I think it would be completely fair to compare against MILP by running K=20 runs in parallel, and still keeping the 120s time limit for each.
+
+More fundamental note : your algorithm seems to have a very high performance variability if increasing the number of runs improve that much. I this case, your algorithm highly benefits from parallelism, and you should emphasize it more. Especially considering your setting "we want a feasible solution in less than 2s" it is completely acceptable to run multiple things in parallel, a "normal" modern laptop often has 24 thread for instance.

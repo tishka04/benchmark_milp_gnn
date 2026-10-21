@@ -4,6 +4,8 @@ Evaluation utilities for temporal heterogeneous GNN models.
 Provides MILP comparison metrics similar to the static graph evaluation.
 """
 
+from src.demand_response import DR_FORMULATION, require_current_formulation, shifting_metrics, validate_dr_report
+
 import json
 import time
 from pathlib import Path
@@ -48,7 +50,7 @@ VAR_NAMES = [
     'hydro_release', 'hydro_ror', 'dr',
     'battery_charge', 'battery_discharge',
     'pumped_charge', 'pumped_discharge',
-    'net_import', 'unserved'
+    'net_import', 'unserved', 'dr_recover'
 ]
 
 # Alternative/simplified names that may be used in training
@@ -76,10 +78,13 @@ def load_model_and_config(run_dir: Path, device: str = 'cpu'):
         raise FileNotFoundError(f"No checkpoint at {checkpoint_path}")
     
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
+
+    require_current_formulation(checkpoint, "checkpoint")
     args = checkpoint['args']
     
     # Load a sample graph to get dimensions
     data_dir = Path(args['data_dir'])
+    project_root = Path.cwd()
     
     # Resolve relative paths relative to run_dir parent (project root)
     if not data_dir.is_absolute():
@@ -105,6 +110,7 @@ def load_model_and_config(run_dir: Path, device: str = 'cpu'):
     # Resolve sample graph path
     sample_path = _resolve_path(Path(entries[0]['graph_file']), project_root)
     sample = np.load(sample_path, allow_pickle=True)
+    require_current_formulation(sample, sample_path)
     node_feature_dim = sample['node_features'].shape[1]
     
     target_vars = args['target_vars'].split(',')
@@ -182,6 +188,7 @@ def evaluate_scenario(
     """Evaluate model on a single scenario."""
     # Load graph
     data = np.load(graph_path, allow_pickle=True)
+    require_current_formulation(data, graph_path)
     
     x = torch.from_numpy(data['node_features']).float().to(device)
     edge_index = torch.from_numpy(data['edge_index']).long().to(device)
@@ -222,9 +229,20 @@ def evaluate_scenario(
     with open(report_path) as f:
         report = json.load(f)
     
+    validate_dr_report(report)
     milp_objective = report['mip']['objective']
     milp_runtime = report['mip']['solve_seconds']
     
+    # Full-horizon DR identities are independent of instantaneous shortage.
+    down_name = "demand_response" if "demand_response" in target_vars else "dr"
+    if down_name not in target_vars or "dr_recover" not in target_vars:
+        raise ValueError("DR evaluation requires both deferred and recovered channels")
+    dr_metrics = shifting_metrics(
+        y_pred[:, :, target_vars.index(down_name)].T,
+        y_pred[:, :, target_vars.index("dr_recover")].T,
+        report["detail"]["dt_hours"],
+    )
+
     # Compute metrics
     cost_gap = (gnn_cost - milp_objective) / milp_objective if milp_objective > 0 else 0.0
     dispatch_mae = np.mean(np.abs(y_pred - y_true))
@@ -239,6 +257,8 @@ def evaluate_scenario(
     speedup = milp_runtime / inference_time if inference_time > 0 else 0.0
     
     return {
+        'dr_formulation': DR_FORMULATION,
+        **dr_metrics,
         'milp_objective': milp_objective,
         'gnn_cost': gnn_cost,
         'cost_gap': cost_gap,
@@ -266,6 +286,7 @@ def evaluate_test_set(
     
     # Load dataset index (resolve relative paths)
     data_dir = Path(args['data_dir'])
+    project_root = Path.cwd()
     if not data_dir.is_absolute():
         data_dir = (project_root / data_dir).resolve()
     

@@ -1,6 +1,8 @@
 """Minimal wrapper around LPWorkerTwoStage for latent candidate evaluation."""
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION
+
 import math
 import pickle
 import subprocess
@@ -8,7 +10,7 @@ import sys
 import tempfile
 import time
 from collections import Counter
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -63,7 +65,13 @@ def _serialize_lp_result(lp_result: Any) -> Dict[str, Any]:
         "stage_used": stage_used,
         "stage_label": _display_stage_name(lp_result, stage_used),
         "stage_reached": _deepest_stage_reached(lp_result),
-        "lp_objective": float(getattr(lp_result, "objective_value", float("inf"))),
+        "dr_formulation": DR_FORMULATION,
+        "dr_metrics": dict(getattr(lp_result, "dr_metrics", {}) or {}),
+        "lp_objective": (
+            float(getattr(lp_result, "objective_value", float("inf")))
+            if getattr(lp_result, "dr_metrics", {}).get("dr_feasible", False)
+            else float("inf")
+        ),
         "slack_mwh": float(getattr(lp_result, "slack_used", 0.0) or 0.0),
         "n_flips": int(getattr(lp_result, "n_flips", 0) or 0),
         "solve_time": float(getattr(lp_result, "solve_time", 0.0) or 0.0),
@@ -104,6 +112,8 @@ class CandidateSolveRecord:
     slack_mwh: float
     n_flips: int
     solve_time: float
+    dr_formulation: str = DR_FORMULATION
+    dr_metrics: Dict[str, Any] = field(default_factory=dict)
     hard_fix_objective: float = float("inf")
     repair_objective: float = float("inf")
 
@@ -273,6 +283,7 @@ class MILPWarmWorker:
         lp_objective = float(payload.get("lp_objective", float("inf")))
         feasible = math.isfinite(lp_objective)
         record = CandidateSolveRecord(
+            dr_metrics=dict(payload.get("dr_metrics", {})),
             candidate_idx=int(candidate_idx),
             scenario_id=sample.scenario_id,
             family=sample.family,

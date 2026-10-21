@@ -11,6 +11,8 @@ reconstruction.
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION
+
 import argparse
 import json
 import pickle
@@ -54,6 +56,8 @@ class HeuristicResult:
 
     scenario_id: str
     family: str = ""
+    dr_formulation: str = DR_FORMULATION
+    dr_metrics: Dict[str, Any] = field(default_factory=dict)
 
     # Timing (seconds)
     time_heuristic: float = 0.0
@@ -222,7 +226,8 @@ class HeuristicRunner:
             stage_key = stage_used.value if hasattr(stage_used, "value") else str(stage_used)
             result.lp_stage_used = _display_stage_name(lp_res, stage_key)
             result.lp_stage_reached = _deepest_stage_reached(lp_res)
-            result.lp_objective = float(lp_res.objective_value)
+            result.dr_metrics = dict(lp_res.dr_metrics)
+            result.lp_objective = float(lp_res.objective_value) if result.dr_metrics["dr_feasible"] else float("inf")
             result.lp_slack = float(getattr(lp_res, "slack_used", 0.0))
             result.lp_n_flips = int(getattr(lp_res, "n_flips", 0) or 0)
             # Per-stage slack progression (0.0 if that stage didn't run)

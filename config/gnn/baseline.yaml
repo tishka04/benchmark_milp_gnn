@@ -1,5 +1,5 @@
 data:
-  index_path: outputs/hetero_graphs/dataset_index.json
+  index_path: outputs/load_shifting_v1/hetero_graphs/dataset_index.json
   graph_type: heterogeneous  # NEW
   train_split: 0.7
   val_split: 0.15
@@ -72,4 +72,4 @@ metrics:
       unserved: 500.0
   constraint_violation_rate:
     tolerance: 0.1
-output_dir: outputs/gnn_runs/heterogeneous
+output_dir: outputs/load_shifting_v1/gnn_runs/heterogeneous

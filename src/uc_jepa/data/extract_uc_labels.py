@@ -25,6 +25,8 @@ Each .npz contains:
 """
 from __future__ import annotations
 
+from src.demand_response import FormulationMismatchError, require_current_formulation, DR_FORMULATION
+
 import argparse
 import json
 import os
@@ -155,6 +157,7 @@ def _load_embedding(path: str) -> Optional[np.ndarray]:
     try:
         if ext == ".npz":
             data = np.load(path, allow_pickle=True)
+            require_current_formulation(data, path)
             for key in ("zones", "zone_embeddings", "embeddings", "zone", "arr_0"):
                 if key in data:
                     arr = data[key]
@@ -166,6 +169,7 @@ def _load_embedding(path: str) -> Optional[np.ndarray]:
                     return arr.astype(np.float32, copy=False)
         elif ext == ".pt":
             obj = torch.load(path, map_location="cpu", weights_only=False)
+            require_current_formulation(obj, path)
             if isinstance(obj, torch.Tensor):
                 return obj.float().cpu().numpy()
             if isinstance(obj, dict):
@@ -173,7 +177,9 @@ def _load_embedding(path: str) -> Optional[np.ndarray]:
                     if key in obj and isinstance(obj[key], torch.Tensor):
                         return obj[key].float().cpu().numpy()
         elif ext == ".npy":
-            return np.load(path).astype(np.float32, copy=False)
+            raise FormulationMismatchError("Unversioned NPY embedding; regenerate as versioned NPZ")
+    except FormulationMismatchError:
+        raise
     except Exception as exc:  # noqa: BLE001 — log and skip a corrupt file
         print(f"  WARN: failed to load embedding {path}: {exc}")
     return None
@@ -284,6 +290,10 @@ def process_one(
         h_scenario = h.astype(np.float32, copy=False)
 
     return {
+        "dr_formulation": np.array(DR_FORMULATION),
+        "dt_hours": np.float32(report["detail"]["dt_hours"]),
+        "dr_recover": np.array([report["detail"]["dr_recover"][z] for z in zone_names], dtype=np.float32),
+        "dr_rebound": np.array([report["detail"]["dr_rebound"][z] for z in zone_names], dtype=np.float32),
         "u_star": u_star.to(torch.uint8).cpu().numpy(),
         "h_scenario": h_scenario,
         "zone_names": np.array(zone_names, dtype=object),
@@ -333,6 +343,8 @@ def run(
             sid = extract_scenario_id(Path(rpath).stem) or Path(rpath).stem
             out_path = family_out / f"{sid}_uc.npz"
             if out_path.exists() and not overwrite:
+                with np.load(out_path, allow_pickle=True) as existing:
+                    require_current_formulation(existing, str(out_path))
                 n_ok += 1
                 continue
             payload = process_one(rpath, n_timesteps, embedding_lookup, embed_dim_hint)

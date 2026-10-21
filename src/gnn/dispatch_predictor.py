@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation, shifting_metrics
+
 import torch
 import numpy as np
 from pathlib import Path
@@ -23,14 +25,16 @@ from dataclasses import dataclass, field
 class GNNDispatchResult:
     """Result from GNN dispatch prediction (mirrors TwoStageResult interface)."""
     scenario_id: str
-    status: str = "optimal"
+    status: str = "predicted_unverified"
     stage_used: str = "gnn_dispatch"
-    objective_value: float = 0.0
+    objective_value: float = float("nan")
     solve_time: float = 0.0
     continuous_vars: Dict[str, np.ndarray] = field(default_factory=dict)
 
     # Compatibility fields
-    slack_used: float = 0.0
+    slack_used: float = float("nan")
+    dr_formulation: str = DR_FORMULATION
+    dr_metrics: Dict[str, object] = field(default_factory=dict)
     n_flips: int = 0
     warm_started: bool = False
 
@@ -39,7 +43,7 @@ class GNNDispatchPredictor:
     """
     Drop-in replacement for Decoder + LP Worker using trained DispatchGNN.
 
-    Predicts continuous dispatch [Z, T, 11] from EBM binaries [Z, T, 7]
+    Predicts continuous dispatch [Z, T, 12] from EBM binaries [Z, T, 7]
     and HTE embeddings [Z, T, D] in a single forward pass.
     """
 
@@ -56,6 +60,7 @@ class GNNDispatchPredictor:
 
         # Load checkpoint
         checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+        require_current_formulation(checkpoint, "checkpoint")
         config = checkpoint.get("config", {})
 
         self.model = DispatchGNN(
@@ -86,6 +91,8 @@ class GNNDispatchPredictor:
         zone_mask: Optional[torch.Tensor] = None,
         zone_names: Optional[List[str]] = None,
         scenario_id: str = "",
+        dt_hours: float = 1.0,
+        physics=None,
     ) -> GNNDispatchResult:
         """
         Predict continuous dispatch from EBM binaries + HTE embeddings.
@@ -113,6 +120,8 @@ class GNNDispatchPredictor:
         h_zt = h_zt.to(self.device)
 
         B, Z, T, F = u_bin.shape
+        if B != 1:
+            raise ValueError("predict requires one scenario; use predict_batch for batches")
 
         if zone_mask is None:
             zone_mask = torch.ones(B, Z, device=self.device)
@@ -144,11 +153,27 @@ class GNNDispatchPredictor:
 
         # Estimate objective (sum of dispatch costs - rough approximation)
         # In practice, the user should compute the true objective from the dispatch
-        objective_approx = 0.0
+        objective_approx = float("nan")
+        limits = {}
+        if physics is not None:
+            limits = dict(down_limit=physics.dr_limit_mw,
+                          up_limit=physics.dr_recovery_limit_mw,
+                          max_periods=physics.dr_max_active_periods, ramp=physics.dr_ramp_mw)
+        metrics = shifting_metrics(continuous_vars["demand_response"],
+                                   continuous_vars["dr_recover"], dt_hours,
+                                   active=u_bin[0, :, :, 4], **limits)
+        continuous_vars["dr_shed"] = continuous_vars["demand_response"]
+        continuous_vars["dr_rebound"] = np.cumsum(
+            (continuous_vars["dr_shed"] - continuous_vars["dr_recover"]) * dt_hours, axis=1
+        )
+        continuous_vars["demand_response_net"] = continuous_vars["dr_shed"] - continuous_vars["dr_recover"]
+        # A neural forward pass neither certifies UC feasibility nor optimality.
+
 
         return GNNDispatchResult(
             scenario_id=scenario_id,
-            status="optimal",
+            status="predicted_unverified",
+            dr_metrics=metrics,
             stage_used="gnn_dispatch",
             objective_value=objective_approx,
             solve_time=elapsed,

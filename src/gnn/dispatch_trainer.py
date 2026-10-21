@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import time
 import torch
 import torch.nn as nn
@@ -20,7 +22,7 @@ class TrainConfig:
     n_binary_features: int = 7
     embed_dim: int = 128
     hidden_dim: int = 256
-    n_dispatch: int = 11
+    n_dispatch: int = 12
     gru_layers: int = 2
     n_gat_layers: int = 3
     n_heads: int = 8
@@ -36,7 +38,7 @@ class TrainConfig:
 
     # Loss weights per dispatch channel (higher = more important)
     # Order: thermal, nuclear, solar, wind, batt_ch, batt_dis,
-    #        pump_ch, pump_dis, dr, unserved, hydro
+    #        pump_ch, pump_dis, dr, unserved, hydro, dr_recover
     channel_weights: Optional[List[float]] = None
 
     # Data
@@ -48,9 +50,9 @@ class TrainConfig:
 
     # Paths (Colab defaults)
     repo_path: str = '/content/drive/MyDrive/benchmark'
-    reports_dir: str = 'outputs/scenarios_v3/reports'
-    embeddings_dir: str = 'outputs/encoders/hierarchical_temporal_v3/embeddings_v3'
-    output_dir: str = 'outputs/gnn_dispatch'
+    reports_dir: str = 'outputs/load_shifting_v1/scenarios_v3/reports'
+    embeddings_dir: str = 'outputs/load_shifting_v1/encoders/hierarchical_temporal_v3/embeddings_v3'
+    output_dir: str = 'outputs/load_shifting_v1/gnn_dispatch'
 
     device: str = 'cuda'
 
@@ -236,6 +238,8 @@ def run_training(
     device = cfg.device
 
     # Build model
+    if cfg.n_dispatch != 12:
+        raise ValueError("Load shifting requires 12 dispatch channels including dr_recover")
     model = DispatchGNN(
         n_binary_features=cfg.n_binary_features,
         embed_dim=cfg.embed_dim,
@@ -330,6 +334,7 @@ def run_training(
             best_val_loss = val_metrics["val_loss"]
             best_epoch = epoch
             torch.save({
+                "dr_formulation": DR_FORMULATION,
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
@@ -367,6 +372,7 @@ def run_training(
 
     # Save final
     torch.save({
+        "dr_formulation": DR_FORMULATION,
         "epoch": cfg.epochs,
         "model_state_dict": model.state_dict(),
         "config": {

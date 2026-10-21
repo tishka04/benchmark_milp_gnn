@@ -4,7 +4,7 @@
 
 data:
   roots:
-    - outputs/uc_jepa/dataset_train
+    - outputs/load_shifting_v1/uc_jepa/dataset_train
   families: null
   max_samples: null
   val_split: 0.1
@@ -13,10 +13,10 @@ data:
   batch_size: 8
 
 ae:
-  checkpoint: outputs/uc_jepa/autoencoder/uc_ae_best.pt
+  checkpoint: outputs/load_shifting_v1/uc_jepa/autoencoder/uc_ae_best.pt
 
 jepa:
-  checkpoint: outputs/uc_jepa/jepa/jepa_best.pt
+  checkpoint: outputs/load_shifting_v1/uc_jepa/jepa/jepa_best.pt
 
 model:
   hidden_dim: 256
@@ -69,6 +69,6 @@ eval:
   prior_estimation_batches: 0
 
 logging:
-  output_dir: outputs/uc_jepa/latent_ebm
+  output_dir: outputs/load_shifting_v1/uc_jepa/latent_ebm
   save_every: 5
   log_every: 50

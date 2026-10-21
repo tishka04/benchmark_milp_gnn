@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Dict, Tuple
 
 from pyomo.environ import (
@@ -20,9 +21,15 @@ from pyomo.environ import (
 from pyomo.environ import value  # noqa: F401  (used by callers)
 
 from .scenario_loader import ScenarioData
+from src.demand_response import DR_FORMULATION
 
 
 def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteModel:
+    """Build UC with lossless, forward-only DR, fully recovered within the horizon."""
+    if not math.isfinite(data.dt_hours) or data.dt_hours <= 0:
+        raise ValueError("dt_hours must be positive for load shifting")
+    if not math.isfinite(data.dr_recovery_limit_factor) or data.dr_recovery_limit_factor < 0:
+        raise ValueError("dr_recovery_limit_factor must be finite and non-negative")
     m = ConcreteModel(name=f"UC_{data.scenario_id}")
 
     m.Z = Set(initialize=data.zones, ordered=True)
@@ -40,9 +47,13 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.dr_block_limit = Param(m.Z, m.T, m.DR_BLOCKS, initialize=data.dr_block_limit, mutable=False)
     m.dr_block_cost = Param(m.DR_BLOCKS, initialize=data.dr_block_cost, mutable=False)
     
-    # DR rebound parameters
-    m.dr_rebound_decay = Param(initialize=data.dr_rebound_decay, mutable=False)
-    m.dr_rebound_tolerance = Param(initialize=data.dr_rebound_tolerance, mutable=False)
+    # Recovery consumes power. Legacy decay/tolerance inputs are deliberately
+    # unused: shifted energy cannot disappear or remain unpaid at the horizon.
+    m.dr_recovery_limit = Param(
+        m.Z, m.T,
+        initialize=lambda _, z, t: data.dr_limit[z, t] * data.dr_recovery_limit_factor,
+        within=NonNegativeReals, mutable=False,
+    )
     
     # DR event constraints parameters
     m.dr_max_events = Param(m.Z, initialize=data.dr_max_events, mutable=False)
@@ -112,10 +123,11 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.p_wind = Var(m.Z, m.T, within=NonNegativeReals)
     m.spill_wind = Var(m.Z, m.T, within=NonNegativeReals)
 
-    m.dr_shed = Var(m.Z, m.T, within=NonNegativeReals)
+    m.dr_shed = Var(m.Z, m.T, within=NonNegativeReals)  # Deferred power (MW); legacy name
     m.dr_shed_block = Var(m.Z, m.T, m.DR_BLOCKS, within=NonNegativeReals)  # DR per tier
-    m.dr_rebound = Var(m.Z, m.T, within=NonNegativeReals)  # DR energy backlog
-    m.dr_active = Var(m.Z, m.T, within=Binary)  # DR event indicator
+    m.dr_recover = Var(m.Z, m.T, within=NonNegativeReals)  # Recovered load (MW)
+    m.dr_rebound = Var(m.Z, m.T, within=NonNegativeReals)  # Unrecovered energy (MWh)
+    m.dr_active = Var(m.Z, m.T, within=Binary)  # 1=deferral; 0=idle or recovery
     m.unserved = Var(m.Z, m.T, within=NonNegativeReals)
 
     m.b_charge = Var(m.Z, m.T, within=NonNegativeReals)
@@ -234,21 +246,36 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     
     m.dr_total_limit_con = Constraint(m.Z, m.T, rule=_dr_total_limit_rule)
     
-    # DR rebound state evolution: e_dr[t] = (1-decay)*e_dr[t-1] + dt*dr_shed[t]
+    # Lossless deferred-energy balance, with no inherited backlog at t=0.
     def _dr_rebound_evolution_rule(model, z, t):
-        if t == model.T.first():
-            return model.dr_rebound[z, t] == model.dt_hours * model.dr_shed[z, t]
-        else:
-            decay = model.dr_rebound_decay
-            return model.dr_rebound[z, t] == (1.0 - decay) * model.dr_rebound[z, t-1] + model.dt_hours * model.dr_shed[z, t]
+        prev = 0.0 if t == model.T.first() else model.dr_rebound[z, t - 1]
+        return model.dr_rebound[z, t] == prev + model.dt_hours * (
+            model.dr_shed[z, t] - model.dr_recover[z, t]
+        )
     
     m.dr_rebound_evolution_con = Constraint(m.Z, m.T, rule=_dr_rebound_evolution_rule)
     
-    # DR rebound must be cleared by end of horizon (within tolerance)
+    # Every deferred MWh must actually be consumed before the horizon ends.
     def _dr_rebound_final_rule(model, z):
-        return model.dr_rebound[z, model.T.last()] <= model.dr_rebound_tolerance
+        return model.dr_rebound[z, model.T.last()] == 0.0
     
     m.dr_rebound_final_con = Constraint(m.Z, rule=_dr_rebound_final_rule)
+
+    # Reuse the existing binary: a zone cannot defer and recover simultaneously.
+    def _dr_recovery_limit_rule(model, z, t):
+        return model.dr_recover[z, t] <= model.dr_recovery_limit[z, t] * (
+            1.0 - model.dr_active[z, t]
+        )
+
+    m.dr_recovery_limit_con = Constraint(m.Z, m.T, rule=_dr_recovery_limit_rule)
+
+    # Only energy deferred in earlier periods can be recovered, including in
+    # the LP relaxation. In particular, recovery in the first period is zero.
+    def _dr_recovery_available_rule(model, z, t):
+        prev = 0.0 if t == model.T.first() else model.dr_rebound[z, t - 1]
+        return model.dt_hours * model.dr_recover[z, t] <= prev
+
+    m.dr_recovery_available_con = Constraint(m.Z, m.T, rule=_dr_recovery_available_rule)
     
     # DR activation binary: dr_shed > 0 iff dr_active = 1
     # Upper bound: dr_shed <= M * dr_active (can only shed if active)
@@ -265,13 +292,13 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     
     m.dr_activation_lower_con = Constraint(m.Z, m.T, rule=_dr_activation_lower_rule)
     
-    # Max number of DR events per zone
+    # Legacy dr_max_events limits active deferral periods, not event starts.
     def _dr_max_events_rule(model, z):
         return sum(model.dr_active[z, t] for t in model.T) <= model.dr_max_events[z]
     
     m.dr_max_events_con = Constraint(m.Z, rule=_dr_max_events_rule)
     
-    # DR ramp limits (if duration constraints are enabled via min_duration > 0, ramp limits help smooth transitions)
+    # Ramp limits on deferred power. dr_min_duration is a legacy unused input.
     def _dr_ramp_up_rule(model, z, t):
         if t == model.T.first():
             return Constraint.Skip
@@ -462,7 +489,7 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
         if z == data.import_anchor_zone:
             net_exchange = model.net_import[t] - model.net_export[t]
         lhs = generation + model.dr_shed[z, t] + model.unserved[z, t] + inflow + net_exchange
-        rhs = model.demand[z, t] + model.b_charge[z, t] + model.pumped_charge[z, t] + outflow + model.overgen_spill[z, t]
+        rhs = model.demand[z, t] + model.dr_recover[z, t] + model.b_charge[z, t] + model.pumped_charge[z, t] + outflow + model.overgen_spill[z, t]
         return lhs == rhs
 
     m.power_balance = Constraint(m.Z, m.T, rule=_power_balance_rule)

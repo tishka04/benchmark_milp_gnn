@@ -24,7 +24,7 @@ class TemporalHeteroGNN(nn.Module):
         0-6: Spatial edges (Nation→Region, Region→Zone, etc.)
         7: Temporal SOC (storage continuity)
         8: Temporal Ramp (generator ramping)
-        9: Temporal DR (demand response cooldown)
+        9: Temporal DR (lossless deferred-energy continuity)
     """
     
     def __init__(
@@ -651,7 +651,9 @@ class TemporalGraphDataset(torch.utils.data.Dataset):
         from torch_geometric.data import Data
         
         # Load graph
+        from src.demand_response import require_current_formulation
         data_dict = np.load(self.graph_files[idx], allow_pickle=True)
+        require_current_formulation(data_dict, self.graph_files[idx])
         
         # Extract components
         x = torch.from_numpy(data_dict["node_features"]).float()
@@ -783,7 +785,7 @@ def create_temporal_hetero_model(
         model_type: "rgcn", "separated", "hgt", or "hgt-transformer"
         node_feature_dim: Input feature dimension
         hidden_dim: Hidden dimension
-        output_dim: Output dimension (e.g., 13 for all dispatch variables)
+        output_dim: Output dimension (e.g., 14 for all dispatch variables)
                    Not required for "hgt-transformer" (encoder-only)
         **kwargs: Additional model-specific arguments
     

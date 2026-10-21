@@ -22,6 +22,8 @@ Usage:
 """
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import json
 import math
@@ -200,6 +202,7 @@ def _apply_thresholds(prob: torch.Tensor, thresholds: torch.Tensor) -> torch.Ten
 
 def _load_frozen_ae(ckpt_path: str, device: torch.device) -> UCAutoencoder:
     ck = torch.load(ckpt_path, map_location=device, weights_only=False)
+    require_current_formulation(ck, ckpt_path)
     mc = ck["config"]["model"]
     ae = UCAutoencoder(
         n_features=int(mc["n_features"]),
@@ -687,6 +690,7 @@ def _save_ckpt(predictor: ScenarioToUCLatent, optim_: torch.optim.Optimizer,
         cfg_dict.setdefault("eval", {})
         cfg_dict["eval"]["feature_thresholds"] = _threshold_dict(thresholds)
     torch.save({
+        "dr_formulation": DR_FORMULATION,
         "model_state_dict": predictor.state_dict(),
         "optimizer_state_dict": optim_.state_dict(),
         "epoch": epoch,

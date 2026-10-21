@@ -133,7 +133,7 @@ class TrainingConfig:
     loop: LoopConfig = field(default_factory=LoopConfig)
     decoder: DecoderConfig = field(default_factory=DecoderConfig)
     metrics: MetricsConfig = field(default_factory=MetricsConfig)
-    output_dir: Path = Path("outputs/gnn_runs/default")
+    output_dir: Path = Path("outputs/load_shifting_v1/gnn_runs/default")
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any], base_dir: Path) -> "TrainingConfig":

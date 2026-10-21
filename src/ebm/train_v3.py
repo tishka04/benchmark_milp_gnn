@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import os
 import time
 import json
@@ -1696,6 +1698,7 @@ def run_full_pipeline(config: EBMv3Config) -> TrajectoryZonalEBM:
     # Save final model
     final_path = os.path.join(config.output_dir, "ebm_v3_final.pt")
     torch.save({
+        "dr_formulation": DR_FORMULATION,
         "model_state_dict": model.state_dict(),
         "config": {
             "embed_dim": config.embed_dim,
@@ -1727,6 +1730,7 @@ def _save_checkpoint(
 ):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     torch.save({
+        "dr_formulation": DR_FORMULATION,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "epoch": epoch,

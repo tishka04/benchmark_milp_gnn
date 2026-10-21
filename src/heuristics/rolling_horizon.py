@@ -30,6 +30,8 @@ is directly comparable to the MILP-GNN-EBM pipeline.
 
 from __future__ import annotations
 
+from src.demand_response import physics_dr_schedule
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -135,6 +137,10 @@ def rolling_horizon_heuristic(
 
     imp_cap = float(physics.import_capacity_mw or 0.0)
     anchor = int(physics.import_anchor_zone_idx or 0)
+
+    # Reserve real recovery before estimating commitment requirements.
+    dr_down, dr_up, _ = physics_dr_schedule(physics)
+    demand = demand + dr_up - dr_down
 
     # ── Derived: residual load after must-run / free resources ────────
     must_run = nuc_must[:, None] + ror + solar + wind        # [Z, T]
@@ -266,17 +272,8 @@ def rolling_horizon_heuristic(
                 if rl_max[z] < therm_min[z] and t > therm_keep_until[z]:
                     therm_on_now = 0
 
-            # ── DR (emergency, last flexible lever before unserved) ─────
-            do_dr = 0
-            if (
-                need > eps
-                and dr_cap[z] > 0
-                and dr_used_h[z] + dt <= dr_budget_h + eps
-                and rl[z] >= q_dr[z] - eps
-            ):
-                do_dr = 1
-                dr_used_h[z] += dt
-                need -= dr_cap[z]
+            # Binary denotes deferral only; the LP optimises the actual amounts.
+            do_dr = int(dr_down[z, t] > 0)
 
             # ── Surplus path: charge storage / decommit thermal ─────────
             if rl[z] < 0:

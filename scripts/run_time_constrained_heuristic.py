@@ -40,6 +40,8 @@ Reference run on the three persona families:
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import json
 import math
@@ -118,6 +120,7 @@ def _load_milp_reports(reports_dir: Path) -> Dict[str, Dict[str, Any]]:
                 report = json.load(handle)
         except (OSError, json.JSONDecodeError):
             continue
+        require_current_formulation(report, report_file)
         mip = (report or {}).get("mip", {}) or {}
         out[report_file.stem] = {
             "objective": _safe_float(mip.get("objective", float("nan"))),
@@ -139,6 +142,7 @@ def _load_pipeline_times(pipeline_results_path: Optional[Path]) -> Dict[tuple, f
     for record in payload:
         if not isinstance(record, dict):
             continue
+        require_current_formulation(record, pipeline_results_path)
         family = str(record.get("family", "") or "")
         scenario_id = str(record.get("scenario_id", "") or "")
         if not scenario_id:

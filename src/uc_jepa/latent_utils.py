@@ -1,6 +1,8 @@
 """Shared helpers for the latent UC-JEPA pipeline."""
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import json
 import random
 from pathlib import Path
@@ -143,6 +145,7 @@ def pairwise_hamming_mean(candidates: torch.Tensor) -> float:
 
 def load_frozen_ae(ckpt_path: str, device: torch.device) -> UCAutoencoder:
     checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+    require_current_formulation(checkpoint, ckpt_path)
     model_cfg = checkpoint["config"]["model"]
     ae = UCAutoencoder(
         n_features=int(model_cfg["n_features"]),
@@ -169,6 +172,7 @@ def load_frozen_jepa(
     device: torch.device,
 ) -> Tuple[ScenarioToUCLatent, Dict[str, Any]]:
     checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+    require_current_formulation(checkpoint, ckpt_path)
     model_cfg = checkpoint["config"]["model"]
     predictor = ScenarioToUCLatent(
         scenario_dim=int(model_cfg.get("scenario_dim", 128)),
@@ -207,6 +211,7 @@ def load_latent_ebm(
     device: torch.device,
 ) -> Tuple[LatentEBM, Dict[str, Any]]:
     checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
+    require_current_formulation(checkpoint, ckpt_path)
     model_cfg = checkpoint["config"]["model"]
     prior_mean = checkpoint.get("latent_prior_mean")
     if "n_tokens" not in model_cfg or "latent_dim" not in model_cfg:

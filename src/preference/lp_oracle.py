@@ -837,7 +837,7 @@ class CachedLPOracle(LPOracle):
         
         for (z, t), val in targets['dr_active'].items():
             if hasattr(model, 'dr_active') and (z, t) in model.dr_active:
-                has_cap = hasattr(model, 'dr_max') and value(model.dr_max[z]) > eps
+                has_cap = value(model.dr_limit[z, t]) > eps
                 if has_cap or val == 0.0:
                     if not model.dr_active[z, t].is_fixed():
                         model.dr_active[z, t].fix(val)

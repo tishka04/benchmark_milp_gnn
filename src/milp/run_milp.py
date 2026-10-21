@@ -31,6 +31,8 @@ def _serialize_report(report):
     }
     if report["detail"] is not None:
         serializable["detail"] = report["detail"]
+    if "dr_formulation" in report:
+        serializable["dr_formulation"] = report["dr_formulation"]
     return serializable
 
 

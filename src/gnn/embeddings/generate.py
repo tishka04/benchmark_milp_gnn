@@ -5,6 +5,8 @@ Hierarchical Temporal Encoder.
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION
+
 import json
 import gc
 from pathlib import Path
@@ -117,6 +119,7 @@ def generate_embeddings(
 
         np.savez_compressed(
             out_path,
+            dr_formulation=np.array(DR_FORMULATION),
             assets=emb_cpu["assets"],
             zones=emb_cpu["zones"],
             regions=emb_cpu["regions"],

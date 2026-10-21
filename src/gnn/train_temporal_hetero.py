@@ -3,12 +3,14 @@ Training script for Temporal Heterogeneous GNNs on grid dispatch prediction.
 
 Example usage:
     python -m src.gnn.train_temporal_hetero \
-        --data-dir outputs/temporal_graphs/supra \
+        --data-dir outputs/load_shifting_v1/temporal_graphs/supra \
         --model-type rgcn \
         --hidden-dim 128 \
         --num-layers 3 \
         --epochs 50
 """
+
+from src.demand_response import DR_FORMULATION, require_current_formulation
 
 import argparse
 import json
@@ -52,6 +54,7 @@ def load_dataset_index(data_dir: Path) -> List[Path]:
 def get_feature_dims(sample_graph_path: Path) -> Tuple[int, int]:
     """Get node feature and label dimensions from a sample graph."""
     data = np.load(sample_graph_path, allow_pickle=True)
+    require_current_formulation(data, sample_graph_path)
     
     node_feature_dim = data["node_features"].shape[1]
     
@@ -133,7 +136,7 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("outputs/temporal_graphs/supra"),
+        default=Path("outputs/load_shifting_v1/temporal_graphs/supra"),
         help="Directory containing temporal graphs",
     )
     parser.add_argument(
@@ -145,7 +148,7 @@ def main():
     parser.add_argument(
         "--target-vars",
         type=str,
-        default="thermal,nuclear,solar,wind",
+        default="thermal,nuclear,solar,wind,hydro_release,hydro_ror,dr,battery_charge,battery_discharge,pumped_charge,pumped_discharge,net_import,unserved,dr_recover",
         help="Comma-separated list of target variables to predict",
     )
     
@@ -209,7 +212,7 @@ def main():
     parser.add_argument(
         "--save-dir",
         type=Path,
-        default=Path("outputs/gnn_runs/temporal_hetero"),
+        default=Path("outputs/load_shifting_v1/gnn_runs/temporal_hetero"),
         help="Directory to save checkpoints and logs",
     )
     
@@ -260,10 +263,14 @@ def main():
         "pumped_discharge": 10,
         "net_import": 11,
         "unserved": 12,
+        "dr_recover": 13,
     }
     
     target_vars = args.target_vars.split(",")
-    target_indices = [target_var_map[v] for v in target_vars if v in target_var_map]
+    unknown = set(target_vars) - set(target_var_map)
+    if unknown:
+        raise ValueError(f"Unknown target variables: {sorted(unknown)}")
+    target_indices = [target_var_map[v] for v in target_vars]
     output_dim = len(target_indices)
     
     print(f"Predicting {output_dim} variables: {target_vars}")
@@ -369,6 +376,7 @@ def main():
             args_dict = vars(args).copy()
             args_dict['output_dim'] = output_dim
             torch.save({
+                "dr_formulation": DR_FORMULATION,
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),

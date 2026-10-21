@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import argparse
+import copy
 import json
 import math
 import pickle
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -126,6 +129,7 @@ def _select_sample_index(
 
 
 def _apply_selected_record(result: PipelineResult, record: Dict[str, Any]) -> None:
+    result.dr_metrics = dict(record.get("dr_metrics", {}))
     result.lp_status = str(record.get("status", ""))
     result.lp_stage_used = str(record.get("stage_label") or record.get("stage_used") or "")
     result.lp_stage_reached = str(record.get("stage_reached") or result.lp_stage_used)
@@ -162,6 +166,68 @@ def _populate_repair_stats(result: PipelineResult, records: Sequence[Dict[str, A
     result.max_repair_flips = float(np.max(flips))
     result.mean_repair_time = float(np.mean(times))
     result.median_repair_time = float(np.median(times))
+
+
+def _complete_candidate_result(
+    result, candidates, records, energies, sampling_times, decoder_times,
+    activation_stats, selection_policy, budget_exhausted, started,
+):
+    """Build the same result for a completed run or an incremental snapshot."""
+    result.n_candidates_projected = len(records)
+    result.n_samples = len(records)
+    result.all_sample_sampling_times = list(sampling_times)
+    result.all_sample_decoder_times = list(decoder_times)
+    result.all_sample_ebm_energies = list(energies)
+    result.all_binary_active_fractions = list(activation_stats)
+    hamming_stats = _pairwise_hamming_stats(candidates)
+    result.pairwise_hamming_distances = hamming_stats["distances"]
+    result.pairwise_hamming_matrix = hamming_stats["matrix"]
+    result.sample_mean_pairwise_hamming = hamming_stats["mean"]
+    result.sample_max_pairwise_hamming = hamming_stats["max"]
+    result.sample_unique_ratio = hamming_stats["unique_ratio"]
+    finite_energies = [v for v in energies if math.isfinite(v)]
+    if finite_energies:
+        result.sample_energy_mean = float(np.mean(finite_energies))
+        result.sample_energy_std = float(np.std(finite_energies))
+    lp_times = [float(r.get("solve_time", 0.0) or 0.0) for r in records]
+    result.time_lp_solve = float(sum(lp_times))
+    result.all_sample_lp_solve_times = lp_times
+    result.all_sample_total_times = [
+        float(sampling_times[i] + decoder_times[i] + lp_times[i]) for i in range(len(records))
+    ]
+    result.all_objectives_raw = [float(r.get("lp_objective", float("inf"))) for r in records]
+    result.all_objectives = list(result.all_objectives_raw)
+    result.all_stages = [str(r.get("stage_label") or r.get("stage_used") or "") for r in records]
+    result.all_stages_reached = [
+        str(r.get("stage_reached") or r.get("stage_label") or "") for r in records
+    ]
+    result.all_sample_slacks = [float(r.get("slack_mwh", float("nan"))) for r in records]
+    result.all_sample_statuses = [str(r.get("status", "")) for r in records]
+    if records:
+        best_idx = _select_sample_index(selection_policy, energies, result.all_objectives_raw)
+        result.best_sample_idx = int(best_idx)
+        _apply_selected_record(result, records[best_idx])
+        PipelineRunner._assign_selected_sample_times(result, best_idx)
+        result.success = math.isfinite(result.lp_objective)
+        if str(records[best_idx].get("stage_used") or "").startswith("repair_"):
+            result.selected_repair_flips = float(records[best_idx].get("n_flips", 0) or 0)
+            result.selected_repair_time = float(records[best_idx].get("solve_time", 0.0) or 0.0)
+    else:
+        result.success = False
+        result.lp_status = "time_budget_exhausted" if budget_exhausted else "no_candidates_evaluated"
+        result.error_message = (
+            "Global time budget exhausted before any LP candidate completed."
+            if budget_exhausted else "No LP candidates were evaluated."
+        )
+    _populate_repair_stats(result, records)
+    backfill_projection_diagnostics([result])
+    result.time_total = time.perf_counter() - started
+    if budget_exhausted and not result.error_message:
+        result.error_message = (
+            f"Global time budget exhausted after evaluating {len(records)} candidate(s) "
+            f"out of {result.n_candidates_generated} generated."
+        )
+    return result
 
 
 def _build_summary_table(df: pd.DataFrame) -> pd.DataFrame:
@@ -310,6 +376,7 @@ def _load_existing_scenario_rows(out_path: Path) -> List[Dict[str, Any]]:
         except (OSError, json.JSONDecodeError):
             continue
         if isinstance(row, dict):
+            require_current_formulation(row, str(path))
             rows.append(row)
     return rows
 
@@ -476,9 +543,22 @@ def evaluate(
     skip_direct_baseline: bool = False,
     analyze: bool = True,
     best_of_k_values: Sequence[int] = (1, 2, 3, 5, 10),
+    direct_only: bool = False,
+    deadline_monotonic: Optional[float] = None,
+    result_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
+    if direct_only:
+        if skip_direct_baseline:
+            raise ValueError("direct_only requires the JEPA baseline")
+        k = 0
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    latent_ebm, latent_ckpt = load_latent_ebm(latent_ebm_path, dev)
+    if direct_only:
+        # Read calibration metadata without constructing or running the EBM.
+        latent_ckpt = torch.load(latent_ebm_path, map_location="cpu", weights_only=False)
+        require_current_formulation(latent_ckpt, latent_ebm_path)
+        latent_ebm = None
+    else:
+        latent_ebm, latent_ckpt = load_latent_ebm(latent_ebm_path, dev)
     ae_path = ae_path or _default_from_checkpoint(latent_ckpt, "ae_checkpoint")
     jepa_path = jepa_path or _default_from_checkpoint(latent_ckpt, "jepa_checkpoint")
     if not ae_path or not jepa_path:
@@ -634,6 +714,10 @@ def evaluate(
                     if global_time_budget_s is not None and float(global_time_budget_s) > 0.0
                     else None
                 )
+                if deadline_monotonic is not None:
+                    # Map the parent's absolute deadline to this loop's clock.
+                    external_deadline = time.perf_counter() + deadline_monotonic - time.monotonic()
+                    scenario_deadline = min(scenario_deadline, external_deadline) if scenario_deadline else external_deadline
                 budget_exhausted = False
 
                 def _budget_hit() -> bool:
@@ -650,22 +734,18 @@ def evaluate(
                     z_anchor = predictor(h_scenario, zone_mask=zone_mask)["z_pred"]
                     result.time_embedding = time.perf_counter() - t0
 
-                    direct_energy_tensor = latent_ebm(
-                        z_anchor,
-                        z_anchor,
-                        h_scenario=h_scenario,
-                        zone_mask=zone_mask,
-                    ).squeeze(0)
-
-                    t0 = time.perf_counter()
-                    direct_logits = ae.decode(
-                        z_anchor,
-                        n_zones=sample.n_zones,
-                        n_timesteps=sample.n_timesteps,
-                        h_scenario=h_scenario,
-                    )
-                    direct_bin = apply_thresholds(torch.sigmoid(direct_logits), thresholds).squeeze(0).cpu()
-                    direct_decode_time = time.perf_counter() - t0
+                    if not skip_direct_baseline:
+                        direct_energy_tensor = (
+                            latent_ebm(z_anchor, z_anchor, h_scenario=h_scenario, zone_mask=zone_mask).squeeze(0)
+                            if latent_ebm is not None else torch.tensor(float("nan"), device=dev)
+                        )
+                        t0 = time.perf_counter()
+                        direct_logits = ae.decode(
+                            z_anchor, n_zones=sample.n_zones,
+                            n_timesteps=sample.n_timesteps, h_scenario=h_scenario,
+                        )
+                        direct_bin = apply_thresholds(torch.sigmoid(direct_logits), thresholds).squeeze(0).cpu()
+                        direct_decode_time = time.perf_counter() - t0
 
                 sample_latents: List[torch.Tensor] = []
                 sample_energies: List[float] = []
@@ -739,6 +819,8 @@ def evaluate(
                     if not single_records:
                         continue
                     row = dict(single_records[0])
+                    if result_callback is not None and row.get("status") == "error":
+                        raise RuntimeError(f"Candidate repair failed: {row}")
                     row["candidate_idx"] = int(cand_idx)
                     row["family"] = family_alias
                     pool_records.append(row)
@@ -748,91 +830,28 @@ def evaluate(
                     projected_sampling_times.append(float(sample_sampling_times[cand_idx]))
                     projected_decoder_times.append(float(decoder_times[cand_idx]))
                     projected_activation_stats.append(dict(activation_stats[cand_idx]))
+                    if result_callback is not None and not _budget_hit():
+                        snapshot = _complete_candidate_result(
+                            copy.deepcopy(result), projected_candidates, pool_records,
+                            projected_energies, projected_sampling_times, projected_decoder_times,
+                            projected_activation_stats, selection_policy, False, t_total_start,
+                        )
+                        result_callback("pipeline", _augment_result_row_with_reference_metrics(
+                            asdict(snapshot), float(sample.objective),
+                        ))
 
-                result.n_candidates_projected = len(projected_candidates)
-                result.n_samples = len(projected_candidates)
-                result.all_sample_sampling_times = [float(value) for value in projected_sampling_times]
-                result.all_sample_decoder_times = [float(value) for value in projected_decoder_times]
-                result.all_sample_ebm_energies = [float(value) for value in projected_energies]
-                result.all_binary_active_fractions = projected_activation_stats
-
-                hamming_stats = _pairwise_hamming_stats(projected_candidates)
-                result.pairwise_hamming_distances = hamming_stats["distances"]
-                result.pairwise_hamming_matrix = hamming_stats["matrix"]
-                result.sample_mean_pairwise_hamming = hamming_stats["mean"]
-                result.sample_max_pairwise_hamming = hamming_stats["max"]
-                result.sample_unique_ratio = hamming_stats["unique_ratio"]
-
-                finite_energies = [value for value in projected_energies if math.isfinite(value)]
-                if finite_energies:
-                    result.sample_energy_mean = float(np.mean(finite_energies))
-                    result.sample_energy_std = float(np.std(finite_energies))
-
-                result.time_lp_solve = float(sum(lp_times))
-                result.all_sample_lp_solve_times = lp_times
-                result.all_sample_total_times = [
-                    float(projected_sampling_times[i] + projected_decoder_times[i] + lp_times[i])
-                    for i in range(len(projected_candidates))
-                ]
-                result.all_objectives_raw = [
-                    float(row.get("lp_objective", float("inf")))
-                    for row in pool_records
-                ]
-                result.all_objectives = list(result.all_objectives_raw)
-                result.all_stages = [
-                    str(row.get("stage_label") or row.get("stage_used") or "")
-                    for row in pool_records
-                ]
-                result.all_stages_reached = [
-                    str(row.get("stage_reached") or row.get("stage_label") or "")
-                    for row in pool_records
-                ]
-                result.all_sample_slacks = [
-                    float(row.get("slack_mwh", float("nan")))
-                    for row in pool_records
-                ]
-                result.all_sample_statuses = [
-                    str(row.get("status", ""))
-                    for row in pool_records
-                ]
-
-                if pool_records:
-                    best_idx = _select_sample_index(
-                        policy=selection_policy,
-                        energies=projected_energies,
-                        objectives=result.all_objectives_raw,
-                    )
-                    result.best_sample_idx = int(best_idx)
-                    if 0 <= best_idx < len(pool_records):
-                        _apply_selected_record(result, pool_records[best_idx])
-                        PipelineRunner._assign_selected_sample_times(result, best_idx)
-                    result.success = math.isfinite(result.lp_objective)
-                else:
-                    result.success = False
-                    result.lp_status = "time_budget_exhausted" if budget_exhausted else "no_candidates_evaluated"
-                    result.error_message = (
-                        "Global time budget exhausted before any LP candidate completed."
-                        if budget_exhausted else
-                        "No LP candidates were evaluated."
-                    )
-
-                _populate_repair_stats(result, pool_records)
-                if pool_records and str(pool_records[result.best_sample_idx].get("stage_used") or "").startswith("repair_"):
-                    result.selected_repair_flips = float(pool_records[best_idx].get("n_flips", 0) or 0)
-                    result.selected_repair_time = float(pool_records[best_idx].get("solve_time", 0.0) or 0.0)
-
-                backfill_projection_diagnostics([result])
-                result.time_total = time.perf_counter() - t_total_start
-                if budget_exhausted and not result.error_message:
-                    result.error_message = (
-                        f"Global time budget exhausted after evaluating {len(pool_records)} candidate(s) "
-                        f"out of {result.n_candidates_generated} generated."
-                    )
+                _complete_candidate_result(
+                    result, projected_candidates, pool_records, projected_energies,
+                    projected_sampling_times, projected_decoder_times, projected_activation_stats,
+                    selection_policy, budget_exhausted, t_total_start,
+                )
                 results.append(result)
                 result_row = _augment_result_row_with_reference_metrics(
                     asdict(result),
                     milp_objective=float(sample.objective),
                 )
+                if result_callback is not None and not direct_only and not _budget_hit():
+                    result_callback("pipeline", result_row)
                 result_rows.append(result_row)
                 family_result_rows.setdefault(family_alias, []).append(result_row)
                 _persist_scenario_result(out_path, result_row)
@@ -855,6 +874,8 @@ def evaluate(
                     )
                     if direct_lp_records:
                         direct_record = dict(direct_lp_records[0])
+                        if result_callback is not None and direct_record.get("status") == "error":
+                            raise RuntimeError(f"JEPA repair failed: {direct_record}")
                         direct_record["family"] = family_alias
                         direct_record["criticality_index"] = float(sample.criticality)
                         direct_record["milp_objective"] = float(sample.objective)
@@ -863,6 +884,8 @@ def evaluate(
                         direct_record["embedding_time_s"] = float(result.time_embedding)
                         direct_record["total_time_s"] = float(result.time_embedding + direct_decode_time + float(direct_record["solve_time"]))
                         direct_record["success"] = bool(math.isfinite(float(direct_record.get("lp_objective", float("inf")))))
+                        if result_callback is not None and not _budget_hit():
+                            result_callback("jepa", direct_record)
                         direct_rows.append(direct_record)
                         family_direct_rows.setdefault(family_alias, []).append(direct_record)
                 progress.update(1)
@@ -921,6 +944,8 @@ def analyze_existing(
     path = Path(results_pkl)
     with path.open("rb") as handle:
         pipeline_results = pickle.load(handle)
+    for row in pipeline_results:
+        require_current_formulation(row, 'saved pipeline result')
     if not isinstance(pipeline_results, list):
         raise TypeError(f"Expected list in {path}, got {type(pipeline_results).__name__}")
 

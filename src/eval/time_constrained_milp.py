@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION
+
 import pickle
 import subprocess
 import sys
@@ -25,6 +27,7 @@ def _payload_from_solver_exception(
         or "no solution can be loaded" in lowered
     ):
         return {
+            "dr_formulation": DR_FORMULATION,
             "scenario_id": scenario_path.stem,
             "mip": SimpleNamespace(
                 objective=float("inf"),
@@ -58,6 +61,7 @@ def _hard_timeout_payload(
     exception_message: str = "",
 ) -> Dict[str, Any]:
     return {
+        "dr_formulation": DR_FORMULATION,
         "scenario_id": scenario_path.stem,
         "mip": SimpleNamespace(
             objective=float("inf"),

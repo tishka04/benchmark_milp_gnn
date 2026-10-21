@@ -23,6 +23,8 @@ Usage:
 """
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import argparse
 import json
 import sys
@@ -53,6 +55,7 @@ from src.uc_jepa.models.uc_autoencoder import UCAutoencoder
 
 def _load_ae(path: str, device: torch.device) -> UCAutoencoder:
     ck = torch.load(path, map_location=device, weights_only=False)
+    require_current_formulation(ck, "checkpoint")
     mc = ck["config"]["model"]
     ae = UCAutoencoder(
         n_features=int(mc["n_features"]), hidden_dim=int(mc["hidden_dim"]),
@@ -70,6 +73,7 @@ def _load_ae(path: str, device: torch.device) -> UCAutoencoder:
 
 def _load_jepa(path: str, device: torch.device) -> tuple[ScenarioToUCLatent, Dict[str, Any]]:
     ck = torch.load(path, map_location=device, weights_only=False)
+    require_current_formulation(ck, "checkpoint")
     mc = ck["config"]["model"]
     pred = ScenarioToUCLatent(
         scenario_dim=int(mc.get("scenario_dim", 128)),

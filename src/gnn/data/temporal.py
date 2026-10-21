@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -128,6 +130,7 @@ class GraphTemporalDataset(Dataset[GraphSample]):
     def _prepare_index(self) -> None:
         for scenario_idx, entry in enumerate(self._entries):
             arrays = _read_npz(Path(entry["graph_file"]))
+            require_current_formulation(arrays, str(entry["graph_file"]))
             time_len = int(arrays["node_time"].shape[0])
             static_dim = int(arrays["node_static"].shape[1])
             temporal_dim = int(arrays["node_time"].shape[2])
@@ -143,6 +146,8 @@ class GraphTemporalDataset(Dataset[GraphSample]):
                 "objective": float(entry.get("objective", float("nan"))),
                 "time_steps": arrays["time_steps"],
                 "time_hours": arrays["time_hours"],
+                "dt_hours": float(arrays["dt_hours"]),
+                "n_timesteps": time_len,
             }
             self._scenario_meta.append(meta)
             for t in range(time_len):
@@ -231,6 +236,10 @@ class GraphTemporalDataset(Dataset[GraphSample]):
             "time_index": int(record["time_steps"][time_idx].item()) if record["time_steps"].numel() else time_idx,
             "time_hour": float(record["time_hours"][time_idx].item()),
             "split": self.split,
+            "dt_hours": meta_src["dt_hours"],
+            "n_timesteps": meta_src["n_timesteps"],
+            "time_position": time_idx,
+            "dr_formulation": DR_FORMULATION,
         }
         return GraphSample(
             node_static=node_static,

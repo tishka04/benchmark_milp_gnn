@@ -20,6 +20,8 @@ Edge Types:
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION
+
 import argparse
 import json
 from pathlib import Path
@@ -194,6 +196,10 @@ class HeteroGraphBuilder:
                 hydro_cap, battery_power, pumped_power,
                 demand_peak, avg_demand,
                 float(region_idx),
+                float(max(self.data.dr_limit[zone, t] for t in periods)),
+                float(self.data.dr_recovery_limit_factor),
+                float(self.data.dr_max_events[zone]),
+                float(self.data.dr_ramp_limit[zone]),
             ]
             
             idx = len(self.node_features)
@@ -437,6 +443,7 @@ class HeteroGraphBuilder:
         flat_compat = self._build_flat_compatibility_input_only(zones)
         
         record = {
+            "dr_formulation": np.array(DR_FORMULATION),
             # Heterogeneous graph fields
             "node_features": np.array(padded_features, dtype=np.float32),
             "node_types": np.array(self.node_types, dtype=np.int64),
@@ -450,7 +457,8 @@ class HeteroGraphBuilder:
             "asset_names": np.array(sorted(self.asset_to_idx.keys()), dtype=object),
             
             # Flat graph compatibility fields (for existing dataset loader)
-            **flat_compat,
+            **{k: v for k, v in flat_compat.items() if k != "edge_index"},
+            "flat_edge_index": flat_compat["edge_index"],
         }
         
         return record
@@ -528,6 +536,7 @@ class HeteroGraphBuilder:
                 battery_soc_init,
                 pumped_level_init,
                 dr_limit,
+                dr_limit * self.data.dr_recovery_limit_factor,
             ], axis=1))
         
         # Transmission edges
@@ -807,26 +816,20 @@ def _build_dr_edges(
     N: int,
     T: int,
 ) -> Tuple[List, List, List]:
-    """Build demand response cooldown edges."""
-    edges = []
-    edge_types = []
-    edge_attrs = []
-    
-    # Find DR assets
-    dr_assets = [(key, idx) for key, idx in asset_to_idx.items() if "dr" in key]
-    
-    for key, base_idx in dr_assets:
-        # DR cooldown: connect multiple future time steps
-        cooldown = 2  # periods (could be parameterized)
-        for t in range(T - cooldown):
-            src = base_idx + t * N
-            for dt in range(1, cooldown + 1):
-                if t + dt < T:
-                    dst = base_idx + (t + dt) * N
-                    edges.append([src, dst])
-                    edge_types.append(EDGE_TYPE_TEMPORAL_DR)
-                    edge_attrs.append([float(dt)])
-    
+    """Connect consecutive DR states for lossless deferred-energy accounting.
+
+    There is no two-period cooldown in the MILP. Consecutive edges carry the
+    backlog through the complete horizon, with no artificial decay.
+    """
+    edges, edge_types, edge_attrs = [], [], []
+    for key, base_idx in asset_to_idx.items():
+        if "dr" not in key:
+            continue
+        for t in range(T - 1):
+            edges.append([base_idx + t * N, base_idx + (t + 1) * N])
+            edge_types.append(EDGE_TYPE_TEMPORAL_DR)
+            edge_attrs.append([float(scenario_data.dt_hours)])
+
     return edges, edge_types, edge_attrs
 
 
@@ -937,8 +940,7 @@ def build_hetero_temporal_record(
         node_ids = _make_node_ids(node_names, T)
         
         # Expand spatial edges over time
-        # Note: base hetero graph returns edge_index as [E, 2], not [2, E]
-        base_edges = base_record["edge_index"].tolist()  # [E, 2] - list of [src, dst] pairs
+        base_edges = base_record["edge_index"].T.tolist()  # [E, 2]
         base_edge_types = base_record["edge_types"]
         base_edge_features = base_record["edge_features"]
         
@@ -985,6 +987,7 @@ def build_hetero_temporal_record(
         )
         
         return {
+            "dr_formulation": np.array(DR_FORMULATION),
             "graph_type": "hetero_multi_layer_temporal_supra",
             "node_features": X,
             "node_types": node_types_expanded,

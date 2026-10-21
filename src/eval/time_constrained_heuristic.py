@@ -27,6 +27,8 @@ The budget can be enforced either:
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import math
 import pickle
 import subprocess
@@ -52,9 +54,11 @@ def _result_to_payload(
     fields so a downstream merge can keep MILP, heuristic and pipeline
     columns side by side.
     """
+    require_current_formulation(result_dict, "heuristic result")
     objective = float(result_dict.get("lp_objective", float("nan")))
     feasible = bool(
         result_dict.get("success", False)
+        and result_dict.get("dr_metrics", {}).get("dr_feasible", False)
         and math.isfinite(objective)
         and not math.isinf(objective)
     )
@@ -64,6 +68,7 @@ def _result_to_payload(
     feasible_within_budget = bool(feasible and within_budget)
 
     return {
+        "dr_formulation": DR_FORMULATION,
         "scenario_id": str(scenario_path.stem),
         "family": str(family),
         "criticality_index": float(result_dict.get("criticality_index", 0.0) or 0.0),
@@ -71,6 +76,7 @@ def _result_to_payload(
         "n_timesteps": int(result_dict.get("n_timesteps", 0) or 0),
         "budget_seconds": float(budget_seconds),
         # --- heuristic outcome ----------------------------------------
+        "dr_metrics": dict(result_dict.get("dr_metrics", {})),
         "heur_found_feasible": feasible,
         "heur_within_budget": within_budget,
         "heur_feasible_within_budget": feasible_within_budget,
@@ -98,6 +104,7 @@ def _hard_timeout_payload(
     error_message: str = "hard_timeout",
 ) -> Dict[str, Any]:
     return {
+        "dr_formulation": DR_FORMULATION,
         "scenario_id": str(scenario_path.stem),
         "family": str(family),
         "criticality_index": 0.0,
@@ -212,7 +219,8 @@ def _run_in_process(
         )
         result.lp_stage_used = _display_stage_name(lp_res, stage_key)
         result.lp_stage_reached = _deepest_stage_reached(lp_res)
-        result.lp_objective = float(lp_res.objective_value)
+        result.dr_metrics = dict(lp_res.dr_metrics)
+        result.lp_objective = float(lp_res.objective_value) if result.dr_metrics["dr_feasible"] else float("inf")
         result.lp_slack = float(getattr(lp_res, "slack_used", 0.0))
         result.lp_n_flips = int(getattr(lp_res, "n_flips", 0) or 0)
         result.lp_slack_hard_fix = float(getattr(lp_res, "slack_hard_fix", 0.0))

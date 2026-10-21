@@ -16,6 +16,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import FormulationMismatchError, require_current_formulation, validate_dr_report
+
 import os
 import json
 import glob
@@ -72,6 +74,7 @@ def _extract_binaries_from_report(
     Falls back to 'pre_dispatch' if 'detail' is not available.
     """
     # Locate the dispatch data section
+    validate_dr_report(report, n_timesteps)
     detail = report.get("detail", {})
     pd = report.get("pre_dispatch", {})
 
@@ -250,13 +253,16 @@ class ScenarioReportDataset(Dataset):
         for path in candidates:
             try:
                 data = torch.load(path, map_location="cpu", weights_only=False)
-                if isinstance(data, dict) and len(data) > 10:
-                    sample_key = next(iter(data))
-                    if "scenario" in sample_key:
+                if isinstance(data, dict):
+                    scenario_keys = [k for k in data if k.startswith("scenario")]
+                    if scenario_keys:
+                        require_current_formulation(data, path)
                         self._consolidated_embeddings = data
                         print(f"  Loaded consolidated embeddings: {path} "
                               f"({len(data)} scenarios)")
                         return
+            except FormulationMismatchError:
+                raise
             except Exception:
                 continue
 
@@ -291,6 +297,7 @@ class ScenarioReportDataset(Dataset):
 
         if ext == ".npz":
             data = np.load(path, allow_pickle=True)
+            require_current_formulation(data, path)
             # Keys from generate.py: zones [Z,T,D], assets, regions, nation
             for key in ["zones", "zone_embeddings", "embeddings", "zone", "arr_0"]:
                 if key in data:
@@ -304,6 +311,7 @@ class ScenarioReportDataset(Dataset):
                     return torch.from_numpy(arr).float()
         elif ext == ".pt":
             obj = torch.load(path, map_location="cpu", weights_only=False)
+            require_current_formulation(obj, path)
             if isinstance(obj, torch.Tensor):
                 return obj.float()
             if isinstance(obj, dict):
@@ -311,7 +319,7 @@ class ScenarioReportDataset(Dataset):
                     if key in obj and isinstance(obj[key], torch.Tensor):
                         return obj[key].float()
         elif ext == ".npy":
-            return torch.from_numpy(np.load(path)).float()
+            raise FormulationMismatchError("Unversioned NPY embedding; regenerate as versioned NPZ")
 
         return None
 

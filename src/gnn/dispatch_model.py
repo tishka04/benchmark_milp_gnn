@@ -7,11 +7,11 @@
 #   1. Input projection: concat(u_zt [Z,T,7], h_zt [Z,T,D]) → [Z,T,H]
 #   2. Temporal GRU: bidirectional per-zone temporal encoding
 #   3. Zone GAT layers: multi-head attention across zones (spatial GNN)
-#   4. Output MLP: predicts 11 continuous dispatch channels per (zone, timestep)
+#   4. Output MLP: predicts 12 continuous dispatch channels per (zone, timestep)
 #
-# Dispatch channels (11):
+# Dispatch channels (12):
 #   0: thermal        5: battery_discharge   10: hydro_release
-#   1: nuclear        6: pumped_charge
+#   1: nuclear        6: pumped_charge       11: dr_recover
 #   2: solar          7: pumped_discharge
 #   3: wind           8: demand_response
 #   4: battery_charge 9: unserved
@@ -37,6 +37,7 @@ DISPATCH_CHANNELS = [
     'demand_response',   # 8
     'unserved',          # 9
     'hydro_release',     # 10
+    'dr_recover',        # 11: additional consumption, not generation
 ]
 N_DISPATCH = len(DISPATCH_CHANNELS)
 
@@ -93,7 +94,7 @@ class DispatchGNN(nn.Module):
         zone_mask: [B, Z]   - 1 for valid zones, 0 for padding
 
     Output:
-        dispatch: [B, Z, T, C] - continuous dispatch predictions (C=11)
+        dispatch: [B, Z, T, C] - continuous dispatch predictions (C=12)
     """
 
     def __init__(

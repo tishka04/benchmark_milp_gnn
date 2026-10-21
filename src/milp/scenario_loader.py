@@ -78,8 +78,8 @@ class ScenarioData:
     dr_num_blocks: int
     dr_block_limit: Dict[Tuple[str, int, int], float]
     dr_block_cost: Dict[int, float]
-    dr_rebound_decay: float
-    dr_rebound_tolerance: float
+    dr_rebound_decay: float  # Legacy input, ignored by lossless load shifting
+    dr_rebound_tolerance: float  # Legacy input, terminal backlog is now exactly zero
     dr_max_events: Dict[str, int]
     dr_min_duration: Dict[str, int]
     dr_ramp_limit: Dict[str, float]
@@ -125,6 +125,10 @@ class ScenarioData:
     lines: Dict[str, NetworkLine]
     lines_from_index: Dict[str, Tuple[str, ...]]
     lines_to_index: Dict[str, Tuple[str, ...]]
+
+    # Recovery power cap = this factor * dr_limit[z,t]. Default preserves
+    # construction of ScenarioData by callers using the original fields.
+    dr_recovery_limit_factor: float = 1.0
 
 
 _DEFAULT_ZONE_VARIANTS = {
@@ -595,6 +599,9 @@ def load_scenario_data(path: Path) -> ScenarioData:
     dr_max_events_per_zone = int(tech.get("dr_max_events", 10))
     dr_min_duration_value = int(tech.get("dr_min_duration", 1))
     dr_ramp_limit_factor = float(tech.get("dr_ramp_limit_factor", 0.5))
+    dr_recovery_limit_factor = float(tech.get("dr_recovery_limit_factor", 1.0))
+    if not math.isfinite(dr_recovery_limit_factor) or dr_recovery_limit_factor < 0:
+        raise ValueError("dr_recovery_limit_factor must be finite and non-negative")
 
     for idx, zone in enumerate(zones):
         zone_profile = zone_profiles[zone]
@@ -641,7 +648,7 @@ def load_scenario_data(path: Path) -> ScenarioData:
             res_available[(zone, t)] = solar_available.get((zone, t), 0.0) + wind_available[(zone, t)]
 
         dr_units = max(0, assets["dr_per_zone"][idx])
-        share = tech["dr_max_shed_share"] * (0.5 + 0.5 * min(dr_units, 4))
+        share = tech["dr_max_shed_share"] * (0.5 + 0.5 * min(dr_units, 4)) if dr_units > 0 else 0.0
         for t in periods:
             dr_limit[(zone, t)] = demand[(zone, t)] * min(share, 0.8)
         
@@ -820,5 +827,6 @@ def load_scenario_data(path: Path) -> ScenarioData:
         lines=lines,
         lines_from_index={k: tuple(v) for k, v in from_idx.items()},
         lines_to_index={k: tuple(v) for k, v in to_idx.items()},
+        dr_recovery_limit_factor=dr_recovery_limit_factor,
     )
 

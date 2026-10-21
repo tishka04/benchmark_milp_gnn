@@ -1,0 +1,244 @@
+# Transcription automatique horodatée de l’audio
+
+Source : Le_verrou_mécanique_de_la_flexibilité_électrique.m4a
+Durée : 15 min 17,49 s. Langue : français.
+
+Transcription intégrale obtenue localement avec Whisper large-v3-turbo. Texte brut de reconnaissance vocale : certains noms et termes techniques sont mal reconnus ; les reformulations vérifiées figurent dans la note d’analyse. Les repères temporels sont approximatifs.
+
+[00:00 - 00:11] Ce document propose une architecture hybride novatrice qui combine programmation linéaire, réseau de neurones sur graphe et modèle basé sur l'énergie latente pour explorer super rapidement des scénarios de flexibilité électrique.
+[00:12 - 00:13] C'est un travail d'une rigueur absolue.
+[00:14 - 00:21] Mais l'articulation entre l'échec du modèle sur les cas très critiques et la cause mécanique de cet échec nécessite un resserrement structurel drastique.
+[00:21 - 00:23] Ce sera vraiment le cœur de notre première critique aujourd'hui.
+[00:23 - 00:31] Oui, c'est un point d'entrée fascinant en fait, parce que la lecture des premières sections, ça nous plonge dans une sorte de vertige scientifique.
+[00:31 - 00:39] Le texte expose avec une très grande transparence, qui est super honnête d'ailleurs, un résultat négatif majeur dès le début de l'évaluation.
+[00:40 - 00:42] C'est ça, sur les scénarios les plus complexes.
+[00:42 - 00:48] Exactement. Sur les scénarios complexes, la performance se dégrade, mais de manière spectaculaire.
+[00:48 - 00:53] On a un écart de coût qui grimpe genre jusqu'à 129% par rapport à l'optimum d'un solver classique.
+[00:54 - 00:58] En lisant ça, on encaisse le choc et on commence tout de suite à douter, tu vois.
+[00:58 - 01:03] Ouais, on se dit l'espace latent du modèle est juste incapable de capter la topologie, quoi.
+[01:03 - 01:08] Voilà. On se demande si le réseau de neurones est fondamentalement cassé face à un réseau haute tension.
+[01:08 - 01:12] Et c'est exactement là que réside la faiblesse structurelle du papier.
+[01:12 - 01:19] La façon dont les résultats sont séquencés, ça donne l'illusion que le réseau de neurones lui-même s'effondre sous la complexité combinatoire.
+[01:19 - 01:20] Alors que c'est pas le cas ?
+[01:20 - 01:25] Bah non, pas du tout. La véritable cause de cet échec, elle est enfouie des dizaines de pages plus loin,
+[01:25 - 01:29] dans la section 6.4.3, celle qui évalue le personnage mathématicien.
+[01:29 - 01:34] La cause, c'est pas une dérive de l'espace latent, c'est le fait que la cascade de programmation linéaire,
+[01:34 - 01:37] donc l'étape finale de réparation, frappe un plafond de verre.
+[01:38 - 01:39] Ah, le fameux budget de basculement.
+[01:39 - 01:43] Exactement. Elle atteint son budget de basculement.
+[01:43 - 01:49] L'auteur a paramétré cette sécurité pour que la variable B2 s'arrête à 100 et B3 à 1000 basculements guinaires.
+[01:49 - 01:54] Du coup, cette séparation temporelle dans la lecture induit vraiment les paires en erreur sur l'intégrité de l'innovation.
+[01:55 - 01:58] Attends, je t'arrête tout de suite parce qu'il faut qu'on clarifie la physique derrière ça.
+[01:59 - 02:02] Si la cascade LP a besoin de faire plus de 1000 basculements bilaires,
+[02:02 - 02:05] donc allumer ou éteindre 1000 générateurs pour trouver une solution faisable,
+[02:05 - 02:11] ce n'est pas la preuve que la prédiction initiale du réseau de neurones était juste super mauvaise.
+[02:11 - 02:18] Je veux dire, pourquoi on dédouanerait le modèle d'apprentissage sous prétexte qu'une sécurité a coupé le calcul ?
+[02:18 - 02:19] C'est une super objection.
+[02:20 - 02:22] Mais en fait, il faut regarder la géométrie de l'espace des solutions.
+[02:23 - 02:26] Dans un scénario de criticité extrême où tu n'as aucune marge de manœuvre,
+[02:27 - 02:32] la distance géométrique entre une solution presque parfaite et une solution physiquement faisable,
+[02:32 - 02:34] elle est infime en continu.
+[02:34 - 02:37] D'accord, mais massive en combinatoire, c'est ça ?
+[02:37 - 02:38] C'est exactement ça.
+[02:38 - 02:42] Le réseau de neurones fait un boulon colossal pour nous amener dans le bon quartier, en quelques millisecondes.
+[02:43 - 02:48] Mais pour trouver l'adresse exacte, la cascade LP doit, genre, zigzaguer à travers les rues à sens unique des contraintes discrètes.
+[02:49 - 02:54] Le modèle n'est pas défaillant, c'est juste que le paramètre B3 coupe le moteur avant que la voiture soit garée.
+[02:54 - 02:55] Ah, je comprends mieux, ouais.
+[02:55 - 03:00] C'est vraiment une limitation imposée par le temps de calcul, pas par l'expressivité du modèle en soi.
+[03:01 - 03:01] Absolument.
+[03:01 - 03:07] La cascade refuse de continuer pour ne pas bloquer le système, mais du coup, en mettant cette explication tout à la fin,
+[03:07 - 03:09] l'auteur se tire un peu une balle dans le pied.
+[03:10 - 03:14] Comment on corrige cette trajectoire narrative de façon pragmatique, Rassel Guetti ?
+[03:14 - 03:18] La suggestion, c'est de restructurer la présentation pour lier immédiatement et visuellement
+[03:18 - 03:21] la chute de performance à cette cause mécanique.
+[03:21 - 03:26] On transforme un défaut cognitif perçu en une limite technique explicite du pipeline.
+[03:26 - 03:32] Concrètement, on fait ça comment ? Sans alourdir la section des résultats qui est, avouons-les, déjà super dense.
+[03:32 - 03:39] Et une astuce simple, tu extrais l'analyse spécifique du blocage au stade 3 qui est isolé dans la section 6.4.3
+[03:39 - 03:44] et tu l'intègres direct au cœur de la section 6.3.6 sur la mise à l'échelle.
+[03:44 - 03:46] Faut pas laisser un reviewer tourner la page avec des doutes.
+[03:46 - 03:49] Ouais, faut pas lui laisser le temps de se poser des questions existentielles.
+[03:49 - 03:54] Voilà. Et surtout, ajouter un petit graphique de sensibilité immédiat sur un sous-échantillon.
+[03:54 - 03:58] Montrez ce qui se passe si le paramètre B3 est débridé, genre poussé à 2000 ou 5000.
+[03:58 - 04:00] Ça prouvera visuellement que la solution est exploitable.
+[04:01 - 04:06] En fait, c'est comme évaluer l'endurance d'un marathonien sans mentionner tout de suite qu'il court attaché à un élastique hyper puissant.
+[04:06 - 04:08] Ah, l'analogie de l'élastique est hyper frappante.
+[04:09 - 04:12] Le modèle a l'endurance, mais B3 le tire en arrière.
+[04:12 - 04:18] Mais tu sais, si on démontre que le réseau nous a emmenés si près du but, et que c'est juste la cascade LP qui bloque, je me demande…
+[04:18 - 04:23] Ouais, je me demande si on passe pas à côté d'une solution beaucoup plus simple en fait.
+[04:23 - 04:29] Au lieu de laisser cette cascade LP échouer silencieusement, pourquoi ne pas proposer un repli direct LP ?
+[04:29 - 04:34] Genre un warm start, un démarrage à chaud classique, envoyer un solver 1000P du marché.
+[04:34 - 04:36] Ça ferait pas sauter ce véro plus vite ?
+[04:36 - 04:41] C'est super intéressant, et d'ailleurs, le fait de vouloir contourner la limite d'une mauvaise prédiction,
+[04:41 - 04:46] ça nous amène directement à une autre stratégie de l'auteur, le fameux k-scaling.
+[04:46 - 04:51] Générer plusieurs candidats simultanément, ce qui m'amène à notre deuxième critique.
+[04:51 - 04:52] Je t'écoute.
+[04:52 - 05:00] L'exploration des scénarios à budget de calcul limité met en évidence un potentiel inexploité dans la méthode de sélection des candidats générés.
+[05:00 - 05:02] Ah oui, le k-scaling.
+[05:03 - 05:06] C'est sans doute l'une des parties les plus stimulantes sur le plan théorique.
+[05:06 - 05:15] Dans la section 6.3.5, l'expérience de générer 5 candidats parallèles montre que l'enveloppe de faisabilité s'élargit de manière massive.
+[05:15 - 05:16] C'est impressionnant, oui.
+[05:16 - 05:22] Sur des réseaux hyper contraints, on atteint 52% de faisabilité si on regarde l'ensemble du groupe.
+[05:23 - 05:28] Donc on prouve mathématiquement qu'au moins une des prédictions arrive à contourner ces fameux goulots d'étranglement.
+[05:28 - 05:35] L'enveloppe théorique est brillante, oui. Mais la faiblesse critique, c'est l'incapacité actuelle du pipeline à identifier ce bon candidat sans tous les évaluer.
+[05:35 - 05:36] C'est ça le problème.
+[05:36 - 05:44] L'auteur admet que l'énergie de l'angeveigne, qui sert à échantillonner l'espace latent, ce n'est pas improxifiable pour le coût économique final.
+[05:45 - 05:54] Du coup, quand on essaye d'en sélectionner un seul parmi les cinq avec une heuristique basique, paf, la faisabilité s'effondre de 52% à seulement 18%.
+[05:54 - 05:55] C'est rude.
+[05:55 - 05:59] Le document pose un super diagnostic là-dessus, mais il opère un retrait brutal.
+[05:59 - 06:03] Il relègue la création d'un sélecteur à prix à la section des travaux futurs.
+[06:04 - 06:10] Le lecteur reste totalement bloqué face à une enveloppe théorique de K égale 5 qui est en fait inutilisable en pratique.
+[06:10 - 06:13] C'est le syndrome classique du cliffhanger scientifique, quoi.
+[06:14 - 06:18] On prouve qu'un trésor est dans une des cinq boîtes, mais on ne donne pas la clé.
+[06:18 - 06:21] On dit juste que la clé sera forgée dans le prochain papier.
+[06:21 - 06:21] Exactement.
+[06:21 - 06:23] Mais plongeons dans la mécanique deux secondes.
+[06:23 - 06:27] Pourquoi l'énergie de Langevin échoue à ce point-ci ?
+[06:27 - 06:32] L'énergie thermodynamique d'un modèle génératif est censée cartographier les états de haute probabilité, non ?
+[06:32 - 06:36] Un état très probable devrait correspondre à un dispatching peu coûteux et faisable.
+[06:36 - 06:39] Intuitivement, on se dit que oui, mais physiquement non.
+[06:39 - 06:44] La dynamique de Langevin évalue juste la vraisemblance structurelle par rapport aux données d'entraînement.
+[06:44 - 06:46] Donc ça fait juste du pattern matching ?
+[06:46 - 06:54] En gros. Ça te dit, oui, allumer ses centrales au gaz et couper cette ligne, ça ressemble fortement à des situations critiques déjà vues.
+[06:54 - 06:56] C'est un proxy de plausibilité topologique.
+[06:57 - 07:02] Mais l'énergie de Langevin n'a aucune idée que cette centrale au gaz coûte dix fois plus cher à démarrer qu'un parc éolien.
+[07:02 - 07:08] Ah ouais, je vois le décalage. Elle confond l'occurrence historique avec l'efficience économique stricte du solver sous-jacent.
+[07:08 - 07:14] C'est exactement pour ça que le candidat sélectionné par l'énergie latente se plante si souvent lors de l'évaluation financière finale.
+[07:14 - 07:19] D'accord. La distinction plausibilité et coûts économiques, elle est cruciale.
+[07:19 - 07:23] Alors, quelle est ta suggestion pour éviter de finir sur ce cliffhanger frustrant ?
+[07:23 - 07:31] Il faut impérativement proposer un pont heuristique ou analytique immédiat pour évaluer et sélectionner ses candidats au lieu d'abandonner le lecteur.
+[07:31 - 07:38] Mais on fait ça comment ? Comment on implémente une heuristique économique sans lancer la réparation complète, sachant que la moindre milliseconde compte ici ?
+[07:38 - 07:44] Il y a plusieurs options très concrètes. La première, ce serait d'exploiter les variables duales, tu sais, les shadow prices.
+[07:44 - 07:48] C'est l'issue de la toute première relaxation LP continue à la section 2.2.6.
+[07:49 - 07:52] Ces prix fictifs reflètent la sensibilité économique du réseau à la marge.
+[07:52 - 07:53] Ah, malin !
+[07:53 - 07:59] L'auteur pourrait concevoir une heuristique ultra rapide en faisant le produit scalaire entre les cinq candidats et ses variables duales.
+[07:59 - 08:04] Ça donnerait un classement économique approximatif, sans aucun appel à un solver lourd.
+[08:04 - 08:05] C'est élégant !
+[08:05 - 08:11] Sinon, s'il veut vraiment garder son idée de sélecteur à prix, il faut détailler l'architecture théorique précise dans la discussion R1,
+[08:12 - 08:17] expliquer comment les objectifs économiques, certifiés par la cascade LP, peuvent servir d'étiquette de vérité terrain.
+[08:17 - 08:20] Il faut transformer cette vague idée en protocole de recherche concret.
+[08:20 - 08:25] Mais en y réfléchissant, pourquoi s'encombrer d'un nouveau modèle neuronal ?
+[08:25 - 08:28] Plutôt, on parlait du Warm Start Décodeur, le décodeur de démarrage à chaud.
+[08:29 - 08:30] Il est extrêmement véloce, ce petit réseau, non ?
+[08:30 - 08:31] Ouais, très rapide.
+[08:32 - 08:35] Pourquoi on ne pourrait pas juste injecter les cinq candidats latents dedans,
+[08:35 - 08:39] obtenir cinq projections physiques rudimentaires en quelques millisecondes,
+[08:39 - 08:45] et calculer bêtement leurs coûts basiques pour choper le moins cher, avant de l'envoyer à la cascade LP ?
+[08:45 - 08:49] L'idée est hyper séduisante par sa rapidité, mais il y a un risque aveugle majeur.
+[08:50 - 08:53] Si le décodeur projette une solution qui a l'air économiquement parfaite,
+[08:53 - 08:56] mais qui viole subtilement une contrainte dynamique complexe,
+[08:57 - 08:59] genre la limite de rampe d'un réacteur nucléaire,
+[09:00 - 09:02] cette erreur cachée sera révélée que pendant la réparation LP.
+[09:03 - 09:05] Ah, et on retourne dans le mur du paramètre B3.
+[09:06 - 09:06] Exactement.
+[09:07 - 09:10] Le candidat apparemment bon marché va provoquer une explosion de basculement binaire,
+[09:10 - 09:11] et on tape le plafond.
+[09:12 - 09:15] Mais ta vraie solution élégante, elle réside sûrement dans une combinaison.
+[09:16 - 09:19] Utiliser l'énergie de l'engin pour virer les aberrations topologiques
+[09:19 - 09:22] et le décodeur pour un tri économique rapide des survivants.
+[09:22 - 09:25] C'est exactement ce niveau de discussion opérationnelle
+[09:25 - 09:27] qui manque cruellement pour valider l'approche K égale 5.
+[09:27 - 09:31] C'est vraiment la différence entre un bon papier et une publication fondamentale.
+[09:31 - 09:32] Complètement.
+[09:32 - 09:36] Et tu vois, on vient de décortiquer comment le modèle lutte avec ses incertitudes internes.
+[09:36 - 09:38] Mais l'exploitation d'un réseau, c'est pas un vase clos.
+[09:38 - 09:40] Un arbre peut tomber sur une ligne,
+[09:40 - 09:41] un transfo peut sauter.
+[09:41 - 09:42] C'est la vraie vie.
+[09:43 - 09:45] Et c'est là que le document aborde les pannes externes,
+[09:45 - 09:47] ce qui nous amène à la troisième partie.
+[09:47 - 09:48] Tout à fait.
+[09:48 - 09:51] Et ça crée une rupture structurelle très forte dans le papier.
+[09:52 - 09:56] L'inclusion soudaine de l'étude pilote de contingence N- en fin d'analyse
+[09:56 - 09:58] dilue sévèrement la focalisation du document
+[09:58 - 10:00] sur l'évaluation comparative principale.
+[10:01 - 10:04] Oui, la section 6-5, elle se démarre du reste d'une façon presque...
+[10:04 - 10:05] choquante.
+[10:05 - 10:10] Jusque-là, le DOC est un modèle de rigueur absolu sur l'optimisation déterministe.
+[10:11 - 10:14] Un horizon clair, des règles fixes, 300 scénarios stratifiés au scalpel.
+[10:15 - 10:16] Tout est carré.
+[10:16 - 10:17] Et boum !
+[10:17 - 10:19] D'un coup, on bascule dans la sécurité des réseaux
+[10:19 - 10:23] avec la modélisation de la perte d'une ligne, la fameuse contrainte environne.
+[10:24 - 10:25] Mais je me fais l'avocat du diable là.
+[10:26 - 10:29] Aucun opérateur de réseau ne déploiera ça s'il ne peut pas survivre à la perte d'une ligne.
+[10:29 - 10:33] Si l'auteur coupe ça, les évaluateurs vont le recaler pour manque de réalisme, non ?
+[10:33 - 10:37] Alors, le problème, ce n'est pas le concept de la sécurité N1 en soi.
+[10:38 - 10:41] C'est le manque de rigueur de son exécution dans ce papier précis.
+[10:42 - 10:44] La faiblesse majeure, c'est le gouffre statistique.
+[10:44 - 10:48] Le pipeline principal n'a pas du tout été entraîné avec des contraintes de sécurité.
+[10:49 - 10:51] L'auteur grève ça comme un ajout de dernière minute.
+[10:51 - 10:54] C'est juste un pilote, c'est ça, ça doit être ?
+[10:54 - 10:56] Ouais, c'est un projet pilote sur seulement 30 scénarios.
+[10:57 - 11:02] Et le pire, c'est que la complexité est telle que 4 des scénarios les plus critiques
+[11:02 - 11:03] ont carrément dû être abandonnés.
+[11:04 - 11:05] Ils faisaient exploser les limites de temps.
+[11:06 - 11:11] Ah ouais, donc on passe de 300 scénarios parfaits à 26 scénarios qui survivent à peu près.
+[11:12 - 11:15] Aligner une expérience aussi fragile juste après une validation massive,
+[11:16 - 11:17] ça crée un déséquilibre béant.
+[11:18 - 11:22] L'étude N1, là, elle fait vraiment figure de brouillon bâclé au milieu d'une œuvre d'art technique.
+[11:22 - 11:24] Ça entame la crédibilité du reste.
+[11:24 - 11:27] C'est le danger de vouloir cocher toutes les cases d'une revue.
+[11:27 - 11:29] On veut montrer qu'on a pensé à la contingence,
+[11:29 - 11:32] mais en le faisant à moitié, on prouve surtout que le modèle n'est pas fait pour ça.
+[11:33 - 11:33] C'est ça.
+[11:33 - 11:38] Quand une ligne tombe, la physique du réseau change instantanément avec les lois de Kirchhoff.
+[11:39 - 11:42] Les flux se redistribuent super agressivement.
+[11:42 - 11:45] Un solver classique doit refaire un dispatching d'urgence.
+[11:46 - 11:50] Le fait que ce modèle neuronal entraîné de façon déterministe n'arrive pas à s'adapter,
+[11:50 - 11:52] c'est pas une surprise, c'est de la physique de base.
+[11:53 - 11:57] Du coup, comment on repositionne ça pour que ça serve l'auteur ?
+[11:57 - 11:59] La stratégie, c'est la suggestion numéro 3.
+[12:00 - 12:05] Il faut déplacer l'intégralité de cette étude N1 hors de la section centrale des résultats.
+[12:05 - 12:09] Il faut la recadrer comme un argumentaire purement exploratoire dans la section finale de discussion.
+[12:09 - 12:11] Pour protéger la partie déterministe ?
+[12:11 - 12:14] Voilà, ça protège l'intégrité statistique de l'évaluation principale,
+[12:14 - 12:18] tout en démontrant une compréhension super lucide des défis à venir.
+[12:18 - 12:24] Ok, mais comment me taire ce glissement sans avoir l'air de, tu sais, cacher la poussière sous le tapis ?
+[12:24 - 12:29] Comment on transforme ces 30 pauvres scénarios en force rhétorique ?
+[12:29 - 12:34] Concrètement, sur le plan éditorial, tu condenses les multiples graphiques et paragraphes actuels
+[12:34 - 12:38] de la section 6.5 en deux paragraphes textuels très denses.
+[12:38 - 12:44] Tu les intègres direct à la section 7.5, là où l'auteur parle de la piste de recherche numéro 6.
+[12:44 - 12:46] Ok, on réduit la voilure visuelle.
+[12:46 - 12:48] Et surtout, on change la posture de présentation.
+[12:49 - 12:54] Actuellement, il présente le fait que le modèle ne récupère que 60% de faisabilité comme un résultat empirique.
+[12:55 - 12:55] Il ne faut plus faire ça.
+[12:56 - 13:03] Il faut le présenter comme une hypothèse naissante sur la tension inhérente entre exploration de la faisabilité et robustesse stochastique.
+[13:03 - 13:04] Ah, malin !
+[13:04 - 13:08] Utiliser les échecs de Spilot pour construire un plaidoyer hyperpercutant.
+[13:08 - 13:15] Justifier le besoin de financer un futur modèle hybride qui intègre les lois de Kirchhoff non pas à la fin, pendant la réparation,
+[13:15 - 13:18] mais carrément dès la construction géométrique de l'espace latin.
+[13:18 - 13:19] C'est brillant, en fait.
+[13:19 - 13:25] Ça transforme une énorme vulnérabilité expérimentale en une preuve de maturité scientifique absolue.
+[13:26 - 13:29] L'auteur dit en gros, voici où mon modèle échoue face au monde réel,
+[13:29 - 13:31] voici pourquoi c'est inévitable structurellement,
+[13:31 - 13:34] et voici le plan de bataille pour la prochaine décennie.
+[13:34 - 13:38] C'est exactement l'attitude d'un chercheur qui maîtrise son sujet de bout en bout.
+[13:38 - 13:40] Et ça ressent que le papier, sur sa vraie victoire,
+[13:41 - 13:45] remplacer un solver MILP classique en un temps record dans un environnement prévisible.
+[13:45 - 13:46] Absolument.
+[13:46 - 13:50] Du coup, pour récapituler les actions immédiates de notre analyse aujourd'hui,
+[13:51 - 13:53] le travail de base est super impressionnant,
+[13:53 - 13:57] mais pour vraiment s'imposer face aux reviewers, il faut construire trois ponts.
+[13:58 - 13:59] Je résume avec toi.
+[13:59 - 14:03] D'abord, fusionner visuellement l'échec des scénarios critiques
+[14:03 - 14:06] avec la mécanique de la cascade LP, le paramètre B3.
+[14:07 - 14:10] Ouais, pour que les lecteurs captent que c'est le paramètre qui freine,
+[14:10 - 14:11] pas l'intelligence du modèle.
+[14:12 - 14:16] Deuxièmement, proposer une heuristique rapide basée sur les variables duval
+[14:16 - 14:18] pour trier les candidats du casqueling.
+[14:18 - 14:21] Faut transformer cette belle abstraction en outil pratique.
+[14:21 - 14:25] Et enfin, désamorcer la faiblesse statistique de l'étude N-1
+[14:25 - 14:30] en la métamorphosant en une puissante hypothèse exploratoire de fin de document.
+[14:30 - 14:36] En effectuant ces remaniements, vous éliminez les frictions cognitives majeures pour le lecteur.
+[14:36 - 14:41] Vous ne cachez pas les goulots d'étranglement, vous les mettez en lumière de façon intelligente
+[14:41 - 14:46] pour valoriser l'innovation algorithmique qui est au cœur de votre pipeline.
+[14:47 - 14:47] C'est ça.
+[14:48 - 14:53] Ces recommandations, elles n'ont d'autre but que de polir une architecture qui a déjà une immense valeur technique.
+[14:53 - 14:57] D'ailleurs, on vous invite formellement à nous soumettre vos futurs développements.
+[14:57 - 15:02] Ah ouais, carrément. Surtout quand ce fameux sélecteur de candidats appris sera devenu une réalité et on veut lire ça.
+[15:03 - 15:08] La science est itérative, il est fondamental de solidifier l'ingénierie d'un pont
+[15:08 - 15:11] avant de se désoler de la vitesse du train qui passe dessus.
+[15:11 - 15:13] Prenez le contrôle de votre narration technique.
+[15:13 - 15:15] Merci de nous avoir rejoints pour cette analyse.
+[15:15 - 15:17] A très vite pour une nouvelle exploration.

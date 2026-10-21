@@ -7,6 +7,8 @@ self-supervised learning (reconstruction or contrastive loss).
 The trained encoder will be used to generate embeddings for EBM training.
 """
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import json
 from pathlib import Path
@@ -224,7 +226,7 @@ def save_embeddings(model, loader, output_path, device):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Save each embedding separately with index
-    save_dict = {}
+    save_dict = {"dr_formulation": np.array(DR_FORMULATION)}
     for i, (emb, meta) in enumerate(zip(embeddings_list, metadata_list)):
         save_dict[f'embedding_{i:05d}'] = emb
         # Convert dict to numpy array for storage
@@ -277,6 +279,7 @@ def main():
     
     # Get node feature dim from first graph
     sample_data = np.load(graph_files[0], allow_pickle=True)
+    require_current_formulation(sample_data, graph_files[0])
     node_feature_dim = sample_data["node_features"].shape[1]
     print(f"Node feature dim: {node_feature_dim}")
     
@@ -327,6 +330,7 @@ def main():
         if train_loss < best_loss:
             best_loss = train_loss
             torch.save({
+                "dr_formulation": DR_FORMULATION,
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),

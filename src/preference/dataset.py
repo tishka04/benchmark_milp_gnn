@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import validate_dr_report, FormulationMismatchError
+
 import os
 import json
 import pickle
@@ -203,6 +205,7 @@ class PreferenceDataset(Dataset):
         try:
             with open(dispatch_path, 'r') as f:
                 dispatch = json.load(f)
+            validate_dr_report(dispatch, n_timesteps)
             
             # Extract binary decisions
             u = torch.zeros(n_zones, n_timesteps, 8)
@@ -248,6 +251,8 @@ class PreferenceDataset(Dataset):
             
             return u
             
+        except FormulationMismatchError:
+            raise
         except Exception as e:
             return None
     

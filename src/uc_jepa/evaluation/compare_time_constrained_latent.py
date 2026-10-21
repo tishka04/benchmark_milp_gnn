@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import json
 import math
@@ -105,10 +107,12 @@ def _load_cache(path: Path) -> List[Dict[str, Any]]:
 def _build_milp_lookup_from_cache(rows: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
     lookup: Dict[str, Dict[str, Any]] = {}
     for row in rows:
+        require_current_formulation(row, "time-constrained cache")
         family = str(row.get("family", ""))
         scenario_id = str(row.get("scenario_id", ""))
         key = f"{family}/{scenario_id}"
         lookup[key] = {
+            "dr_formulation": DR_FORMULATION,
             "milp_objective": _safe_float(row.get("reference_milp_objective", float("nan"))),
             "milp_solve_time": _safe_float(row.get("reference_milp_solve_time", float("nan"))),
             "milp_status": "reference",

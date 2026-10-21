@@ -13,6 +13,8 @@ Designed to be imported from Colab notebook via Google Drive.
 """
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import json
 import time
 import pickle
@@ -387,6 +389,8 @@ class PipelineResult:
     """Result from running the pipeline on a single scenario."""
     scenario_id: str
     family: str = ''
+    dr_formulation: str = DR_FORMULATION
+    dr_metrics: Dict[str, Any] = field(default_factory=dict)
 
     # Timing breakdown (seconds)
     time_graph_build: float = 0.0
@@ -533,6 +537,7 @@ class PipelineRunner:
 
         encoder_path = self.repo_path / cfg.encoder_path
         checkpoint = torch.load(encoder_path, map_location=self.device, weights_only=False)
+        require_current_formulation(checkpoint, "checkpoint")
         if 'model_state_dict' in checkpoint:
             self.encoder.load_state_dict(checkpoint['model_state_dict'])
         else:
@@ -549,6 +554,7 @@ class PipelineRunner:
 
         ebm_path = self.repo_path / cfg.ebm_path
         ebm_checkpoint = torch.load(ebm_path, map_location=self.device, weights_only=False)
+        require_current_formulation(ebm_checkpoint, "checkpoint")
         if 'model_state_dict' in ebm_checkpoint:
             self.ebm.load_state_dict(ebm_checkpoint['model_state_dict'])
         else:
@@ -598,6 +604,7 @@ class PipelineRunner:
             try:
                 import numpy as np
                 cached = dict(np.load(output_path, allow_pickle=True))
+                require_current_formulation(cached, str(output_path))
                 with open(scenario_path, 'r') as f:
                     sc = json.load(f)
                 expected_zones = sum(sc.get('graph', {}).get('zones_per_region', [1]))
@@ -610,7 +617,7 @@ class PipelineRunner:
                 else:
                     return
             except Exception:
-                return  # If validation fails, trust the cache
+                pass  # Rebuild stale/unversioned caches from scenario inputs.
 
         scenario_data = load_scenario_data(scenario_path)
 
@@ -670,6 +677,7 @@ class PipelineRunner:
         from torch_geometric.utils import add_self_loops
 
         graph_data = np.load(graph_path, allow_pickle=True)
+        require_current_formulation(graph_data, str(graph_path))
         x = torch.from_numpy(graph_data['node_features']).float().to(self.device)
         edge_index = torch.from_numpy(graph_data['edge_index']).long().to(self.device)
         node_types = torch.from_numpy(graph_data['node_types']).long().to(self.device)
@@ -978,7 +986,7 @@ class PipelineRunner:
         plan = decoder.decode_passthrough(u_bin)
         return plan, physics
 
-    def _run_gnn_dispatch(self, u_bin: torch.Tensor, zone_emb: torch.Tensor, n_zones: int, scenario_id: str):
+    def _run_gnn_dispatch(self, u_bin: torch.Tensor, zone_emb: torch.Tensor, n_zones: int, scenario_id: str, scenario_path: Path):
         """Run GNN dispatch predictor to get continuous dispatch directly.
 
         Args:
@@ -990,12 +998,16 @@ class PipelineRunner:
         Returns:
             GNNDispatchResult with continuous_vars dict
         """
+        from src.ebm.feasibility import load_physics_from_scenario
+        physics = load_physics_from_scenario(scenario_id, str(scenario_path.parent))
         zone_mask = torch.ones(n_zones)
         return self.gnn_predictor.predict(
             u_bin=u_bin[:n_zones],
             h_zt=zone_emb[:n_zones],
             zone_mask=zone_mask,
             scenario_id=scenario_id,
+            dt_hours=physics.dt_hours,
+            physics=physics,
         )
 
     def _run_lp_worker(self, decoder_tensor: torch.Tensor, scenario_path: Path, scenarios_dir: Path, feasible_plan=None):
@@ -1038,6 +1050,7 @@ class PipelineRunner:
     @staticmethod
     def _assign_lp_diagnostics(result: PipelineResult, lp_result: Any) -> None:
         """Copy final LP diagnostics, including deepest reached stage."""
+        result.dr_metrics = dict(getattr(lp_result, 'dr_metrics', {}) or {})
         result.lp_status = str(getattr(lp_result, 'status', ''))
         stage_used = _normalize_stage_name(getattr(lp_result, 'stage_used', ''))
         result.lp_stage_used = _display_stage_name(lp_result, stage_used)
@@ -1045,6 +1058,9 @@ class PipelineRunner:
         result.lp_objective = float(getattr(lp_result, 'objective_value', float('nan')))
         result.lp_slack = float(getattr(lp_result, 'slack_used', 0.0) or 0.0)
         result.lp_n_flips = int(getattr(lp_result, 'n_flips', 0) or 0)
+        if not result.dr_metrics.get("dr_feasible", False):
+            result.lp_objective = float("inf")
+
 
         result.lp_slack_hard_fix = float(getattr(lp_result, 'slack_hard_fix', 0.0) or 0.0)
         result.lp_slack_repair_20 = float(getattr(lp_result, 'slack_repair_20', 0.0) or 0.0)
@@ -1222,7 +1238,7 @@ class PipelineRunner:
                         # GNN dispatch: replaces decoder + LP entirely
                         t1 = time.perf_counter()
                         gnn_result = self._run_gnn_dispatch(
-                            u_bin, zone_emb, n_zones, sc_id,
+                            u_bin, zone_emb, n_zones, sc_id, scenario_path,
                         )
                         sample_lp_time = time.perf_counter() - t1
                         sample_result = gnn_result
@@ -1257,6 +1273,8 @@ class PipelineRunner:
                         sample_result = lp_result
 
                     if sample_result is not None:
+                        if not sample_result.dr_metrics.get("dr_feasible", False):
+                            sample_result.objective_value = float("inf")
                         lp_results.append((sample_idx, sample_result))
                         result.all_objectives_raw.append(
                             float(getattr(sample_result, 'objective_value', float('inf')))
@@ -1307,7 +1325,7 @@ class PipelineRunner:
             if lp_results:
                 valid_results = [
                     (sample_idx, lr) for sample_idx, lr in lp_results
-                    if hasattr(lr, 'objective_value') and lr.objective_value < float('inf')
+                    if np.isfinite(lr.objective_value) and lr.dr_metrics.get('dr_feasible', False)
                 ]
                 if valid_results:
                     best_idx, best_lr = min(valid_results, key=lambda x: x[1].objective_value)
@@ -1404,4 +1422,7 @@ class PipelineRunner:
     def load_results(path: Path) -> List[Dict]:
         """Load pipeline results from pickle file."""
         with open(path, 'rb') as f:
-            return pickle.load(f)
+            results = pickle.load(f)
+        for result in results:
+            require_current_formulation(result, str(path))
+        return results

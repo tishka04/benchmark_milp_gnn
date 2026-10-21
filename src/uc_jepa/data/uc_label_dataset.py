@@ -1,6 +1,8 @@
 """Torch dataset over UC label .npz files produced by ``extract_uc_labels``."""
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import glob
 import os
 from dataclasses import dataclass
@@ -37,6 +39,11 @@ class UCLabelDataset(Dataset):
     ):
         files: List[str] = []
         for root in roots:
+            # Also support one explicit sample for isolated benchmark workers.
+            if os.path.isfile(root) and str(root).endswith("_uc.npz"):
+                if families is None or Path(root).parent.name in families:
+                    files.append(str(root))
+                continue
             if not os.path.isdir(root):
                 continue
             for path in sorted(glob.glob(os.path.join(root, "**", "*_uc.npz"), recursive=True)):
@@ -58,6 +65,7 @@ class UCLabelDataset(Dataset):
     def __getitem__(self, idx: int) -> UCSample:
         path = self.files[idx]
         data = np.load(path, allow_pickle=True)
+        require_current_formulation(data, path)
 
         u_star = torch.from_numpy(np.asarray(data["u_star"], dtype=np.float32))
         h_scenario = torch.from_numpy(np.asarray(data["h_scenario"], dtype=np.float32))

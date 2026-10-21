@@ -8,6 +8,8 @@ where u^+ are positive samples (MILP-feasible) and u^- are negative samples
 (generated via Gibbs sampling).
 """
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -272,6 +274,7 @@ class EBMTrainer:
             path: Path to save checkpoint
         """
         checkpoint = {
+            "dr_formulation": DR_FORMULATION,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'epoch': self.current_epoch,
@@ -288,6 +291,7 @@ class EBMTrainer:
             path: Path to checkpoint
         """
         checkpoint = torch.load(path, map_location=self.device)
+        require_current_formulation(checkpoint, path)
         self.model.load_state_dict(checkpoint['model_state_dict'])
         self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         self.current_epoch = checkpoint['epoch']

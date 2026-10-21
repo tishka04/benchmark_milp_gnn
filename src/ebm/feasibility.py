@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, physics_dr_schedule, shifting_metrics
+
 import os
 import json
 import torch
@@ -62,7 +64,11 @@ class ScenarioPhysics:
 
     # DR [Z]
     dr_capacity_mw: Optional[torch.Tensor] = None
-    dr_max_duration_hours: float = 4.0
+    dr_max_duration_hours: float = 4.0  # Fallback only for manually constructed physics
+    dr_limit_mw: Optional[torch.Tensor] = None  # [Z,T], exact MILP bounds
+    dr_recovery_limit_mw: Optional[torch.Tensor] = None  # [Z,T]
+    dr_max_active_periods: Optional[torch.Tensor] = None  # [Z]
+    dr_ramp_mw: Optional[torch.Tensor] = None  # [Z]
 
     # Import/export (Fix #3: anchor zone)
     import_capacity_mw: float = 0.0
@@ -119,6 +125,16 @@ class FeasiblePlan:
     # Storage state [Z, T+1]
     battery_soc: torch.Tensor
     pumped_level: torch.Tensor
+
+    dr_recover: Optional[torch.Tensor] = None  # [Z,T], MW
+    dr_rebound: Optional[torch.Tensor] = None  # [Z,T], end-period MWh
+    dr_formulation: str = DR_FORMULATION
+
+    @property
+    def demand_response_net(self):
+        if self.dr_recover is None:
+            raise ValueError("A load-shifting plan must include recovery")
+        return self.demand_response - self.dr_recover
 
     def to_tensor(self) -> torch.Tensor:
         """Convert to binary tensor [Z, T, 7] for EBM."""
@@ -203,7 +219,6 @@ class HierarchicalFeasibilityDecoder:
         batt_cap = p.battery_capacity_mwh if p.battery_capacity_mwh is not None else torch.zeros(Z)
         pump_power = p.pumped_power_mw if p.pumped_power_mw is not None else torch.zeros(Z)
         pump_cap = p.pumped_capacity_mwh if p.pumped_capacity_mwh is not None else torch.zeros(Z)
-        dr_cap = p.dr_capacity_mw if p.dr_capacity_mw is not None else torch.zeros(Z)
         therm_cap = p.thermal_capacity_mw if p.thermal_capacity_mw is not None else torch.zeros(Z)
         therm_min = p.thermal_min_mw if p.thermal_min_mw is not None else therm_cap * 0.3
         nuc_cap = p.nuclear_capacity_mw if p.nuclear_capacity_mw is not None else torch.zeros(Z)
@@ -245,7 +260,11 @@ class HierarchicalFeasibilityDecoder:
         battery_discharge = torch.zeros(Z, T)
         pumped_charge = torch.zeros(Z, T)
         pumped_discharge = torch.zeros(Z, T)
-        demand_response = torch.zeros(Z, T)
+        down, up, backlog = physics_dr_schedule(p)
+        demand_response = torch.as_tensor(down, dtype=torch.float32)
+        dr_recover = torch.as_tensor(up, dtype=torch.float32)
+        dr_rebound = torch.as_tensor(backlog, dtype=torch.float32)
+        dr_active = (demand_response > 0).float()
 
         solar_dispatch = torch.zeros(Z, T)
         wind_dispatch = torch.zeros(Z, T)
@@ -261,7 +280,6 @@ class HierarchicalFeasibilityDecoder:
         b_soc = torch.zeros(Z)
         p_level = torch.zeros(Z)
         h_level = torch.zeros(Z)
-        dr_used_hours = torch.zeros(Z)
 
         if p.battery_initial_soc is not None and batt_cap is not None:
             b_soc = (p.battery_initial_soc * batt_cap).clone()
@@ -274,7 +292,7 @@ class HierarchicalFeasibilityDecoder:
         pumped_level[:, 0] = p_level.clone()
 
         for t in range(T):
-            demand_t = p.demand[:, t].clone() if p.demand is not None else torch.zeros(Z)
+            demand_t = p.demand[:, t].clone() + dr_recover[:, t] - demand_response[:, t]
             solar_avail = p.solar_available[:, t].clone() if p.solar_available is not None else torch.zeros(Z)
             wind_avail = p.wind_available[:, t].clone() if p.wind_available is not None else torch.zeros(Z)
             ror_t = p.hydro_ror[:, t].clone() if p.hydro_ror is not None else torch.zeros(Z)
@@ -409,16 +427,6 @@ class HierarchicalFeasibilityDecoder:
                     imp = min(import_cap, residual[z].item())
                     net_import[z, t] = imp
                     residual[z] -= imp
-                if residual[z] <= 0:
-                    continue
-
-                # Demand Response
-                if dr_cap[z] > 0 and dr_used_hours[z] < p.dr_max_duration_hours:
-                    dr_amt = min(dr_cap[z].item(), residual[z].item())
-                    demand_response[z, t] = dr_amt
-                    dr_active[z, t] = 1.0 if dr_amt > 0 else 0.0
-                    dr_used_hours[z] += dt
-                    residual[z] -= dr_amt
                 if residual[z] <= 0:
                     continue
 
@@ -559,6 +567,8 @@ class HierarchicalFeasibilityDecoder:
             pumped_charge=pumped_charge,
             pumped_discharge=pumped_discharge,
             demand_response=demand_response,
+            dr_recover=dr_recover,
+            dr_rebound=dr_rebound,
             solar_dispatch=solar_dispatch,
             wind_dispatch=wind_dispatch,
             hydro_dispatch=hydro_dispatch,
@@ -572,18 +582,18 @@ class HierarchicalFeasibilityDecoder:
 
     def decode_passthrough(self, u_relax: torch.Tensor) -> FeasiblePlan:
         """
-        Pass-through decode: keep EBM binaries UNCHANGED, but compute
-        physically consistent continuous dispatch for LP warm-starting.
+        Build a continuous warm start guided by the EBM on/off decisions.
 
-        Unlike decode(), this does NOT flip any binaries. It only computes
-        MW dispatch values consistent with the EBM's on/off decisions,
-        respecting ramp limits, SOC bounds, and efficiencies.
+        DR requests without reserved future recovery are omitted from this
+        warm start. Callers pass the original EBM binaries separately to the
+        exact LP worker, which fixes or repairs them under the full model.
+        This heuristic plan does not certify global UC feasibility.
 
         Args:
             u_relax: [Z, T, F] relaxed binary decisions from EBM/Langevin
 
         Returns:
-            FeasiblePlan with EBM-original binaries + consistent dispatch
+            FeasiblePlan carrying deferred power, recovery and energy backlog
         """
         Z, T, F = u_relax.shape
         p = self.physics
@@ -602,7 +612,6 @@ class HierarchicalFeasibilityDecoder:
         batt_cap = p.battery_capacity_mwh if p.battery_capacity_mwh is not None else torch.zeros(Z)
         pump_power = p.pumped_power_mw if p.pumped_power_mw is not None else torch.zeros(Z)
         pump_cap = p.pumped_capacity_mwh if p.pumped_capacity_mwh is not None else torch.zeros(Z)
-        dr_cap = p.dr_capacity_mw if p.dr_capacity_mw is not None else torch.zeros(Z)
         therm_cap = p.thermal_capacity_mw if p.thermal_capacity_mw is not None else torch.zeros(Z)
         therm_min = p.thermal_min_mw if p.thermal_min_mw is not None else therm_cap * 0.3
         nuc_cap = p.nuclear_capacity_mw if p.nuclear_capacity_mw is not None else torch.zeros(Z)
@@ -642,7 +651,12 @@ class HierarchicalFeasibilityDecoder:
         battery_discharge = torch.zeros(Z, T)
         pumped_charge = torch.zeros(Z, T)
         pumped_discharge = torch.zeros(Z, T)
-        demand_response = torch.zeros(Z, T)
+        request = p.demand.detach().cpu() * ebm_dr.detach().cpu()
+        down, up, backlog = physics_dr_schedule(p, requested=request)
+        demand_response = torch.as_tensor(down, dtype=torch.float32)
+        dr_recover = torch.as_tensor(up, dtype=torch.float32)
+        dr_rebound = torch.as_tensor(backlog, dtype=torch.float32)
+        dr_active = (demand_response > 0).float()
 
         solar_dispatch = torch.zeros(Z, T)
         wind_dispatch = torch.zeros(Z, T)
@@ -658,7 +672,6 @@ class HierarchicalFeasibilityDecoder:
         b_soc = torch.zeros(Z)
         p_level = torch.zeros(Z)
         h_level = torch.zeros(Z)
-        dr_used_hours = torch.zeros(Z)
 
         if p.battery_initial_soc is not None and batt_cap is not None:
             b_soc = (p.battery_initial_soc * batt_cap).clone()
@@ -671,7 +684,7 @@ class HierarchicalFeasibilityDecoder:
         pumped_level[:, 0] = p_level.clone()
 
         for t in range(T):
-            demand_t = p.demand[:, t].clone() if p.demand is not None else torch.zeros(Z)
+            demand_t = p.demand[:, t].clone() + dr_recover[:, t] - demand_response[:, t]
             solar_avail = p.solar_available[:, t].clone() if p.solar_available is not None else torch.zeros(Z)
             wind_avail = p.wind_available[:, t].clone() if p.wind_available is not None else torch.zeros(Z)
             ror_t = p.hydro_ror[:, t].clone() if p.hydro_ror is not None else torch.zeros(Z)
@@ -754,15 +767,6 @@ class HierarchicalFeasibilityDecoder:
                     imp = min(import_cap, residual[z].item())
                     net_import[z, t] = imp
                     residual[z] -= imp
-
-                # DR - ONLY if EBM says ON
-                if ebm_dr[z, t] and dr_cap[z] > 0 and dr_used_hours[z] < p.dr_max_duration_hours:
-                    if residual[z] > 0:
-                        dr_amt = min(dr_cap[z].item(), residual[z].item())
-                        demand_response[z, t] = dr_amt
-                        dr_active[z, t] = 1.0
-                        dr_used_hours[z] += dt
-                        residual[z] -= dr_amt
 
                 # Unserved (no fallback - accept imbalance for LP to fix)
                 if residual[z] > 1e-6:
@@ -867,6 +871,8 @@ class HierarchicalFeasibilityDecoder:
             pumped_charge=pumped_charge,
             pumped_discharge=pumped_discharge,
             demand_response=demand_response,
+            dr_recover=dr_recover,
+            dr_rebound=dr_rebound,
             solar_dispatch=solar_dispatch,
             wind_dispatch=wind_dispatch,
             hydro_dispatch=hydro_dispatch,
@@ -1011,6 +1017,12 @@ def load_physics_from_scenario(
             hydro_initial=hydro_initial,
             hydro_inflow=hydro_inflow_ts,
             dr_capacity_mw=dr_capacity,
+            dr_limit_mw=torch.tensor([[data.dr_limit[z, t] for t in range(T)] for z in zones]),
+            dr_recovery_limit_mw=torch.tensor([
+                [data.dr_limit[z, t] * data.dr_recovery_limit_factor for t in range(T)] for z in zones
+            ]),
+            dr_max_active_periods=torch.tensor([data.dr_max_events[z] for z in zones]),
+            dr_ramp_mw=torch.tensor([data.dr_ramp_limit[z] for z in zones]),
             dr_max_duration_hours=4.0,
             import_capacity_mw=data.import_capacity,
             # Fix #3: anchor zone

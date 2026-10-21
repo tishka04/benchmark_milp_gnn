@@ -84,6 +84,8 @@ class EmbeddingLoader:
             print("Trying with weights_only=False...")
             data = torch.load(self.embedding_file, map_location=self.device, weights_only=False)
         
+        from src.demand_response import require_current_formulation
+        require_current_formulation(data, self.embedding_file)
         # Handle different file structures
         if isinstance(data, dict):
             if 'embeddings' in data:
@@ -92,12 +94,12 @@ class EmbeddingLoader:
                 print(f"Loaded nested structure with {len(self.embeddings)} scenarios")
             elif all(isinstance(k, str) and k.startswith('scenario_') for k in list(data.keys())[:10]):
                 # Direct scenario_id -> embedding mapping
-                self.embeddings = data
+                self.embeddings = {k: v for k, v in data.items() if k.startswith("scenario_")}
                 print(f"Loaded direct mapping with {len(self.embeddings)} scenarios")
             else:
                 # Try to infer structure
                 print(f"Unknown structure. Keys: {list(data.keys())[:10]}")
-                self.embeddings = data
+                self.embeddings = {k: v for k, v in data.items() if k.startswith("scenario_")}
         else:
             raise ValueError(f"Expected dict, got {type(data)}")
         
@@ -133,12 +135,14 @@ class EmbeddingLoader:
                 map_location='cpu',
                 weights_only=False,
             )
+            from src.demand_response import require_current_formulation
+            require_current_formulation(data, self.embedding_file)
             
             if isinstance(data, dict):
                 if 'embeddings' in data:
                     self.scenario_ids = list(data['embeddings'].keys())
                 else:
-                    self.scenario_ids = list(data.keys())
+                    self.scenario_ids = [k for k in data if k.startswith("scenario_")]
                 
                 # Store file path for later loading
                 self._lazy_data = None  # Will load on first access
@@ -152,6 +156,9 @@ class EmbeddingLoader:
                 raise ValueError(f"Expected dict, got {type(data)}")
                 
         except Exception as e:
+            from src.demand_response import FormulationMismatchError
+            if isinstance(e, FormulationMismatchError):
+                raise
             print(f"Error peeking at file: {e}")
             print("Will attempt full load on first access")
             self.scenario_ids = None
@@ -189,6 +196,8 @@ class EmbeddingLoader:
                     map_location='cpu',
                     weights_only=False,
                 )
+                from src.demand_response import require_current_formulation
+                require_current_formulation(self._lazy_data, self.embedding_file)
                 
                 if 'embeddings' in self._lazy_data:
                     self._lazy_data = self._lazy_data['embeddings']

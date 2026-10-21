@@ -20,7 +20,7 @@ from typing import Any, Dict, List
 
 from pyomo.environ import SolverFactory, value
 
-from .model import build_uc_model
+from .model import DR_FORMULATION, build_uc_model
 from .scenario_loader import load_scenario_data, ScenarioData
 from .solve import (
     _compute_cost_components, 
@@ -129,6 +129,18 @@ def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
             zone: [float(value(model.dr_shed[zone, t])) for t in periods]
             for zone in zones
         },
+        "dr_recover": {
+            zone: [float(value(model.dr_recover[zone, t])) for t in periods]
+            for zone in zones
+        },
+        "dr_rebound": {
+            zone: [float(value(model.dr_rebound[zone, t])) for t in periods]
+            for zone in zones
+        },
+        "demand_response_net": {
+            zone: [float(value(model.dr_shed[zone, t] - model.dr_recover[zone, t])) for t in periods]
+            for zone in zones
+        },
         "unserved": {
             zone: [float(value(model.unserved[zone, t])) for t in periods]
             for zone in zones
@@ -151,6 +163,7 @@ def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
     
     # Metadata
     metadata = {
+        "dr_formulation": DR_FORMULATION,
         "time_steps": [int(t) for t in periods],
         "time_hours": [float(t * data.dt_hours) for t in periods],
         "dt_hours": float(data.dt_hours),

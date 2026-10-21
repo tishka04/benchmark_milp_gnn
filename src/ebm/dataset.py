@@ -5,6 +5,8 @@ Extracts UC/DR/Storage binary decisions from MILP solutions and pairs them
 with embeddings from the Hierarchical Temporal Encoder.
 """
 
+from src.demand_response import DR_FORMULATION, FormulationMismatchError
+
 import json
 import torch
 import numpy as np
@@ -170,12 +172,15 @@ class MILPBinaryDataset(Dataset):
         dispatch_file = f1 if f1.exists() else f2
         
         if not dispatch_file.exists():
-            # Dummy fallback
-            dims = (self.n_timesteps, 100) if self.temporal else (self.n_timesteps * 100,)
-            return np.random.randint(0, 2, dims).astype(np.float32)
+            raise FileNotFoundError(f"Missing load-shifting labels: {dispatch_file}")
         
         # 1. Load CSV (Fast)
         df = pd.read_csv(dispatch_file)
+        if "dr_formulation" not in df or not (df["dr_formulation"] == DR_FORMULATION).all():
+            raise FormulationMismatchError(f"{dispatch_file}: regenerate CSVs for load shifting")
+        if "dr_recover" not in df:
+            raise ValueError(f"{dispatch_file}: missing recovery dispatch")
+
         
         # 2. Sort to guarantee order (Time -> Zone)
         if 'zone_id' in df.columns:

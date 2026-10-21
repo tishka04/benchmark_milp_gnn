@@ -63,6 +63,10 @@ def convert_batch(
         output_path = output_dir / f"{stem}.npz"
         
         if resume and output_path.exists():
+            from src.demand_response import require_current_formulation
+            import numpy as np
+            with np.load(output_path, allow_pickle=True) as existing:
+                require_current_formulation(existing, output_path)
             stats["skipped"] += 1
             # Still add to index
             try:

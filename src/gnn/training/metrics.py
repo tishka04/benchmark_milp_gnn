@@ -28,6 +28,7 @@ _COMPONENT_ORDER = [
     "pumped_discharge",
     "net_import",
     "unserved",
+    "dr_recover",
 ]
 
 
@@ -156,7 +157,7 @@ def compute_constraint_violation_rate(
         + pumped_discharge
         + net_import
     )
-    demand_side = demand + battery_charge + pumped_charge
+    demand_side = demand + battery_charge + pumped_charge + pred[:, idx["dr_recover"]]
     served = supply + unserved
     shortage = demand_side - served
     violation = shortage.abs() > tolerance

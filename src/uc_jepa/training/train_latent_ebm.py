@@ -10,6 +10,8 @@ The EBM is optimized with a contrastive-divergence style loss so that
 """
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import argparse
 import json
 import math
@@ -435,6 +437,7 @@ def _save_ckpt(
     cfg_dict["eval"]["feature_thresholds"] = threshold_dict(thresholds, thresholds.numel())
     torch.save(
         {
+            "dr_formulation": DR_FORMULATION,
             "model_state_dict": ebm.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
             "epoch": epoch,

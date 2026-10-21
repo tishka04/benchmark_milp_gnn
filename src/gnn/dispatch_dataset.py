@@ -10,6 +10,8 @@
 
 from __future__ import annotations
 
+from src.demand_response import FormulationMismatchError, require_current_formulation, validate_dr_report
+
 import os
 import json
 import glob
@@ -51,6 +53,7 @@ def extract_binaries_from_report(
 
     Reuses the same logic as src.ebm.dataset_v3._extract_binaries_from_report.
     """
+    validate_dr_report(report, n_timesteps)
     detail = report.get("detail", {})
     pd_section = report.get("pre_dispatch", {})
     src = detail if detail else pd_section
@@ -128,12 +131,13 @@ def extract_dispatch_from_report(
     n_timesteps: int = 24,
 ) -> Optional[Tuple[torch.Tensor, List[str]]]:
     """
-    Extract continuous dispatch tensor [Z, T, 11] from a MILP report JSON.
+    Extract continuous dispatch tensor [Z, T, 12] from a MILP report JSON.
 
     Returns:
-        dispatch: [Z, T, 11] tensor of dispatch values (MW)
+        dispatch: [Z, T, 12] tensor of dispatch values (MW)
         zone_names: list of zone name strings
     """
+    validate_dr_report(report, n_timesteps)
     detail = report.get("detail", {})
     if not detail:
         return None
@@ -173,7 +177,7 @@ class DispatchDataset(Dataset):
     Each sample:
         u_zt: [Z, T, 7]  binary decisions (from MILP ground truth)
         h_zt: [Z, T, D]  HTE zone embeddings
-        y_zt: [Z, T, 11] continuous dispatch targets
+        y_zt: [Z, T, 12] continuous dispatch targets
         n_zones: int
         scenario_id: str
         objective: float (MILP objective value)
@@ -258,6 +262,7 @@ class DispatchDataset(Dataset):
         ext = os.path.splitext(path)[1]
         if ext == ".npz":
             data = np.load(path, allow_pickle=True)
+            require_current_formulation(data, path)
             for key in ["zones", "zone_embeddings", "embeddings", "zone", "arr_0"]:
                 if key in data:
                     arr = data[key]
@@ -269,6 +274,7 @@ class DispatchDataset(Dataset):
                     return torch.from_numpy(arr).float()
         elif ext == ".pt":
             obj = torch.load(path, map_location="cpu", weights_only=False)
+            require_current_formulation(obj, path)
             if isinstance(obj, torch.Tensor):
                 return obj.float()
             if isinstance(obj, dict):
@@ -276,7 +282,7 @@ class DispatchDataset(Dataset):
                     if key in obj and isinstance(obj[key], torch.Tensor):
                         return obj[key].float()
         elif ext == ".npy":
-            return torch.from_numpy(np.load(path)).float()
+            raise FormulationMismatchError("Unversioned NPY embedding; regenerate as versioned NPZ")
 
         return None
 
@@ -296,7 +302,7 @@ class DispatchDataset(Dataset):
         if u_zt is None:
             u_zt = torch.zeros(1, self.n_timesteps, N_BINARY_FEATURES)
 
-        # Extract dispatch targets [Z, T, 11]
+        # Extract dispatch targets [Z, T, 12]
         result = extract_dispatch_from_report(report, self.n_timesteps)
         if result is not None:
             y_zt, zone_names = result

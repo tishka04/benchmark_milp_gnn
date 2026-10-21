@@ -19,6 +19,8 @@ before passing to the worker.
 """
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import argparse
 import json
 import os
@@ -71,6 +73,7 @@ def _infer_checkpoint_arch(model_cfg: Dict, state_dict: Dict[str, torch.Tensor])
 
 def _load_model(ckpt_path: str, device: torch.device) -> UCAutoencoder:
     ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
+    require_current_formulation(ckpt, "checkpoint")
     cfg = ckpt.get("config", {}) or {}
     model_cfg = cfg.get("model", {}) if isinstance(cfg, dict) else {}
     model_cfg = _infer_checkpoint_arch(model_cfg, ckpt["model_state_dict"])

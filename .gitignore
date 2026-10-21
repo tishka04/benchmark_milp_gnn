@@ -3,6 +3,9 @@ extracted_pdfs/
 Literature/
 Writings/
 outputs/
+tmp/
+output/
+.poster_build/
 
 # --- Python virtual environments ---
 .venv/

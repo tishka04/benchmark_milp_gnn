@@ -5,7 +5,7 @@ data:
   # Training data: scenarios_v3 (gold + silver tiers).
   # Eval data (criticality families) is intentionally NOT included here.
   roots:
-    - outputs/uc_jepa/dataset_train
+    - outputs/load_shifting_v1/uc_jepa/dataset_train
   # If null, all families found under roots are used.
   # Restrict to specific tiers via e.g. ["gold"] or ["gold", "silver"].
   families: null
@@ -75,6 +75,6 @@ optim:
   best_metric: macro_f1
 
 logging:
-  output_dir: outputs/uc_jepa/autoencoder
+  output_dir: outputs/load_shifting_v1/uc_jepa/autoencoder
   save_every: 5
   log_every: 50

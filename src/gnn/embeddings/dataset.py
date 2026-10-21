@@ -7,6 +7,8 @@ and extract hierarchy mappings per-graph.
 
 from __future__ import annotations
 
+from src.demand_response import require_current_formulation
+
 import json
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -40,6 +42,7 @@ class TemporalGraphDatasetV3(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         data_dict = np.load(self.graph_files[idx], allow_pickle=True)
+        require_current_formulation(data_dict, str(self.graph_files[idx]))
 
         x = torch.from_numpy(data_dict["node_features"]).float()
         edge_index = torch.from_numpy(data_dict["edge_index"]).long()

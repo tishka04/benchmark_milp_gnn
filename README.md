@@ -159,6 +159,11 @@ python -m src.analysis.visualize_clusters \
 
 ## 5. MILP oracle (Block 2 — ground truth)
 
+The current MILP uses energy-conserving forward demand shifting. See
+[Demand response formulation and migration notes](docs/demand_response_load_shifting.md)
+for recovery constraints, output fields and compatibility with historical
+shedding datasets / trained models.
+
 ### 5.1 Single scenario
 
 ```bash

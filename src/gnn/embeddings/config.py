@@ -13,9 +13,9 @@ class TrainingConfig:
 
     # --------------- paths (Google Drive / Colab) ---------------
     repo_path: str = "/content/drive/MyDrive/benchmark"
-    data_dir: str = "/content/drive/MyDrive/benchmark/outputs/graphs/hetero_temporal_v3"
+    data_dir: str = "/content/drive/MyDrive/benchmark/outputs/load_shifting_v1/graphs/hetero_temporal_v3"
     scenario_dir: str = "/content/drive/MyDrive/benchmark/outputs/scenarios_v3"
-    save_dir: str = "/content/drive/MyDrive/benchmark/outputs/encoders/hierarchical_temporal_v3"
+    save_dir: str = "/content/drive/MyDrive/benchmark/outputs/load_shifting_v1/encoders/hierarchical_temporal_v3"
 
     # --------------- data ---------------
     train_split: float = 0.8

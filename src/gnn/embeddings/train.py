@@ -4,6 +4,8 @@ Training and validation loops for the Hierarchical Temporal Encoder.
 
 from __future__ import annotations
 
+from src.demand_response import DR_FORMULATION, require_current_formulation
+
 import math
 import time
 from pathlib import Path
@@ -285,6 +287,7 @@ def run_training(
             patience_counter = 0
             torch.save(
                 {
+                    "dr_formulation": DR_FORMULATION,
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),
@@ -312,6 +315,7 @@ def run_training(
         if epoch % config.save_freq == 0:
             torch.save(
                 {
+                    "dr_formulation": DR_FORMULATION,
                     "epoch": epoch,
                     "model_state_dict": model.state_dict(),
                     "optimizer_state_dict": optimizer.state_dict(),

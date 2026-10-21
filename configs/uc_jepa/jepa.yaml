@@ -3,7 +3,7 @@
 
 data:
   roots:
-    - outputs/uc_jepa/dataset_train
+    - outputs/load_shifting_v1/uc_jepa/dataset_train
   families: null
   max_samples: null
   val_split: 0.1
@@ -13,7 +13,7 @@ data:
 
 ae:
   # Frozen phase-1 autoencoder used as the JEPA target encoder.
-  checkpoint: outputs/uc_jepa/autoencoder/uc_ae_best.pt
+  checkpoint: outputs/load_shifting_v1/uc_jepa/autoencoder/uc_ae_best.pt
 
 model:
   scenario_dim: 128         # h_scenario per-(zone, time) embedding dim
@@ -99,6 +99,6 @@ eval:
   threshold_search_step: 0.05
 
 logging:
-  output_dir: outputs/uc_jepa/jepa
+  output_dir: outputs/load_shifting_v1/uc_jepa/jepa
   save_every: 5
   log_every: 50
