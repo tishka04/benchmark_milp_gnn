@@ -1,0 +1,74 @@
+Thermal startup/shutdown correction -- thermal_transitions_v1
+===========================================================
+
+Scope
+The same build_uc_model is used by the direct MILP and every LP/MILP repair
+stage. Existing scenario inputs, trained weights and campaign results are not
+modified. DR remains load_shifting_v1. The binary learning interface retains
+its seven channels; shutdown is derived, not an additional prediction target.
+
+Convention
+R is the existing online ramp in MW per model period (no new time scaling).
+SU and SD are separate MW limits at startup and immediately before shutdown.
+Default: SU = SD = min(Pmax, max(Pmin, R)). Thus a 100 MW unit with Pmin=45
+and R=20 can start at 45 MW, then reach 65 MW, ramp back to 45 MW, then stop.
+It cannot jump straight from 0 to 100 MW or stop directly from 90 MW.
+
+This is an explicit one-period startup/shutdown approximation. It does not
+describe startup trajectories lasting several periods, nor minimum up/down
+times. Initial output remains zero in the generated scenarios. For an already
+running ScenarioData unit, initial commitment is inferred from positive initial
+output, or supplied explicitly via thermal_initial_on. Initial states must
+respect Pmin/Pmax. An initially running unit has no spurious startup cost.
+
+Optional scenario tech keys thermal_startup_limit_pct and
+thermal_shutdown_limit_pct specify SU/Pmax and SD/Pmax (fractions, not 0--100).
+ScenarioData also accepts per-zone thermal_startup_limit and
+thermal_shutdown_limit dictionaries in MW. Limits below Pmin or above Pmax
+are rejected for this one-period model rather than silently clipped.
+
+Equations
+u[t] is commitment; v[t] is startup; w[t] is shutdown.
+v[t] >= u[t]-u[t-1]; v[t] <= u[t]; v[t] <= 1-u[t-1].
+w[t] = u[t-1]-u[t]+v[t] (derived expression).
+Pmin*u[t] <= p[t] <= Pmax*u[t].
+p[t]-p[t-1] <= R*u[t-1] + SU*v[t].
+p[t-1]-p[t] <= R*u[t] + SD*w[t].
+At t=0, the previous state is the declared initial state. Exact startup
+constraints prevent false transitions from relaxing ramps even at zero cost.
+
+Repairs and warm starts
+All five repair stages inherit these constraints from the shared builder.
+Round-and-refix derives startups from rounded commitment instead of rounding
+startup independently. Heuristic warm starts share the same thermal limits,
+preserve a genuine zero online ramp and continue ramping down if shutdown is
+not yet possible. They remain heuristics, not full-network certificates.
+The latent repair boundary checks the saved thermal trajectories independently
+and refuses to publish a finite candidate objective when they violate them.
+
+Provenance
+New MILP reports and repair payloads carry thermal_formulation. Detailed MILP
+reports include initial states, transition limits and shutdown indicators.
+The batch-runner code fingerprint includes src/thermal.py; existing comparison
+manifests already hash every src Python file and reject mixed-code resumes.
+Old labels/checkpoints/results are NOT migrated or certified by this patch.
+Do not resume the old campaign to obtain a corrected scientific comparison;
+prepare a separate campaign and appropriate new labels/models first.
+
+Verification command (synthetic tests only; no campaign/training):
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -p test_thermal_transitions.py -v
+
+Validation performed on 27 October 2026
+18 targeted thermal tests passed, including small actual HiGHS MILP/LP solves
+with one zone, 1--4 periods and one thread. The reference and repaired dispatch
+[45, 65, 45, 0] MW both cost 162 in the synthetic fixture (unit energy cost 1,
+startup cost 7), with zero unserved energy. An initial 90 MW unit ramps down
+through [70, 50, 45, 0]; an immediate OFF candidate is repaired accordingly.
+Direct jumps 0->100 MW and 90->0 MW are rejected under SU=SD=45 and R=20.
+Zero online ramp, zero startup cost, explicit limits, initially-online units,
+round-and-refix transitions, thermal payload rejection and report exports pass.
+
+123 tests passed, 0 failures/errors/skips across thermal, load shifting,
+pipeline contracts, batch/resume, matched budgets and parallel benchmark tests.
+The benchmark/control tests use fake processes/models; no real campaign or
+trained-model inference/learning was run. Test log: tmp/thermal_transitions_tests.log.

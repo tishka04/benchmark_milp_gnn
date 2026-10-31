@@ -61,6 +61,8 @@ def _serialize_report(report: Dict[str, Any]) -> Dict[str, Any]:
         serializable["detail"] = report["detail"]
     if "dr_formulation" in report:
         serializable["dr_formulation"] = report["dr_formulation"]
+    if "thermal_formulation" in report:
+        serializable["thermal_formulation"] = report["thermal_formulation"]
     if "solver_resources" in report:
         serializable["solver_resources"] = report["solver_resources"]
     return serializable
@@ -71,7 +73,7 @@ def _solve_code_hash() -> str:
     """Fingerprint the formulation and input/solver code, not launcher/log edits."""
     root = Path(__file__).resolve().parents[1]
     digest = hashlib.sha256()
-    for name in ("demand_response.py", "milp/model.py", "milp/solve.py",
+    for name in ("demand_response.py", "thermal.py", "milp/model.py", "milp/solve.py",
                  "milp/scenario_loader.py", "milp/defaults.py", "milp/profiles.py",
                  "milp/solver_resources.py"):
         digest.update(name.encode("utf-8"))

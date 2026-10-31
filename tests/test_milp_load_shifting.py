@@ -21,6 +21,7 @@ from src.milp.model import DR_FORMULATION, build_uc_model
 from src.milp.run_milp import _serialize_report as serialize_single
 from src.milp.scenario_loader import load_scenario_data
 from src.milp.solve import _apply_mip_warm_start, _relax_integrality, solve_scenario
+from src.milp.solver_resources import configure_highs_threads
 
 
 def scenario_input(n=2, dt=1.0, dr_units=1, zones=1):
@@ -89,6 +90,10 @@ class LoadShiftingTests(unittest.TestCase):
         cls.solver = SolverFactory("highs")
         if not cls.solver.available(exception_flag=False):
             raise RuntimeError("These regression tests require HiGHS (highspy)")
+        # Use the same process-wide HiGHS allocation as solve_scenario.
+        # Mixing default threads and an explicit cap breaks its global scheduler.
+        configure_highs_threads(cls.solver, "highs")
+        cls.solver.options["time_limit"] = 5
 
     def solve(self, model, feasible=True):
         result = self.solver.solve(model, load_solutions=False)

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Comparaison MILP / pipeline / JEPA</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f7fa;color:#243344;font:15px/1.5 system-ui,Arial,sans-serif}main{max-width:1380px;margin:auto;padding:28px}h1{font-size:30px;line-height:1.15;margin:0 0 14px}h2{font-size:23px;margin:8px 0 12px}h3{font-size:17px;margin:0 0 8px}p{max-width:1050px}section{background:white;border:1px solid #dce2e7;border-radius:8px;padding:22px;margin:24px 0}.intro{font-size:17px;color:#536476}.note{color:#536476;font-size:13px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}.legend{display:flex;flex-wrap:wrap;gap:22px;margin:12px 0}.swatch{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px}.controls{display:flex;gap:18px;flex-wrap:wrap;margin:18px 0}label{display:flex;flex-direction:column;gap:5px;font-weight:600}select{font:inherit;padding:8px;border:1px solid #aebbc7;border-radius:4px;max-width:100%;background:white;color:inherit}svg{display:block;width:100%;overflow:visible}svg text{font-family:system-ui,Arial;fill:#344050;font-size:12px}svg circle{cursor:help}.table-scroll{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px;white-space:nowrap}th,td{padding:9px 12px;border-bottom:1px solid #e2e7ec;text-align:right}th:first-child,td:first-child,th:nth-child(2),td:nth-child(2){text-align:left}thead{background:#eef2f6}.missing{color:#7b8790}footer{font-size:13px;color:#657584;padding-bottom:30px}@media(max-width:760px){main{padding:14px}section{padding:12px}.grid{grid-template-columns:1fr}h1{font-size:25px}.controls{gap:10px}select{font-size:16px}}
+</style></head><body><main>
+<h1>Ce que donnent les 10 800 expériences</h1>
+<p class="intro">600 scénarios, six budgets indépendants, trois méthodes. Explorer la faisabilité, puis comparer les coûts au MILP de référence pour chaque scénario.</p>
+<div class="legend" id="legend"></div>
+<section><h2>Faisabilité selon le budget</h2>
+<p class="note">Chaque panneau contient 100 scénarios. La faisabilité autorise les variables pénalisées d'énergie non servie et de surproduction. Le critère sans slack les limite à 0,001 MWh au total.</p>
+<div class="controls"><label>Critère<select id="metric"><option value="feasible">Solution faisable</option><option value="zero_slack">Faisable et sans slack</option><option value="quality">Faisable et écart de coût ≤ +10 %</option></select></label></div>
+<div class="grid" id="overview"></div></section>
+<section><h2>Coût de chaque scénario face à sa référence</h2>
+<p>Un point représente une solution faisable. <b>0 % correspond au coût de la référence ; plus bas est meilleur.</b> Les résultats absents ou infaisables ne reçoivent pas de coût artificiel. Survoler un point pour lire le coût brut et le slack.</p>
+<div class="controls"><label>Famille<select id="family"></select></label><label>Budget (secondes)<select id="budget"></select></label><label>Mesure de coût<select id="costView"><option value="gap">Écart à la référence (%)</option><option value="raw">Coût brut et référence longue</option></select></label></div>
+<div id="scatter"></div><p class="note" id="support" aria-live="polite"></p>
+</section>
+<section><h2>Suivre un scénario à tous les budgets</h2>
+<div class="controls"><label>Scénario dans la famille sélectionnée<select id="scenario"></select></label></div>
+<p id="reference" aria-live="polite"></p><div id="trajectory"></div>
+<p class="note">Les budgets correspondent à des exécutions indépendantes. Les segments relient les résultats disponibles pour guider la lecture ; ce ne sont pas des trajectoires d'une seule résolution.</p>
+<div class="table-scroll"><table><thead><tr><th>Budget</th><th>Méthode</th><th>Faisable</th><th>Coût</th><th>Écart (%)</th><th>Slack (MWh)</th></tr></thead><tbody id="details"></tbody></table></div></section>
+<footer>Écart = 100 × (coût - référence) / |référence|. Les graphiques de coût utilisent l'échelle verticale signée log10(1 + |valeur|), avec graduations dans les valeurs d'origine (k = mille, M = million). Les coûts utilisent les unités de l'objectif du modèle. En vue « coût brut », les points gris sont les références longues. Elles sont déclarées optimales pour 495 scénarios, limitées en temps pour 105 ; elles ne sont donc pas toutes des optima certifiés. Démarrage Python, imports, chargements et réparations sont inclus dans les budgets. Embeddings HTE et entraînements exclus. Pipeline : batch GPU K=16 puis 16 réparations CPU ; HiGHS et réparation JEPA : plafond de 16 threads.</footer>
+</main><script id="results" type="application/json">__DATA_JSON__</script><script>
+const DATA=JSON.parse(document.getElementById('results').textContent),METHODS=['milp','pipeline','jepa'],BUDGETS=[1,2,5,10,60,120];
+DATA.colors.reference='#758391';DATA.methods.reference='Référence longue';
+const $=id=>document.getElementById(id),fmt=(n,d=2)=>n==null?'—':Number(n).toLocaleString('fr-FR',{maximumFractionDigits:d}),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+$('legend').innerHTML=METHODS.map(m=>`<span><span class="swatch" style="background:${DATA.colors[m]}"></span>${DATA.methods[m]}</span>`).join('');
+$('family').innerHTML=Object.entries(DATA.families).map(([v,n])=>`<option value="${v}">${n}</option>`).join('');
+$('budget').innerHTML=BUDGETS.map(b=>`<option ${b===120?'selected':''}>${b}</option>`).join('');
+$('scenario').innerHTML=Array.from({length:100},(_,i)=>`<option value="scenario_${String(i+1).padStart(5,'0')}">${i+1}</option>`).join('');
+$('overview').innerHTML=Object.entries(DATA.families).map(([f,n])=>`<div><h3>${n}</h3><div id="overview-${f}"></div></div>`).join('');
+function plot(container,series,{budget=false,percent=false,xlabel='',ylabel='',connect=false}={}){
+ const W=Math.max(280,container.clientWidth),H=300,L=78,R=18,T=18,B=55,w=W-L-R,h=H-T-B;
+ const points=series.flatMap(s=>s.points).filter(p=>p.y!=null&&Number.isFinite(p.y));
+ const sy=v=>Math.sign(v)*Math.log10(1+Math.abs(v));
+ let ymin=percent?0:Math.min(0,...points.map(p=>sy(p.y))),ymax=percent?100:Math.max(.12,...points.map(p=>sy(p.y)));
+ if(!percent){let pad=(ymax-ymin)*.07;ymin-=pad;ymax+=pad;}
+ const xx=x=>L+5+(budget?Math.log(x)/Math.log(120):(x-1)/99)*(w-10),yy=y=>T+h-((percent?y:sy(y))-ymin)/(ymax-ymin)*h;
+ let ticks=percent?[0,25,50,75,100]:[-1e10,-1e9,-1e8,-1e7,-1e6,-1e5,-1e4,-1e3,-100,-10,-1,-.1,0,.1,1,10,100,1000,10000,100000,1000000,10000000,1e8,1e9,1e10].filter(v=>sy(v)>=ymin&&sy(v)<=ymax);
+ if(ticks.length>7){const step=Math.ceil(ticks.length/7);ticks=ticks.filter((v,i)=>v===0||i%step===0||i===ticks.length-1);}
+ if(!percent){const spaced=ticks.includes(0)?[0]:[];for(const t of [...ticks].sort((a,b)=>Math.abs(b)-Math.abs(a))){if(!spaced.includes(t)&&spaced.every(v=>Math.abs(yy(v)-yy(t))>=23))spaced.push(t);}ticks=spaced.sort((a,b)=>a-b);}
+ const axisFmt=v=>Math.abs(v)>=1e6?fmt(v/1e6,1)+' M':Math.abs(v)>=1000?fmt(v/1000,1)+' k':fmt(v);
+ let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(ylabel)} selon ${esc(xlabel)}"><rect x="${L}" y="${T}" width="${w}" height="${h}" fill="white" stroke="#ccd5dc"/>`;
+ for(const t of ticks)svg+=`<line x1="${L}" x2="${L+w}" y1="${yy(t)}" y2="${yy(t)}" stroke="#e3e8ed"/><text x="${L-9}" y="${yy(t)+4}" text-anchor="end">${esc(axisFmt(t))}</text>`;
+ const xt=budget?(W<420?[1,5,10,120]:BUDGETS):(W<420?[1,50,100]:[1,20,40,60,80,100]);
+ for(const t of xt)svg+=`<text x="${xx(t)}" y="${T+h+22}" text-anchor="middle">${t}</text>`;
+ svg+=`<text x="${L+w/2}" y="${H-7}" text-anchor="middle">${esc(xlabel)}</text><text transform="translate(15 ${T+h/2}) rotate(-90)" text-anchor="middle">${esc(ylabel)}</text>`;
+ for(const s of series){const pts=s.points.filter(p=>p.y!=null&&Number.isFinite(p.y));
+  if(connect&&pts.length>1)svg+=`<polyline points="${pts.map(p=>`${xx(p.x)},${yy(p.y)}`).join(' ')}" stroke="${DATA.colors[s.method]}" fill="none" stroke-width="2" ${percent?'':'stroke-dasharray="5 3"'}/>`;
+  for(const p of pts)svg+=`<circle cx="${xx(p.x)}" cy="${yy(p.y)}" r="${percent?3.7:3.3}" opacity=".82" fill="${DATA.colors[s.method]}"><title>${esc(p.tip||`${DATA.methods[s.method]} : ${fmt(p.y)} %`)}</title></circle>`;
+ }
+ if(!points.length)svg+=`<text x="${L+w/2}" y="${T+h/2}" text-anchor="middle">Aucune solution faisable</text>`;
+ container.innerHTML=svg+'</svg>';
+}
+function updateOverview(){let field=$('metric').value;
+ for(const family of Object.keys(DATA.families)){
+ const group=DATA.rows.filter(r=>r.family===family);
+ const series=METHODS.map(method=>({method,points:BUDGETS.map(b=>{const rows=group.filter(r=>r.method===method&&r.budget_seconds===b);const n=rows.filter(r=>field==='quality'?r.feasible&&r.gap_reference_pct<=10:r[field]).length;return{x:b,y:n,tip:`${DATA.methods[method]}, ${b} s : ${n}/100`};})}));
+ plot($('overview-'+family),series,{budget:true,percent:true,connect:true,xlabel:'Budget (s, échelle log)',ylabel:'Scénarios (%)'});
+ }}
+function tooltip(r){return `${r.scenario_id} | ${DATA.methods[r.method]} | ${r.budget_seconds} s\nCoût : ${fmt(r.objective)}\nRéférence : ${fmt(r.reference_objective)}\nÉcart : ${fmt(r.gap_reference_pct)} %\nSlack : ${fmt(r.slack_mwh)} MWh`;}
+function updateCosts(){const family=$('family').value,b=Number($('budget').value),group=DATA.rows.filter(r=>r.family===family&&r.budget_seconds===b),raw=$('costView').value==='raw';
+ const series=METHODS.map(method=>({method,points:group.filter(r=>r.method===method&&r.feasible).map(r=>({x:Number(r.scenario_id.split('_')[1]),y:raw?r.objective:r.gap_reference_pct,tip:tooltip(r)}))}));
+ $('support').textContent=series.map(s=>`${DATA.methods[s.method]} : ${s.points.length}/100 solutions faisables`).join(' · ')+(raw?' · Points gris : référence longue':'');
+ if(raw)series.unshift({method:'reference',points:group.filter(r=>r.method==='milp').map(r=>({x:Number(r.scenario_id.split('_')[1]),y:r.reference_objective,tip:`${r.scenario_id} | Référence : ${fmt(r.reference_objective)} (${r.reference_status})`}))});
+ plot($('scatter'),series,{xlabel:'Numéro du scénario',ylabel:raw?'Coût (unités de l’objectif)':'Écart à la référence (%)'});
+ updateScenario();}
+function updateScenario(){const family=$('family').value,sid=$('scenario').value,group=DATA.rows.filter(r=>r.family===family&&r.scenario_id===sid),ref=group[0];
+ $('reference').textContent=`${DATA.families[family]} / ${sid} — Coût de référence : ${fmt(ref.reference_objective)} ; statut : ${ref.reference_status==='optimal'?'optimal selon le solveur':'limite de temps (incumbent)'}.`;
+ const series=METHODS.map(method=>({method,points:group.filter(r=>r.method===method&&r.feasible).map(r=>({x:r.budget_seconds,y:r.gap_reference_pct,tip:tooltip(r)}))}));
+ plot($('trajectory'),series,{budget:true,connect:true,xlabel:'Budget (s, échelle log)',ylabel:'Écart à la référence (%)'});
+ $('details').innerHTML=group.map(r=>`<tr class="${r.feasible?'':'missing'}"><td>${r.budget_seconds} s</td><td>${DATA.methods[r.method]}</td><td>${r.feasible?'Oui':'Non'}</td><td>${fmt(r.objective)}</td><td>${fmt(r.gap_reference_pct)}</td><td>${fmt(r.slack_mwh)}</td></tr>`).join('');}
+$('metric').addEventListener('change',updateOverview);$('family').addEventListener('change',updateCosts);$('budget').addEventListener('change',updateCosts);$('costView').addEventListener('change',updateCosts);$('scenario').addEventListener('change',updateScenario);
+let timer;window.addEventListener('resize',()=>{clearTimeout(timer);timer=setTimeout(()=>{updateOverview();updateCosts()},100)});updateOverview();updateCosts();
+</script></body></html>

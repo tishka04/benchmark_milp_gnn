@@ -7,6 +7,7 @@ from pyomo.environ import (
     Binary,
     ConcreteModel,
     Constraint,
+    Expression,
     NonNegativeReals,
     Objective,
     Param,
@@ -22,6 +23,7 @@ from pyomo.environ import value  # noqa: F401  (used by callers)
 
 from .scenario_loader import ScenarioData
 from src.demand_response import DR_FORMULATION
+from src.thermal import THERMAL_FORMULATION, scenario_thermal_limits
 
 
 def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteModel:
@@ -31,6 +33,8 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     if not math.isfinite(data.dr_recovery_limit_factor) or data.dr_recovery_limit_factor < 0:
         raise ValueError("dr_recovery_limit_factor must be finite and non-negative")
     m = ConcreteModel(name=f"UC_{data.scenario_id}")
+    thermal = scenario_thermal_limits(data)
+    m.thermal_formulation = THERMAL_FORMULATION
 
     m.Z = Set(initialize=data.zones, ordered=True)
     m.T = RangeSet(0, len(data.periods) - 1)
@@ -70,6 +74,9 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     m.thermal_ramp = Param(m.Z, initialize=data.thermal_ramp, mutable=False)
     m.thermal_initial = Param(m.Z, initialize=data.thermal_initial_output, mutable=False)
     m.thermal_startup_cost = Param(m.Z, initialize=data.thermal_startup_cost, mutable=False)
+    m.thermal_initial_on = Param(m.Z, initialize={z: x.initial_on for z, x in thermal.items()})
+    m.thermal_startup_limit = Param(m.Z, initialize={z: x.startup for z, x in thermal.items()})
+    m.thermal_shutdown_limit = Param(m.Z, initialize={z: x.shutdown for z, x in thermal.items()})
 
     m.nuclear_capacity = Param(m.Z, initialize=data.nuclear_capacity, mutable=False)
     m.nuclear_min = Param(m.Z, initialize=data.nuclear_min_power, mutable=False)
@@ -112,7 +119,8 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
     lines_to: Dict[str, Tuple[str, ...]] = {z: data.lines_to_index.get(z, tuple()) for z in data.zones}
 
     m.p_thermal = Var(m.Z, m.T, within=NonNegativeReals)
-    m.u_thermal = Var(m.Z, m.T, within=Binary)
+    m.u_thermal = Var(m.Z, m.T, within=Binary,
+                      bounds=lambda _, z, t: (0, int(thermal[z].capacity > 0)))
     m.v_thermal_startup = Var(m.Z, m.T, within=Binary)  # Startup indicator
 
     m.p_nuclear = Var(m.Z, m.T, within=NonNegativeReals)
@@ -161,34 +169,36 @@ def build_uc_model(data: ScenarioData, enable_duals: bool = False) -> ConcreteMo
 
     m.thermal_min_limit = Constraint(m.Z, m.T, rule=_thermal_min_rule)
 
-    def _thermal_ramp_up_rule(model, z, t):
-        if t == model.T.first():
-            prev = model.thermal_initial[z]
-        else:
-            prev = model.p_thermal[z, t - 1]
-        return model.p_thermal[z, t] - prev <= model.thermal_ramp[z]
+    def previous_on(model, z, t):
+        return model.thermal_initial_on[z] if t == model.T.first() else model.u_thermal[z, t - 1]
 
-    def _thermal_ramp_down_rule(model, z, t):
-        if t == model.T.first():
-            prev = model.thermal_initial[z]
-        else:
-            prev = model.p_thermal[z, t - 1]
-        return prev - model.p_thermal[z, t] <= model.thermal_ramp[z]
+    def previous_power(model, z, t):
+        return model.thermal_initial[z] if t == model.T.first() else model.p_thermal[z, t - 1]
 
-    m.thermal_ramp_up = Constraint(m.Z, m.T, rule=_thermal_ramp_up_rule)
-    m.thermal_ramp_down = Constraint(m.Z, m.T, rule=_thermal_ramp_down_rule)
-
-    # Thermal startup logic
+    # Exact startup indicator, even when startup cost is zero. The shutdown
+    # indicator is derived from the commitment transition, not another learned
+    # decision channel. These equations also hold in every repair model.
     def _thermal_startup_rule(model, z, t):
-        if t == model.T.first():
-            # Assume initially off (thermal_initial = 0 for most zones)
-            # If unit turns on at t=0, count as startup
-            return model.v_thermal_startup[z, t] >= model.u_thermal[z, t]
-        else:
-            # Startup occurs when u[t] > u[t-1]
-            return model.v_thermal_startup[z, t] >= model.u_thermal[z, t] - model.u_thermal[z, t - 1]
-
+        return model.v_thermal_startup[z, t] >= model.u_thermal[z, t] - previous_on(model, z, t)
     m.thermal_startup_detection = Constraint(m.Z, m.T, rule=_thermal_startup_rule)
+    m.thermal_startup_current_on = Constraint(
+        m.Z, m.T, rule=lambda model, z, t: model.v_thermal_startup[z, t] <= model.u_thermal[z, t])
+    m.thermal_startup_previous_off = Constraint(
+        m.Z, m.T, rule=lambda model, z, t: model.v_thermal_startup[z, t] <= 1 - previous_on(model, z, t))
+    m.w_thermal_shutdown = Expression(
+        m.Z, m.T, rule=lambda model, z, t:
+        previous_on(model, z, t) - model.u_thermal[z, t] + model.v_thermal_startup[z, t])
+
+    m.thermal_ramp_up = Constraint(
+        m.Z, m.T, rule=lambda model, z, t:
+        model.p_thermal[z, t] - previous_power(model, z, t)
+        <= model.thermal_ramp[z] * previous_on(model, z, t)
+        + model.thermal_startup_limit[z] * model.v_thermal_startup[z, t])
+    m.thermal_ramp_down = Constraint(
+        m.Z, m.T, rule=lambda model, z, t:
+        previous_power(model, z, t) - model.p_thermal[z, t]
+        <= model.thermal_ramp[z] * model.u_thermal[z, t]
+        + model.thermal_shutdown_limit[z] * model.w_thermal_shutdown[z, t])
 
     # Nuclear limits - always ON (must-run baseload), no commitment binaries
     def _nuclear_cap_rule(model, z, t):

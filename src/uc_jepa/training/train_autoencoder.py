@@ -8,6 +8,8 @@ The config is YAML with sections ``data``, ``model``, ``loss``, ``optim``, ``log
 """
 from __future__ import annotations
 
+from src.operational_exit.training_runtime import (TrainingRuntime, training_device, frozen_loaders, backward_step, save_training_checkpoint)
+
 from src.demand_response import DR_FORMULATION, require_current_formulation
 
 import argparse
@@ -65,6 +67,8 @@ def _seed_all(seed: int) -> None:
 
 
 def _build_dataloaders(data_cfg: Dict) -> Tuple[DataLoader, DataLoader, UCLabelDataset]:
+    if data_cfg.get("split_manifest"):
+        return frozen_loaders(data_cfg, include_dataset=True)
     dataset = UCLabelDataset(
         roots=data_cfg["roots"],
         families=data_cfg.get("families"),
@@ -218,11 +222,7 @@ def _epoch_pass(
             )
 
             if is_train:
-                optimizer.zero_grad(set_to_none=True)
-                losses["loss"].backward()
-                if grad_clip and grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
-                optimizer.step()
+                backward_step(losses["loss"], optimizer, model.parameters(), grad_clip, u.shape[0], step, loader)
 
             B = u.shape[0]
             n_seen += B
@@ -273,7 +273,7 @@ def _save_checkpoint(
     path: Path,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({
+    save_training_checkpoint({
         "dr_formulation": DR_FORMULATION,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
@@ -298,7 +298,7 @@ def train(cfg: TrainConfig, device: Optional[str] = None) -> Dict:
     seed = int(cfg.data.get("seed", 42))
     _seed_all(seed)
 
-    dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    dev = training_device(cfg, device)
     print(f"Device: {dev}")
 
     train_loader, val_loader, dataset = _build_dataloaders(cfg.data)
@@ -355,14 +355,16 @@ def train(cfg: TrainConfig, device: Optional[str] = None) -> Dict:
     bad_epochs = 0
     best_path = out_dir / "uc_ae_best.pt"
 
-    for epoch in range(epochs):
-        train_metrics = _epoch_pass(
-            model, train_loader, dev, weights, optimizer, grad_clip,
+    runtime = TrainingRuntime(cfg, model, optimizer, scheduler, out_dir)
+    best_val, bad_epochs, history = runtime.values(best_val, bad_epochs, history)
+    for epoch in range(runtime.start_epoch, epochs):
+        train_metrics = runtime.train_epoch(lambda epoch_loader: _epoch_pass(
+            model, epoch_loader, dev, weights, optimizer, grad_clip,
             log_every, epoch, is_train=True,
             pos_weight=pos_weight, track_macro=False,
-        )
+        ), train_loader)
         val_metrics = _epoch_pass(
-            model, val_loader, dev, weights, optimizer=None, grad_clip=0.0,
+            model, runtime.loader(val_loader, shuffle=False), dev, weights, optimizer=None, grad_clip=0.0,
             log_every=0, epoch=epoch, is_train=False,
             pos_weight=pos_weight, track_macro=True,
         )
@@ -397,7 +399,10 @@ def train(cfg: TrainConfig, device: Optional[str] = None) -> Dict:
             bad_epochs += 1
             if bad_epochs >= patience:
                 print(f"  Early stopping at epoch {epoch+1} (no improvement for {patience} epochs).")
-                break
+
+        runtime.save(epoch, best_val, bad_epochs, history, None)
+        if bad_epochs >= patience:
+            break
 
         if save_every > 0 and (epoch + 1) % save_every == 0:
             _save_checkpoint(

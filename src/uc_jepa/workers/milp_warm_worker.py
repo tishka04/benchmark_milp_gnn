@@ -60,16 +60,20 @@ def _deepest_stage_reached(lp_result: Any) -> str:
 
 def _serialize_lp_result(lp_result: Any) -> Dict[str, Any]:
     stage_used = _normalize_stage_name(getattr(lp_result, "stage_used", ""))
+    thermal = dict(getattr(lp_result, "thermal_metrics", {}) or {})
     return {
         "status": str(getattr(lp_result, "status", "")),
         "stage_used": stage_used,
         "stage_label": _display_stage_name(lp_result, stage_used),
         "stage_reached": _deepest_stage_reached(lp_result),
         "dr_formulation": DR_FORMULATION,
+        "thermal_formulation": getattr(lp_result, "thermal_formulation", None),
+        "thermal_metrics": thermal,
         "dr_metrics": dict(getattr(lp_result, "dr_metrics", {}) or {}),
         "lp_objective": (
             float(getattr(lp_result, "objective_value", float("inf")))
-            if getattr(lp_result, "dr_metrics", {}).get("dr_feasible", False)
+            if (getattr(lp_result, "dr_metrics", {}).get("dr_feasible", False)
+                and thermal.get("thermal_feasible", False))
             else float("inf")
         ),
         "slack_mwh": float(getattr(lp_result, "slack_used", 0.0) or 0.0),
@@ -114,6 +118,8 @@ class CandidateSolveRecord:
     solve_time: float
     dr_formulation: str = DR_FORMULATION
     dr_metrics: Dict[str, Any] = field(default_factory=dict)
+    thermal_formulation: Optional[str] = None
+    thermal_metrics: Dict[str, Any] = field(default_factory=dict)
     hard_fix_objective: float = float("inf")
     repair_objective: float = float("inf")
 
@@ -284,6 +290,8 @@ class MILPWarmWorker:
         feasible = math.isfinite(lp_objective)
         record = CandidateSolveRecord(
             dr_metrics=dict(payload.get("dr_metrics", {})),
+            thermal_formulation=payload.get("thermal_formulation"),
+            thermal_metrics=dict(payload.get("thermal_metrics", {})),
             candidate_idx=int(candidate_idx),
             scenario_id=sample.scenario_id,
             family=sample.family,

@@ -33,6 +33,8 @@ def _serialize_report(report):
         serializable["detail"] = report["detail"]
     if "dr_formulation" in report:
         serializable["dr_formulation"] = report["dr_formulation"]
+    if "thermal_formulation" in report:
+        serializable["thermal_formulation"] = report["thermal_formulation"]
     return serializable
 
 

@@ -1,0 +1,98 @@
+REFERENCES MILP CORRIGEES ET AUDIT DE CRITICITE
+
+Preparé le 27 octobre 2026. Aucun calcul expérimental n'est déclenché par la
+création de ces scripts. Le lancement normal ci-dessous exécute les calculs.
+
+LANCEMENT (depuis la racine du dépôt)
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_corrected_criticality.ps1
+
+REPRISE APRES INTERRUPTION
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_corrected_criticality.ps1 -Resume
+
+REFAIRE SEULEMENT L'ANALYSE, APRES LES 600 REFERENCES
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_corrected_criticality.ps1 -StartStep 2
+
+VERIFICATION DU PLAN SANS CALCUL ET SANS ECRITURE
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\run_corrected_criticality.ps1 -Preview
+
+Avec un dossier personnalisé, fournir le même -OutputDir à chaque reprise.
+Python utilisé par défaut : .venv\Scripts\python.exe. -PythonExe permet de le préciser.
+
+PROTOCOLE
+- Cohorte exacte du manifeste historique outputs/load_shifting_v1/evaluation/
+  budgets_v1/manifest.json : 600 scénarios, 100 dans chacune des six familles.
+  Aucun scénario de scenarios_v3 n'est résolu ici ; aucun entraînement ni aucune
+  inférence pipeline/JEPA n'est lancé.
+- Les fichiers d'entrée et anciennes références restent dans load_shifting_v1,
+  en lecture seule (seul le verrou partagé _pipeline/run.lock est utilisé).
+- Nouvelles sorties : outputs/thermal_transitions_v1/reference_criticality.
+- Un seul scénario en cours, HiGHS 16 threads, démarrage à froid, limite native
+  de 600 secondes par MILP. Ce sont les mêmes réglages que les anciennes
+  références. Pas de parallélisation 4 x 4 pour mesurer les temps de référence.
+- La relaxation LP est également recalculée, avec sa propre limite de 600 s,
+  comme dans le producteur historique. Son temps est séparé et exclu de la
+  réponse statistique « temps MILP ». La durée totale peut donc dépasser
+  600 secondes par scénario. Surveillance du processus complet : 1 500 s.
+- La limite HiGHS n'est pas une limite murale stricte : construction, transferts,
+  restitution, relaxation et validation s'ajoutent. Une résolution arrêtée au
+  délai avec incumbent valide est conservée ; elle n'est pas présentée comme
+  un optimum prouvé. Aucun warm start issu du pilote n'est utilisé.
+- Version HiGHS/Pyomo, code de résolution, paramètres et empreintes des entrées
+  sont figés au premier lancement. Le code d'analyse est suivi séparément :
+  sa modification invalide l'analyse, pas les références compatibles.
+
+REPRISE ET ERREURS
+- Un JSON de référence complet et compatible est le checkpoint par scénario.
+  Contrôles : empreinte du résultat, scénario, code et paramètres, horizon,
+  load shifting et transitions thermiques ; décomposition des coûts avec les
+  démarrages incluse. Les JSON sont écrits par remplacement atomique.
+- Les cas manquants, échoués ou endommagés sont relancés. Les fichiers invalides
+  sont conservés avec un suffixe .invalid-... ; les références valides restent
+  en place. Les résultats du pilote de 12 cas ne sont pas importés : le format
+  et le protocole complet de référence (dont la relaxation LP) diffèrent.
+- Un verrou temporaire OneDrive est réessayé ; s'il persiste, arrêt explicite
+  au lieu d'écraser une référence potentiellement valide.
+- Arrêt au premier échec ; code de sortie non nul remonté en PowerShell.
+  Journaux par scénario et par invocation d'analyse dans logs/. Etat et durées
+  des étapes dans state.json. La reprise complète contrôle les 600 checkpoints.
+- Après panne électrique, le temps depuis le dernier checkpoint n'est pas
+  récupérable exactement ; state.json enregistre les durées finalisées et les
+  échecs interceptés. Le scénario interrompu est recalculé.
+- Un changement de formulation, solveur ou scénario refuse le mélange de
+  références : utiliser un nouveau dossier. Un dossier sans manifeste mais
+  contenant des sorties n'est jamais automatiquement réutilisé.
+
+ANALYSE PREVUE
+- Recalcul de la criticité commune (alpha 0,5 et poids uniformes), stress,
+  hardness, chaque composante et hardness sans B1/B2/B3. Les indices d'entrée
+  et leurs formules ne sont pas modifiés ; les scores personas d'origine sont
+  reproduits avec leurs pondérations propres.
+- Deux audits comparables : anciennes références et références corrigées.
+  Aucune réutilisation des échecs ou gaps pipeline/JEPA historiques, obtenus
+  sous une autre formulation. Aucun appel aux anciens scripts de rapport
+  contenant des conclusions textuelles figées.
+- Réponses : ENS/demande, surproduction/demande, durée MILP plafonnée à 600 s,
+  arrêt à la limite de temps. Coûts nets et différences avant/après descriptifs.
+- Contrôles non linéaires de taille (zones, lignes, régions, actifs, estimations
+  des binaires/variables/contraintes, horizon), puis effets de famille.
+- Corrélations ajustées ; validation croisée 5 plis équilibrés par famille,
+  10 répétitions par défaut (-Repeats), famille entière exclue, références
+  optimales uniquement, taille réduite et scores non linéaires. Bootstrap
+  apparié des scénarios et correction BH des associations exploratoires.
+- Réponses constantes ou trop rares signalées explicitement ; aucune valeur
+  de performance inventée. Les cellules non estimables apparaissent NaN.
+- Le nom startup_allowed désigne l'ancien groupe non bloqué. L'appartenance
+  historique au groupe bloqué ne signifie pas qu'il l'est encore après correction.
+- ENS observée dans une optimisation économique != preuve de pénurie inévitable.
+  Les temps censurés ne deviennent pas des temps prouvés d'optimalité.
+  Les modèles statistiques exploratoires ne sont pas un réentraînement des
+  modèles HTE, JEPA ou Latent EBM.
+
+SORTIES
+analysis/rapport.html : synthèse dynamique, tableaux et graphiques PNG/SVG.
+analysis/paired_scenarios.csv : 600 comparaisons de coûts, ENS et temps.
+analysis/before/ et analysis/after/ : données par scénario, associations,
+  validation, prédictions hors échantillon, transfert par famille et résultats.
+analysis/outcome_support.csv et skipped_analyses.json : analyses non estimables.
+analysis/component_audit.csv : composantes constantes, saturées et normalisation.
+manifest.json, state.json, analysis_complete.json : provenance et reprise.

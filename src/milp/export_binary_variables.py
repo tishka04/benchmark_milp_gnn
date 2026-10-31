@@ -56,6 +56,10 @@ def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
             zone: [int(round(value(model.v_thermal_startup[zone, t]))) for t in periods]
             for zone in zones
         },
+        "w_thermal_shutdown": {
+            zone: [int(round(value(model.w_thermal_shutdown[zone, t]))) for t in periods]
+            for zone in zones
+        },
         # Nuclear is always ON (must-run baseload) - no commitment binaries
     }
     
@@ -164,6 +168,7 @@ def extract_all_variables(model, data: ScenarioData) -> Dict[str, Any]:
     # Metadata
     metadata = {
         "dr_formulation": DR_FORMULATION,
+        "thermal_formulation": model.thermal_formulation,
         "time_steps": [int(t) for t in periods],
         "time_hours": [float(t * data.dt_hours) for t in periods],
         "dt_hours": float(data.dt_hours),

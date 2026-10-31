@@ -67,6 +67,35 @@ try {
     if ($env:BENCHMARK_HIGHS_THREADS -ne "16" -or $env:OPENBLAS_NUM_THREADS -ne "7") {
         throw "Training environment leaked after failure"
     }
+    # Execute only the isolated stage-10 body, with all effects mocked above.
+    function Assert-Path([string]$Path) { }
+    $FailModule = $false
+    $EvalDir = "unused/evaluation/latent_k5"
+    $InferenceK = 5
+    $GlobalTimeBudgetSeconds = 120.0
+    $JepaTimeBudgetSeconds = 120.0
+    $TestFamilies = @("low_criticality_scenarios", "persona_network_operator_scenarios")
+    $stepTen = $null
+    foreach ($switchNode in $ast.FindAll({ param($node)
+        $node -is [Management.Automation.Language.SwitchStatementAst]
+    }, $true)) {
+        foreach ($clause in $switchNode.Clauses) {
+            if ($clause.Item1.Extent.Text -eq "10") { $stepTen = $clause.Item2 }
+        }
+    }
+    if ($null -eq $stepTen) { throw "Missing stage 10" }
+    $stepTenCode = [scriptblock]::Create(($stepTen.Statements | ForEach-Object { $_.Extent.Text }) -join "`n")
+    foreach ($resuming in @($false, $true)) {
+        $Resume = $resuming
+        $Calls = @()
+        $Archives = @()
+        & $stepTenCode
+        if ($Calls.Count -ne 1 -or $Calls[0].module -ne "scripts.run_strict_standard_inference") {
+            throw "Wrong stage-10 command"
+        }
+        if (($Calls[0].arguments -contains "--resume") -ne $resuming) { throw "Wrong standard resume flag" }
+        if (($Archives.Count -eq 0) -ne $resuming) { throw "Standard resume must preserve completed cases" }
+    }
     $State = [ordered]@{ stage_timings = @() }
     $RunId = "test"
     $ActiveStep = 2
@@ -81,7 +110,7 @@ try {
     if ($null -ne $StepTimer -or $State.stage_timings[0].elapsed_wall_seconds -lt 0) {
         throw "Invalid wall timer"
     }
-    Write-Host "PASS: launcher syntax, selective MILP resume, explicit fresh restart, 4x4 train / 1x16 test, environment restoration, failure propagation, stage timings."
+    Write-Host "PASS: launcher syntax, selective MILP and standard inference resume, explicit fresh restart, 4x4 train / 1x16 test, environment restoration, failure propagation, stage timings."
 } finally {
     foreach ($name in $previous.Keys) { [Environment]::SetEnvironmentVariable($name, $previous[$name], "Process") }
 }

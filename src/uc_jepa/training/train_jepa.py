@@ -22,6 +22,8 @@ Usage:
 """
 from __future__ import annotations
 
+from src.operational_exit.training_runtime import (TrainingRuntime, training_device, frozen_loaders, backward_step, save_training_checkpoint)
+
 from src.demand_response import DR_FORMULATION, require_current_formulation
 
 import argparse
@@ -86,6 +88,8 @@ def _seed_all(seed: int) -> None:
 # ---------------------------------------------------------------------------
 
 def _build_dataloaders(data_cfg: Dict) -> Tuple[DataLoader, DataLoader]:
+    if data_cfg.get("split_manifest"):
+        return frozen_loaders(data_cfg, include_dataset=False)
     dataset = UCLabelDataset(
         roots=data_cfg["roots"],
         families=data_cfg.get("families"),
@@ -622,11 +626,7 @@ def _epoch_pass(
                         mask_cache.append(mask_compact)
 
             if is_train:
-                optimizer.zero_grad(set_to_none=True)
-                total_loss.backward()
-                if grad_clip and grad_clip > 0:
-                    torch.nn.utils.clip_grad_norm_(predictor.parameters(), grad_clip)
-                optimizer.step()
+                backward_step(total_loss, optimizer, predictor.parameters(), grad_clip, u.shape[0], step, loader)
 
             B = u.shape[0]
             n_seen += B
@@ -689,7 +689,7 @@ def _save_ckpt(predictor: ScenarioToUCLatent, optim_: torch.optim.Optimizer,
     if thresholds is not None:
         cfg_dict.setdefault("eval", {})
         cfg_dict["eval"]["feature_thresholds"] = _threshold_dict(thresholds)
-    torch.save({
+    save_training_checkpoint({
         "dr_formulation": DR_FORMULATION,
         "model_state_dict": predictor.state_dict(),
         "optimizer_state_dict": optim_.state_dict(),
@@ -715,7 +715,7 @@ def _make_lr_lambda(warmup_epochs: int, total_epochs: int):
 
 def train(cfg: JEPATrainConfig, device: Optional[str] = None) -> Dict:
     _seed_all(int(cfg.data.get("seed", 42)))
-    dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    dev = training_device(cfg, device)
     print(f"Device: {dev}")
 
     train_loader, val_loader = _build_dataloaders(cfg.data)
@@ -879,13 +879,16 @@ def train(cfg: JEPATrainConfig, device: Optional[str] = None) -> Dict:
     bad_epochs = 0
     history: List[Dict] = []
 
-    for epoch in range(epochs):
-        tr = _epoch_pass(predictor, ae, train_loader, dev, optimizer, grad_clip,
+    runtime = TrainingRuntime(cfg, predictor, optimizer, scheduler, out_dir)
+    best_val, bad_epochs, history = runtime.values(best_val, bad_epochs, history)
+    thresholds = runtime.thresholds(thresholds)
+    for epoch in range(runtime.start_epoch, epochs):
+        tr = runtime.train_epoch(lambda epoch_loader: _epoch_pass(predictor, ae, epoch_loader, dev, optimizer, grad_clip,
                          epoch, True, log_every, w_mse, w_var, w_cov, gamma,
                          uc_weight, aux_weight, pos_weight, focal_gamma, thresholds, target_noise_std,
                          temporal_weight, temporal_feature_weights, decoded_feature_weights,
-                         aux_feature_weights, None)
-        va = _epoch_pass(predictor, ae, val_loader, dev, None, 0.0,
+                         aux_feature_weights, None), train_loader)
+        va = _epoch_pass(predictor, ae, runtime.loader(val_loader, shuffle=False), dev, None, 0.0,
                          epoch, False, 0, w_mse, w_var, w_cov, gamma,
                          uc_weight, aux_weight, pos_weight, focal_gamma, thresholds, 0.0,
                          temporal_weight, temporal_feature_weights, decoded_feature_weights,
@@ -922,7 +925,10 @@ def train(cfg: JEPATrainConfig, device: Optional[str] = None) -> Dict:
             bad_epochs += 1
             if bad_epochs >= patience:
                 print(f"  Early stopping at epoch {epoch+1} (no improvement for {patience} epochs).")
-                break
+
+        runtime.save(epoch, best_val, bad_epochs, history, thresholds)
+        if bad_epochs >= patience:
+            break
 
         if save_every > 0 and (epoch + 1) % save_every == 0:
             _save_ckpt(predictor, optimizer, epoch, va, cfg,

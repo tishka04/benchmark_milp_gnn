@@ -11,6 +11,7 @@ from pyomo.core import TransformationFactory
 from pyomo.opt import SolverStatus
 
 from .model import DR_FORMULATION, build_uc_model
+from src.thermal import THERMAL_FORMULATION
 from .scenario_loader import ScenarioData, load_scenario_data
 from .solver_resources import configure_highs_threads
 
@@ -304,7 +305,7 @@ def _apply_mip_warm_start(model, warm_start_data: Dict[str, Any] | None) -> int:
                     n_set += _set_warm_value(model.pumped_charge_mode, (zone, t), charge_mode, binary=True)
         if hasattr(model, "v_thermal_startup") and "v_thermal_startup" not in continuous_vars:
             for z_idx, zone in enumerate(zones):
-                prev_u = 0.0
+                prev_u = float(value(model.thermal_initial_on[zone]))
                 for t in periods:
                     current_u = 1.0 if binary_sample[z_idx, t, 6] >= 0.5 else 0.0
                     startup = 1.0 if current_u > prev_u else 0.0
@@ -315,7 +316,7 @@ def _apply_mip_warm_start(model, warm_start_data: Dict[str, Any] | None) -> int:
     u_thermal = get_2d("u_thermal")
     if u_thermal is not None and hasattr(model, "v_thermal_startup") and "v_thermal_startup" not in continuous_vars:
         for z_idx, zone in enumerate(zones):
-            prev_u = 0.0
+            prev_u = float(value(model.thermal_initial_on[zone]))
             for t in periods:
                 current_u = 1.0 if u_thermal[z_idx, t] >= 0.5 else 0.0
                 startup = 1.0 if current_u > prev_u else 0.0
@@ -566,6 +567,12 @@ def solve_scenario(
         wind_spill = {zone: [float(value(mip_model.spill_wind[zone, t])) for t in periods] for zone in zones}
         detail_payload = {
             "dr_formulation": DR_FORMULATION,
+            "thermal_formulation": THERMAL_FORMULATION,
+            "thermal_parameters": {
+                name: {z: float(value(getattr(mip_model, name)[z])) for z in zones}
+                for name in ("thermal_capacity", "thermal_min", "thermal_ramp", "thermal_initial",
+                             "thermal_initial_on", "thermal_startup_limit", "thermal_shutdown_limit")
+            },
             "time_steps": [int(t) for t in periods],
             "time_hours": [float(t * data.dt_hours) for t in periods],
             "dt_hours": float(data.dt_hours),
@@ -605,6 +612,7 @@ def solve_scenario(
             "pumped_charge_mode": {zone: [float(value(mip_model.pumped_charge_mode[zone, t])) for t in periods] for zone in zones},
             "thermal_commitment": {zone: [float(value(mip_model.u_thermal[zone, t])) for t in periods] for zone in zones},
             "thermal_startup": {zone: [float(value(mip_model.v_thermal_startup[zone, t])) for t in periods] for zone in zones},
+            "thermal_shutdown": {zone: [float(value(mip_model.w_thermal_shutdown[zone, t])) for t in periods] for zone in zones},
             # Nuclear is always ON (must-run baseload) - no commitment binaries
             "net_import": {"values": [float(value(mip_model.net_import[t])) for t in periods]},
             "net_export": {"values": [float(value(mip_model.net_export[t])) for t in periods]},
@@ -685,6 +693,7 @@ def solve_scenario(
     result = {
         "scenario_id": data.scenario_id,
         "dr_formulation": DR_FORMULATION,
+        "thermal_formulation": THERMAL_FORMULATION,
         "solver_resources": solver_resources,
         "mip": mip_summary,
         "lp": lp_summary,

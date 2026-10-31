@@ -26,6 +26,7 @@ Depuis la racine du dépôt :
 
 # Reprendre à la première étape inachevée, avec les paramètres sauvegardés
 # Si l'étape 2 est interrompue : conserver les MILP valides déjà terminés
+# Si l'étape 10 est interrompue : conserver les inférences déjà terminées
 .\scripts\run_load_shifting_pipeline.ps1 -Resume
 
 # Recommencer à la génération des embeddings, en conservant le HTE entraîné
@@ -165,6 +166,24 @@ protocole, utiliser de nouvelles sorties ou repartir des étapes correspondantes
 conserve ses groupes terminés. Le protocole `gpu_batch_cpu_repairs_v1` empêche
 de mélanger les anciennes expériences entièrement CPU avec celles sur GPU.
 
+Les checkpoints de l'étape 12 sont désormais vidés sur disque avant leur
+publication atomique, munis d'une empreinte de contrôle, et accompagnés d'une
+copie `.json.bak` de la sauvegarde précédente. Les verrous temporaires Windows
+sont retentés pendant au plus 2 s pour ces écritures/lectures du parent, hors
+fenêtre de décision. Un fichier JSON vide, rempli d'octets nuls, tronqué ou dont
+l'empreinte ne correspond plus est conservé sous un nom `.corrupt-...`. La
+reprise restaure la copie précédente si elle est valide ; sinon, seul le
+scénario concerné est recalculé. Les scénarios intacts et leurs échecs/timeout
+déjà mesurés sont conservés. Les sorties brutes des workers ne sont jamais
+récupérées après coup, faute de preuve de réception avant l'échéance.
+
+La révision précisément identifiée du lanceur antérieure à cette correction
+des sauvegardes est autorisée à la reprise. Tous les autres contrôles de
+compatibilité restent stricts. Le manifeste d'origine est conservé, les
+reprises sont tracées dans `resumes/`, et le calcul des candidats, leur sélection
+et leurs budgets restent identiques. Aucun résultat n'est recalculé par la
+seule installation de cette correction ; il faut lancer `-Resume`.
+
 ## Comparaison parallèle demandée dans le commentaire de Thibault
 
 Source : commentaire page 28, transcrit dans
@@ -291,13 +310,42 @@ L'étape 10 appelle `scripts/run_strict_standard_inference.py` :
   de détection dû à l'ordonnanceur sont mesurés séparément ; aucun résultat
   reçu après l'échéance n'est accepté. Le temps réel de la campagne comprend
   ce nettoyage et les écritures de résultats.
+- Un accès temporairement refusé par Windows à un snapshot ou au fichier
+  de fin est retenté dans la boucle de surveillance, pendant au plus 2 s
+  et toujours dans la fenêtre initiale de 120 s. Le dernier snapshot déjà
+  reçu reste disponible ; un snapshot plus ancien encore non lu peut aussi
+  être retenu pendant que le plus récent est verrouillé. La fin du worker
+  ne valide pas prématurément ce résultat ancien si le dernier reste à lire.
+  À l'échéance, aucun fichier supplémentaire n'est lu. Un refus persistant
+  au-delà des 2 s arrête explicitement la campagne ; les JSON corrompus et
+  les identités incohérentes restent des erreurs. `file_access_retries`
+  conserve le nombre de tentatives de lecture refusées dans les résultats.
 
 Le protocole standard est `strict_standard_separate_v1`. Pour une ancienne
 campagne arrêtée avant ou pendant l'étape 10, `-Resume` adopte ces nouveaux
 réglages (l'ancien budget nul devient 120 s). Si les anciennes inférences
 ont déjà été réalisées, repartir avec `-StartStep 10` ; aucun entraînement
-n'est nécessaire pour ce seul changement de protocole temporel. Comme avant,
-une interruption de l'étape 10 fait recommencer cette étape à la reprise.
+n'est nécessaire pour ce seul changement de protocole temporel.
+
+À l'étape 10, `-Resume` conserve maintenant les paires pipeline/JEPA présentes
+dans `cases/<famille>/<scénario>.json`, après contrôle du manifeste, des
+identités et des budgets. Un résultat infaisable ou un timeout déjà enregistré
+reste un résultat terminé : il n'est pas rééchantillonné à la reprise. Les
+scénarios manquants, dont celui interrompu par une erreur du worker, sont repris.
+Les données, modèles, paramètres et sources doivent être identiques ; seule
+la révision précisément identifiée du lanceur antérieure à cette correction
+des chemins/reprises est également acceptée. Le manifeste d'origine reste
+intact et chaque reprise enregistre sa provenance dans `resumes/`.
+
+Les nouveaux workers utilisent des chemins courts `jobs/0401/pipeline/a001/`
+(index du scénario dans le manifeste), afin d'éviter la limite Windows de
+260 caractères lors des exports de familles. Le nom complet et le scénario
+restent dans `job.json`. Chaque méthode terminée possède son propre checkpoint,
+ce qui permet aussi de garder le pipeline si JEPA plante ensuite. Les anciennes
+tentatives restent intactes ; les retries utilisent `a002/`, etc. Les snapshots
+d'une tentative interrompue sans checkpoint du parent ne sont jamais récupérés
+après coup, car leur réception avant l'échéance n'est plus vérifiable.
+`-StartStep 10` reste un redémarrage explicite complet avec archivage.
 
 Les budgets standard et JEPA ne modifient pas celui des étapes 12/13 :
 `-ParallelBudgetSeconds 120` reste une fenêtre commune au batch GPU et aux

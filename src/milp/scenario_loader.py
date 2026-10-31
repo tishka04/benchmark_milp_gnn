@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
 from uuid import UUID
@@ -129,6 +129,12 @@ class ScenarioData:
     # Recovery power cap = this factor * dr_limit[z,t]. Default preserves
     # construction of ScenarioData by callers using the original fields.
     dr_recovery_limit_factor: float = 1.0
+
+    # Optional MW-per-transition limits. Empty maps use the shared one-period
+    # startup/shutdown convention; initial status is inferred from initial MW.
+    thermal_startup_limit: Dict[str, float] = field(default_factory=dict)
+    thermal_shutdown_limit: Dict[str, float] = field(default_factory=dict)
+    thermal_initial_on: Dict[str, int] = field(default_factory=dict)
 
 
 _DEFAULT_ZONE_VARIANTS = {
@@ -828,5 +834,11 @@ def load_scenario_data(path: Path) -> ScenarioData:
         lines_from_index={k: tuple(v) for k, v in from_idx.items()},
         lines_to_index={k: tuple(v) for k, v in to_idx.items()},
         dr_recovery_limit_factor=dr_recovery_limit_factor,
+        thermal_startup_limit=(
+            {z: thermal_capacity[z] * float(tech["thermal_startup_limit_pct"]) for z in zones}
+            if "thermal_startup_limit_pct" in tech else {}),
+        thermal_shutdown_limit=(
+            {z: thermal_capacity[z] * float(tech["thermal_shutdown_limit_pct"]) for z in zones}
+            if "thermal_shutdown_limit_pct" in tech else {}),
     )
 

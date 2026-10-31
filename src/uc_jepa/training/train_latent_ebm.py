@@ -10,6 +10,8 @@ The EBM is optimized with a contrastive-divergence style loss so that
 """
 from __future__ import annotations
 
+from src.operational_exit.training_runtime import (TrainingRuntime, training_device, frozen_loaders, backward_step, save_training_checkpoint)
+
 from src.demand_response import DR_FORMULATION, require_current_formulation
 
 import argparse
@@ -73,6 +75,8 @@ def _load_config(path: str) -> LatentEBMTrainConfig:
 
 
 def _build_dataloaders(data_cfg: Dict[str, Any]) -> Tuple[DataLoader, DataLoader]:
+    if data_cfg.get("split_manifest"):
+        return frozen_loaders(data_cfg, include_dataset=False)
     dataset = UCLabelDataset(
         roots=data_cfg["roots"],
         families=data_cfg.get("families"),
@@ -321,7 +325,6 @@ def _epoch_pass(
         z_neg = z_neg_samples.squeeze(1)
 
         if is_train:
-            optimizer.zero_grad(set_to_none=True)
             e_pos = ebm(z_pos, z_anchor, h_scenario=h_scenario, zone_mask=zone_mask)
             e_neg = ebm(z_neg.detach(), z_anchor, h_scenario=h_scenario, zone_mask=zone_mask)
             loss, metrics = _contrastive_loss(
@@ -333,10 +336,7 @@ def _epoch_pass(
                 cd_clamp=cd_clamp,
                 rank_margin=rank_margin,
             )
-            loss.backward()
-            if grad_clip > 0:
-                torch.nn.utils.clip_grad_norm_(ebm.parameters(), grad_clip)
-            optimizer.step()
+            backward_step(loss, optimizer, ebm.parameters(), grad_clip, u_star.shape[0], step, loader)
         else:
             with torch.no_grad():
                 e_pos = ebm(z_pos, z_anchor, h_scenario=h_scenario, zone_mask=zone_mask)
@@ -435,7 +435,7 @@ def _save_ckpt(
     cfg_dict["model"]["scenario_dim"] = int(ebm.scenario_dim)
     cfg_dict.setdefault("eval", {})
     cfg_dict["eval"]["feature_thresholds"] = threshold_dict(thresholds, thresholds.numel())
-    torch.save(
+    save_training_checkpoint(
         {
             "dr_formulation": DR_FORMULATION,
             "model_state_dict": ebm.state_dict(),
@@ -457,7 +457,7 @@ def train(cfg: LatentEBMTrainConfig, device: Optional[str] = None) -> Dict[str, 
     seed = int(cfg.data.get("seed", 42))
     seed_all(seed)
 
-    dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+    dev = training_device(cfg, device)
     print(f"Device: {dev}")
     train_loader, val_loader = _build_dataloaders(cfg.data)
 
@@ -511,9 +511,13 @@ def train(cfg: LatentEBMTrainConfig, device: Optional[str] = None) -> Dict[str, 
     )
 
     print("Estimating latent prior from train positives...")
+    prior_loader = train_loader
+    if cfg.optim.get("operational"):
+        prior_loader = DataLoader(train_loader.dataset, batch_size=1, shuffle=False,
+                                  num_workers=0, collate_fn=train_loader.collate_fn)
     prior_mean, prior_std = estimate_latent_prior(
         ae=ae,
-        loader=train_loader,
+        loader=prior_loader,
         device=dev,
         max_batches=int(cfg.eval.get("prior_estimation_batches", 0)),
     )
@@ -574,13 +578,19 @@ def train(cfg: LatentEBMTrainConfig, device: Optional[str] = None) -> Dict[str, 
     bad_epochs = 0
     history: List[Dict[str, Any]] = []
 
-    for epoch in range(epochs):
-        train_metrics = _epoch_pass(
+    runtime = TrainingRuntime(cfg, ebm, optimizer, scheduler, output_dir)
+    best_val, bad_epochs, history = runtime.values(best_val, bad_epochs, history)
+    thresholds = runtime.thresholds(thresholds)
+    if runtime.active and runtime.state:
+        prior_mean = runtime.state["prior_mean"].to(dev)
+        prior_std = runtime.state["prior_std"].to(dev)
+    for epoch in range(runtime.start_epoch, epochs):
+        train_metrics = runtime.train_epoch(lambda epoch_loader: _epoch_pass(
             ebm=ebm,
             ae=ae,
             predictor=predictor,
             sampler=sampler,
-            loader=train_loader,
+            loader=epoch_loader,
             device=dev,
             optimizer=optimizer,
             grad_clip=grad_clip,
@@ -592,13 +602,13 @@ def train(cfg: LatentEBMTrainConfig, device: Optional[str] = None) -> Dict[str, 
             thresholds=thresholds,
             loss_cfg=cfg.loss,
             eval_cfg=cfg.eval,
-        )
+        ), train_loader)
         val_metrics = _epoch_pass(
             ebm=ebm,
             ae=ae,
             predictor=predictor,
             sampler=sampler,
-            loader=val_loader,
+            loader=runtime.loader(val_loader, shuffle=False),
             device=dev,
             optimizer=None,
             grad_clip=0.0,
@@ -653,7 +663,11 @@ def train(cfg: LatentEBMTrainConfig, device: Optional[str] = None) -> Dict[str, 
             bad_epochs += 1
             if bad_epochs >= patience:
                 print(f"  Early stopping at epoch {epoch+1} (patience={patience}).")
-                break
+
+        runtime.save(epoch, best_val, bad_epochs, history, thresholds,
+                     prior_mean=prior_mean, prior_std=prior_std)
+        if bad_epochs >= patience:
+            break
 
         if save_every > 0 and (epoch + 1) % save_every == 0:
             _save_ckpt(

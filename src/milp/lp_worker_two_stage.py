@@ -9,6 +9,7 @@
 # ==============================================================================
 
 from src.demand_response import DR_FORMULATION, shifting_metrics
+from src.thermal import THERMAL_FORMULATION, thermal_metrics
 
 import os
 import sys
@@ -54,6 +55,19 @@ class TwoStageResult:
     solve_time: float
     continuous_vars: Dict[str, np.ndarray]
     dr_formulation: str = DR_FORMULATION
+    thermal_formulation: str = THERMAL_FORMULATION
+
+    @property
+    def thermal_metrics(self):
+        v = self.continuous_vars
+        if not v:
+            return {"thermal_feasible": False}
+        return thermal_metrics(
+            v["p_thermal"], v["u_thermal"], v["v_thermal_startup"],
+            capacity=v["thermal_capacity"], minimum=v["thermal_min"], ramp=v["thermal_ramp"],
+            startup_limit=v["thermal_startup_limit"], shutdown_limit=v["thermal_shutdown_limit"],
+            initial_power=v["thermal_initial"], initial_on=v["thermal_initial_on"],
+        )
 
     @property
     def dr_metrics(self):
@@ -536,7 +550,7 @@ class LPWorkerTwoStage:
             'pumped_charge', 'pumped_discharge', 'pumped_level',
             'h_release', 'h_level', 'h_spill', 'dr_shed', 'dr_recover', 'dr_rebound',
             'unserved', 'spill_solar', 'spill_wind', 'overgen_spill',
-            'u_thermal', 'v_thermal_startup',
+            'u_thermal', 'v_thermal_startup', 'w_thermal_shutdown',
             'b_charge_mode', 'pumped_charge_mode', 'dr_active',
         ]
         
@@ -563,6 +577,9 @@ class LPWorkerTwoStage:
             solution[name] = extract_2d(getattr(model, name))
         solution["dr_max_active_periods"] = np.array([value(model.dr_max_events[z]) for z in zones])
         solution["dr_ramp"] = np.array([value(model.dr_ramp_limit[z]) for z in zones])
+        for name in ("thermal_capacity", "thermal_min", "thermal_ramp", "thermal_initial",
+                     "thermal_initial_on", "thermal_startup_limit", "thermal_shutdown_limit"):
+            solution[name] = np.array([value(getattr(model, name)[z]) for z in zones])
 
         # Also extract hydro_ror parameter (fixed input, not a variable)
         if hasattr(model, 'hydro_ror'):
@@ -1158,17 +1175,16 @@ class LPWorkerTwoStage:
                 except:
                     pass
         
-        # v_thermal_startup (Z, T indexed) - not in original targets, add from model
+        # Derive startups from the ROUNDED commitments, not by independently
+        # rounding relaxed startup values (which can contradict those states).
         if hasattr(model, 'v_thermal_startup'):
             rounded['v_thermal_startup'] = {}
             for z in model.Z:
+                previous = value(model.thermal_initial_on[z])
                 for t in model.T:
-                    if (z, t) in model.v_thermal_startup:
-                        try:
-                            u = value(model.v_thermal_startup[z, t])
-                            rounded['v_thermal_startup'][(z, t)] = 1.0 if (u is not None and u >= 0.5) else 0.0
-                        except:
-                            rounded['v_thermal_startup'][(z, t)] = 0.0
+                    current = rounded['u_thermal'][(z, t)]
+                    rounded['v_thermal_startup'][(z, t)] = float(current > previous)
+                    previous = current
         
         # import_mode (T indexed only, not zone-indexed)
         if hasattr(model, 'import_mode'):

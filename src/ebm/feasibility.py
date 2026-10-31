@@ -11,6 +11,10 @@
 from __future__ import annotations
 
 from src.demand_response import DR_FORMULATION, physics_dr_schedule, shifting_metrics
+from src.thermal import (
+    THERMAL_FORMULATION, thermal_limits, scenario_thermal_limits,
+    dispatch_bounds, project_dispatch,
+)
 
 import os
 import json
@@ -88,6 +92,9 @@ class ScenarioPhysics:
     thermal_cost_per_mwh: Optional[torch.Tensor] = None
     thermal_ramp_mw: Optional[torch.Tensor] = None
     thermal_initial_output: Optional[torch.Tensor] = None
+    thermal_initial_on: Optional[torch.Tensor] = None
+    thermal_startup_limit_mw: Optional[torch.Tensor] = None
+    thermal_shutdown_limit_mw: Optional[torch.Tensor] = None
 
 
 @dataclass
@@ -129,6 +136,8 @@ class FeasiblePlan:
     dr_recover: Optional[torch.Tensor] = None  # [Z,T], MW
     dr_rebound: Optional[torch.Tensor] = None  # [Z,T], end-period MWh
     dr_formulation: str = DR_FORMULATION
+    thermal_formulation: str = THERMAL_FORMULATION
+    thermal_initial_on: Optional[torch.Tensor] = None
 
     @property
     def demand_response_net(self):
@@ -148,12 +157,31 @@ class FeasiblePlan:
         # Feature 5: thermal start-up (off→on transition)
         for t in range(T):
             if t == 0:
-                u[:, t, 5] = self.thermal_on[:, t]  # on at t=0 counts as start-up
+                previous = self.thermal_initial_on if self.thermal_initial_on is not None else torch.zeros(Z)
+                u[:, t, 5] = ((self.thermal_on[:, t] == 1.0) & (previous == 0.0)).float()
             else:
                 u[:, t, 5] = ((self.thermal_on[:, t] == 1.0) &
                               (self.thermal_on[:, t - 1] == 0.0)).float()
         u[:, :, 6] = self.thermal_on
         return u
+
+
+def _thermal_units(p):
+    """Use the exact same transition parameters as the UC/repair model."""
+    def item(name, z, fallback):
+        values = getattr(p, name)
+        return fallback if values is None else float(values[z])
+    units = []
+    for z in range(p.n_zones):
+        cap = item("thermal_capacity_mw", z, 0.0)
+        units.append(thermal_limits(
+            cap, item("thermal_min_mw", z, .45 * cap),
+            item("thermal_ramp_mw", z, cap), item("thermal_initial_output", z, 0.0),
+            startup=item("thermal_startup_limit_mw", z, None),
+            shutdown=item("thermal_shutdown_limit_mw", z, None),
+            initial_on=item("thermal_initial_on", z, None),
+        ))
+    return units
 
 
 class HierarchicalFeasibilityDecoder:
@@ -220,7 +248,6 @@ class HierarchicalFeasibilityDecoder:
         pump_power = p.pumped_power_mw if p.pumped_power_mw is not None else torch.zeros(Z)
         pump_cap = p.pumped_capacity_mwh if p.pumped_capacity_mwh is not None else torch.zeros(Z)
         therm_cap = p.thermal_capacity_mw if p.thermal_capacity_mw is not None else torch.zeros(Z)
-        therm_min = p.thermal_min_mw if p.thermal_min_mw is not None else therm_cap * 0.3
         nuc_cap = p.nuclear_capacity_mw if p.nuclear_capacity_mw is not None else torch.zeros(Z)
         hydro_cap_mw = p.hydro_capacity_mw if p.hydro_capacity_mw is not None else torch.zeros(Z)
         hydro_cap_mwh = p.hydro_capacity_mwh if p.hydro_capacity_mwh is not None else torch.zeros(Z)
@@ -236,11 +263,9 @@ class HierarchicalFeasibilityDecoder:
         batt_ret = p.battery_retention_rate
         pump_ret = p.pumped_retention_rate
 
-        # ── Thermal dynamics (Fix #5, #6) ──
-        therm_ramp = p.thermal_ramp_mw if p.thermal_ramp_mw is not None else therm_cap.clone()
-        # If ramp is 0 for zones WITH thermal capacity, use capacity as fallback (unrestricted)
-        therm_ramp = torch.where((therm_ramp < 1e-6) & (therm_cap > 0), therm_cap, therm_ramp)
-        prev_therm_disp = p.thermal_initial_output.clone() if p.thermal_initial_output is not None else torch.zeros(Z)
+        units = _thermal_units(p)
+        prev_therm_disp = torch.tensor([x.initial_power for x in units])
+        prev_therm_on = torch.tensor([x.initial_on for x in units])
 
         # ── Anchor zone for export (Fix #3) ──
         anchor_z = p.import_anchor_zone_idx
@@ -309,6 +334,15 @@ class HierarchicalFeasibilityDecoder:
 
             residual = demand_t.clone()
 
+            # Above the shutdown limit, the unit must remain online and ramp
+            # down even if the candidate asks for OFF or there is no demand.
+            for z, unit in enumerate(units):
+                lower, _, can_stop = dispatch_bounds(unit, float(prev_therm_disp[z]), bool(prev_therm_on[z]))
+                if not can_stop:
+                    thermal_dispatch[z, t] = lower
+                    thermal_on[z, t] = 1.0
+                    residual[z] -= lower
+
             # ── PHASE 1: MUST-RUN AND FREE RESOURCES ──
             nuc_dispatch_t = nuc_must_run.clone()
             nuclear_dispatch[:, t] = nuc_dispatch_t
@@ -368,18 +402,13 @@ class HierarchicalFeasibilityDecoder:
 
                 # --- EBM-guided thermal (with ramp limits - Fix #5, #6) ---
                 if ebm_therm[z, t] and therm_cap[z] > 0:
-                    ramp_up_max = prev_therm_disp[z].item() + therm_ramp[z].item()
-                    if prev_therm_disp[z].item() < 1e-6:
-                        max_disp = min(therm_cap[z].item(), max(ramp_up_max, therm_min[z].item()))
-                    else:
-                        max_disp = min(therm_cap[z].item(), ramp_up_max)
-                    dispatch = min(max_disp, residual[z].item())
-                    if 0 < dispatch < therm_min[z].item():
-                        dispatch = min(therm_min[z].item(), max_disp)
+                    previous_dispatch = float(thermal_dispatch[z, t])
+                    dispatch, _ = project_dispatch(units[z], float(prev_therm_disp[z]), bool(prev_therm_on[z]),
+                                                   previous_dispatch + float(residual[z]), True)
                     if dispatch > 0:
                         thermal_dispatch[z, t] = dispatch
                         thermal_on[z, t] = 1.0
-                        residual[z] -= dispatch
+                        residual[z] -= dispatch - previous_dispatch
                 if residual[z] <= 0:
                     continue
 
@@ -407,14 +436,8 @@ class HierarchicalFeasibilityDecoder:
                     continue
 
                 if thermal_dispatch[z, t] == 0 and therm_cap[z] > 0:
-                    ramp_up_max = prev_therm_disp[z].item() + therm_ramp[z].item()
-                    if prev_therm_disp[z].item() < 1e-6:
-                        max_disp = min(therm_cap[z].item(), max(ramp_up_max, therm_min[z].item()))
-                    else:
-                        max_disp = min(therm_cap[z].item(), ramp_up_max)
-                    dispatch = min(max_disp, residual[z].item())
-                    if 0 < dispatch < therm_min[z].item():
-                        dispatch = min(therm_min[z].item(), max_disp)
+                    dispatch, _ = project_dispatch(units[z], float(prev_therm_disp[z]), bool(prev_therm_on[z]),
+                                                   float(residual[z]), True)
                     if dispatch > 0:
                         thermal_dispatch[z, t] = dispatch
                         thermal_on[z, t] = 1.0
@@ -454,8 +477,9 @@ class HierarchicalFeasibilityDecoder:
                 # Reduce thermal (ramp-down aware - Fix #6)
                 therm_running = thermal_dispatch[z, t].item()
                 if therm_running > 0:
-                    ramp_dn_floor = max(prev_therm_disp[z].item() - therm_ramp[z].item(), 0)
-                    min_disp = max(therm_min[z].item(), ramp_dn_floor) if thermal_on[z, t] > 0 else 0
+                    min_disp, _, can_stop = dispatch_bounds(units[z], float(prev_therm_disp[z]), bool(prev_therm_on[z]))
+                    if can_stop and surplus[z] >= therm_running:
+                        min_disp = 0.0
                     reduce = min(therm_running - min_disp, surplus[z].item())
                     if reduce > 0:
                         thermal_dispatch[z, t] -= reduce
@@ -548,11 +572,13 @@ class HierarchicalFeasibilityDecoder:
 
             # Update thermal tracking for next timestep (Fix #5, #6)
             prev_therm_disp = thermal_dispatch[:, t].clone()
+            prev_therm_on = thermal_on[:, t].clone()
 
             battery_soc[:, t + 1] = b_soc.clone()
             pumped_level[:, t + 1] = p_level.clone()
 
         return FeasiblePlan(
+            thermal_initial_on=torch.tensor([x.initial_on for x in units]),
             thermal_on=thermal_on,
             nuclear_on=nuclear_on,
             battery_charging=battery_charging,
@@ -613,7 +639,6 @@ class HierarchicalFeasibilityDecoder:
         pump_power = p.pumped_power_mw if p.pumped_power_mw is not None else torch.zeros(Z)
         pump_cap = p.pumped_capacity_mwh if p.pumped_capacity_mwh is not None else torch.zeros(Z)
         therm_cap = p.thermal_capacity_mw if p.thermal_capacity_mw is not None else torch.zeros(Z)
-        therm_min = p.thermal_min_mw if p.thermal_min_mw is not None else therm_cap * 0.3
         nuc_cap = p.nuclear_capacity_mw if p.nuclear_capacity_mw is not None else torch.zeros(Z)
         hydro_cap_mw = p.hydro_capacity_mw if p.hydro_capacity_mw is not None else torch.zeros(Z)
         hydro_cap_mwh = p.hydro_capacity_mwh if p.hydro_capacity_mwh is not None else torch.zeros(Z)
@@ -629,10 +654,9 @@ class HierarchicalFeasibilityDecoder:
         batt_ret = p.battery_retention_rate
         pump_ret = p.pumped_retention_rate
 
-        # ── Thermal ramp ──
-        therm_ramp = p.thermal_ramp_mw if p.thermal_ramp_mw is not None else therm_cap.clone()
-        therm_ramp = torch.where((therm_ramp < 1e-6) & (therm_cap > 0), therm_cap, therm_ramp)
-        prev_therm_disp = p.thermal_initial_output.clone() if p.thermal_initial_output is not None else torch.zeros(Z)
+        units = _thermal_units(p)
+        prev_therm_disp = torch.tensor([x.initial_power for x in units])
+        prev_therm_on = torch.tensor([x.initial_on for x in units])
 
         anchor_z = p.import_anchor_zone_idx
 
@@ -700,6 +724,13 @@ class HierarchicalFeasibilityDecoder:
 
             residual = demand_t.clone()
 
+            for z, unit in enumerate(units):
+                lower, _, can_stop = dispatch_bounds(unit, float(prev_therm_disp[z]), bool(prev_therm_on[z]))
+                if not can_stop:
+                    thermal_dispatch[z, t] = lower
+                    thermal_on[z, t] = 1.0
+                    residual[z] -= lower
+
             # ── PHASE 1: Must-run (same as decode) ──
             nuc_dispatch_t = nuc_must_run.clone()
             nuclear_dispatch[:, t] = nuc_dispatch_t
@@ -748,19 +779,14 @@ class HierarchicalFeasibilityDecoder:
                         residual[z] -= dis
 
                 # Thermal - ONLY if EBM says ON (with ramp limits)
-                if ebm_therm[z, t] and therm_cap[z] > 0:
-                    ramp_up_max = prev_therm_disp[z].item() + therm_ramp[z].item()
-                    if prev_therm_disp[z].item() < 1e-6:
-                        max_disp = min(therm_cap[z].item(), max(ramp_up_max, therm_min[z].item()))
-                    else:
-                        max_disp = min(therm_cap[z].item(), ramp_up_max)
-                    dispatch = min(max_disp, max(residual[z].item(), 0))
-                    if 0 < dispatch < therm_min[z].item():
-                        dispatch = min(therm_min[z].item(), max_disp)
+                if ebm_therm[z, t] and therm_cap[z] > 0 and residual[z] > 0:
+                    previous_dispatch = float(thermal_dispatch[z, t])
+                    dispatch, _ = project_dispatch(units[z], float(prev_therm_disp[z]), bool(prev_therm_on[z]),
+                                                   previous_dispatch + float(residual[z]), True)
                     if dispatch > 0:
                         thermal_dispatch[z, t] = dispatch
                         thermal_on[z, t] = 1.0
-                        residual[z] -= dispatch
+                        residual[z] -= dispatch - previous_dispatch
 
                 # Import
                 if residual[z] > 0 and import_cap > 0:
@@ -790,8 +816,9 @@ class HierarchicalFeasibilityDecoder:
                 # Reduce thermal (ramp-aware)
                 therm_running = thermal_dispatch[z, t].item()
                 if therm_running > 0:
-                    ramp_dn_floor = max(prev_therm_disp[z].item() - therm_ramp[z].item(), 0)
-                    min_disp = max(therm_min[z].item(), ramp_dn_floor) if thermal_on[z, t] > 0 else 0
+                    min_disp, _, can_stop = dispatch_bounds(units[z], float(prev_therm_disp[z]), bool(prev_therm_on[z]))
+                    if can_stop and surplus[z] >= therm_running:
+                        min_disp = 0.0
                     reduce = min(therm_running - min_disp, surplus[z].item())
                     if reduce > 0:
                         thermal_dispatch[z, t] -= reduce
@@ -853,10 +880,12 @@ class HierarchicalFeasibilityDecoder:
                     surplus[z] = 0
 
             prev_therm_disp = thermal_dispatch[:, t].clone()
+            prev_therm_on = thermal_on[:, t].clone()
             battery_soc[:, t + 1] = b_soc.clone()
             pumped_level[:, t + 1] = p_level.clone()
 
         return FeasiblePlan(
+            thermal_initial_on=torch.tensor([x.initial_on for x in units]),
             thermal_on=thermal_on,
             nuclear_on=nuclear_on,
             battery_charging=battery_charging,
@@ -931,6 +960,7 @@ def load_physics_from_scenario(
                 hydro_ror_ts[z_idx, t_idx] = data.hydro_ror_generation.get((zone, t_idx), 0.0)
                 hydro_inflow_ts[z_idx, t_idx] = data.hydro_inflow_power.get((zone, t_idx), 0.0)
 
+        thermal_units = scenario_thermal_limits(data)
         thermal_capacity = torch.tensor(
             [data.thermal_capacity.get(z, 0.0) for z in zones], dtype=torch.float32
         )
@@ -1053,6 +1083,9 @@ def load_physics_from_scenario(
             thermal_initial_output=torch.tensor(
                 [data.thermal_initial_output.get(z, 0.0) for z in zones], dtype=torch.float32
             ),
+            thermal_initial_on=torch.tensor([thermal_units[z].initial_on for z in zones]),
+            thermal_startup_limit_mw=torch.tensor([thermal_units[z].startup for z in zones]),
+            thermal_shutdown_limit_mw=torch.tensor([thermal_units[z].shutdown for z in zones]),
         )
 
     except ImportError:

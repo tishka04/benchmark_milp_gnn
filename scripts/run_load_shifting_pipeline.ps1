@@ -6,6 +6,7 @@ Rebuild the load-shifting HTE / UC-JEPA / latent EBM benchmark, in order.
 Run from any directory. -ListSteps only displays the plan.
 -Resume resumes at the first unfinished step saved in _pipeline/state.json.
 Within step 2, completed compatible MILP reports are retained per scenario.
+Within step 10, completed compatible inference pairs/methods are retained.
 -StartStep N explicitly restarts at N; -EndStep N stops after N.
 Training restarts from epoch 1 within an interrupted training step.
 Replaced stage outputs are archived, never silently mixed with a previous fit.
@@ -556,13 +557,15 @@ try {
             }
             10 {
                 Assert-Path "$R/uc_jepa/latent_ebm/latent_ebm_best.pt"
-                Archive-Output $EvalDir
-                Invoke-Module "scripts.run_strict_standard_inference" (@(
+                if (-not $Resume) { Archive-Output $EvalDir }
+                $standardArguments = @(
                     "--root", $R, "--output-dir", $EvalDir,
                     "--k", "$InferenceK", "--threads", "$HighsThreads",
                     "--budget", $GlobalTimeBudgetSeconds.ToString([Globalization.CultureInfo]::InvariantCulture),
                     "--jepa-budget", $JepaTimeBudgetSeconds.ToString([Globalization.CultureInfo]::InvariantCulture),
-                    "--families") + $TestFamilies)
+                    "--families") + $TestFamilies
+                if ($Resume) { $standardArguments += "--resume" }
+                Invoke-Module "scripts.run_strict_standard_inference" $standardArguments
             }
             11 {
                 Assert-Path "$EvalDir/pipeline_eval_all_families.pkl"

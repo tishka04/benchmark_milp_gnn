@@ -31,6 +31,12 @@ PROTOCOL = "gpu_batch_cpu_repairs_v1"
 DEFAULT_K_VALUES = (1, 2, 5, 8, 12, 16)
 THREAD_ENV = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
               "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS")
+# Audited predecessor: only parent checkpoint I/O and resume checks change.
+# Worker computation, candidate selection and deadline handling are unchanged.
+RUNNER_SOURCE = "scripts/benchmark_parallel_best_of_k.py"
+COMPATIBLE_RUNNER_HASHES = {
+    "c87f022780249427c9a5ff8ab2517284c98f8f5927bcdf09f79e74e55a49ed16",
+}
 
 
 def atomic_json(path, payload):
@@ -47,6 +53,135 @@ def sha256(path):
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_resume_manifest(previous, current):
+    if previous == current:
+        return
+    old, new = dict(previous), dict(current)
+    old_sources = dict(old.pop("source_sha256", {}))
+    new_sources = dict(new.pop("source_sha256", {}))
+    old_runner = old_sources.pop(RUNNER_SOURCE, None)
+    new_sources.pop(RUNNER_SOURCE, None)
+    if (old != new or old_sources != new_sources
+            or old_runner not in COMPATIBLE_RUNNER_HASHES):
+        raise ValueError("Existing benchmark differs: inputs, sources or settings changed; "
+                         "use a fresh output directory")
+
+
+def checkpoint_io(operation):
+    """Retry transient Windows locks, outside experiment decision budgets."""
+    deadline = time.monotonic() + 2.0
+    while True:
+        try:
+            return operation()
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(min(0.05, max(0.0, deadline - time.monotonic())))
+
+
+def durable_checkpoint(path, data):
+    """Flush a unique temporary file to disk before publishing the checkpoint."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.tmp")
+    with temp.open("xb") as stream:
+        stream.write(data)
+        stream.flush()
+        os.fsync(stream.fileno())
+    checkpoint_io(lambda: temp.replace(path))
+
+
+class CorruptCheckpoint(ValueError):
+    pass
+
+
+def record_checksum(record):
+    payload = {key: value for key, value in record.items() if key != "checkpoint_sha256"}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, allow_nan=True).encode("utf-8")).hexdigest()
+
+
+def validate_record(record, item, budget, k_values):
+    """Keep completed infeasible/time-limit outcomes; reject incompatible data."""
+    if (not isinstance(record, dict) or any(record.get(k) != v for k, v in item.items())
+            or record.get("dr_formulation") != FORMULATION
+            or not isinstance(record.get("runs"), dict)
+            or not set(record["runs"]).issubset({str(k) for k in k_values})):
+        raise ValueError("Checkpoint scenario, formulation or K grid mismatch")
+    outcomes = list(record["runs"].values())
+    if "milp" in record:
+        outcomes.append(record["milp"])
+    for result in outcomes:
+        if (not isinstance(result, dict) or result.get("complete") is not True
+                or type(result.get("feasible")) is not bool):
+            raise ValueError("Invalid completed comparison checkpoint")
+        for name in ("decision_wall_s", "cleanup_wall_s"):
+            value = result.get(name)
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                raise ValueError(f"Invalid checkpoint timing: {name}")
+        if result["decision_wall_s"] > budget:
+            raise ValueError("Checkpoint decision exceeds its budget")
+        objective = result.get("objective")
+        if (not isinstance(objective, (int, float))
+                or (result["feasible"] and not math.isfinite(objective))):
+            raise ValueError("Invalid checkpoint objective")
+
+
+def read_record(path, item, budget, k_values):
+    raw = checkpoint_io(lambda: Path(path).read_bytes())
+    try:
+        record = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeError) as exc:
+        raise CorruptCheckpoint(f"Unreadable JSON checkpoint: {path}") from exc
+    if (isinstance(record, dict) and "checkpoint_sha256" in record
+            and record["checkpoint_sha256"] != record_checksum(record)):
+        raise CorruptCheckpoint(f"Checkpoint checksum mismatch: {path}")
+    validate_record(record, item, budget, k_values)
+    return record, raw
+
+
+def load_record(path, item, budget, k_values):
+    """Recover only parent checkpoints, never raw workers received after a crash."""
+    path = Path(path)
+    damaged = []
+    try:
+        return read_record(path, item, budget, k_values)[0]
+    except FileNotFoundError:
+        pass
+    except CorruptCheckpoint:
+        damaged.append(path)
+    backup = path.with_suffix(path.suffix + ".bak")
+    try:
+        record, raw = read_record(backup, item, budget, k_values)
+    except FileNotFoundError:
+        record = None
+    except CorruptCheckpoint:
+        damaged.append(backup)
+        record = None
+    for source in damaged:
+        archive = source.with_name(f"{source.name}.corrupt-{uuid.uuid4().hex[:8]}")
+        checkpoint_io(lambda: source.rename(archive))
+        print(f"Corrupt checkpoint preserved: {archive}", flush=True)
+    if record is not None:
+        durable_checkpoint(path, raw)
+        print(f"Restored previous parent checkpoint: {path}", flush=True)
+    elif damaged:
+        print(f"No valid parent backup; recomputing only {item['family']}/{item['scenario_id']}", flush=True)
+    return record
+
+
+def save_record(path, record, item, budget, k_values):
+    validate_record(record, item, budget, k_values)
+    path = Path(path)
+    try:
+        _, previous = read_record(path, item, budget, k_values)
+    except FileNotFoundError:
+        pass
+    else:
+        durable_checkpoint(path.with_suffix(path.suffix + ".bak"), previous)
+    payload = dict(record, checkpoint_sha256=record_checksum(record))
+    durable_checkpoint(path, json.dumps(payload, indent=2, allow_nan=True).encode("utf-8"))
 
 
 def parse_k_values(text, threads):
@@ -438,16 +573,30 @@ def run_benchmark(args):
     manifest = make_manifest(root, args.families, args.threads, args.budget, k_values)
     manifest_path = out / "manifest.json"
     if manifest_path.exists():
-        old = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if old != manifest or not args.resume:
+        old = json.loads(checkpoint_io(lambda: manifest_path.read_text(encoding="utf-8")))
+        if not args.resume:
             raise ValueError("Existing benchmark differs or --resume is missing; use a fresh output directory")
-    atomic_json(manifest_path, manifest)
-    for item in manifest["cohort"]:
+        validate_resume_manifest(old, manifest)
+        # Preserve the original provenance; record each resume separately.
+        durable_checkpoint(out / "resumes" / f"{uuid.uuid4().hex[:12]}.json",
+                           json.dumps(manifest, indent=2).encode("utf-8"))
+    else:
+        if any((out / "cases").rglob("*.json")):
+            raise ValueError("Case checkpoints exist without their provenance manifest")
+        durable_checkpoint(manifest_path, json.dumps(manifest, indent=2).encode("utf-8"))
+    # Inspect every parent checkpoint before starting any expensive worker.
+    saved = [load_record(out / "cases" / item["family"] / f"{item['scenario_id']}.json",
+                         item, args.budget, k_values) for item in manifest["cohort"]]
+    completed = sum(record is not None and "milp" in record
+                    and all(str(k) in record["runs"] for k in k_values) for record in saved)
+    print(f"Reusing {completed}/{len(saved)} fully completed scenarios", flush=True)
+    for item, record in zip(manifest["cohort"], saved):
         family, sid = item["family"], item["scenario_id"]
         record_path = out / "cases" / family / f"{sid}.json"
-        record = json.loads(record_path.read_text(encoding="utf-8")) if record_path.exists() else {
-            **item, "dr_formulation": FORMULATION, "runs": {},
-        }
+        if record is not None and "milp" in record and all(str(k) in record["runs"] for k in k_values):
+            continue
+        if record is None:
+            record = {**item, "dr_formulation": FORMULATION, "runs": {}}
         report = json.loads((root / family / "reports" / f"{sid}.json").read_text(encoding="utf-8"))
         if report.get("dr_formulation", (report.get("detail") or {}).get("dr_formulation")) != FORMULATION:
             raise ValueError(f"Legacy MILP reference: {family}/{sid}")
@@ -465,7 +614,7 @@ def run_benchmark(args):
                 [dict(common, kind="milp", threads=args.threads, seed=base_seed)],
                 out / "jobs" / family / sid / "milp", args.budget,
             )
-            atomic_json(record_path, record)
+            save_record(record_path, record, item, args.budget, k_values)
         for k in k_values:
             if str(k) in record["runs"]:
                 continue
@@ -473,7 +622,7 @@ def run_benchmark(args):
             record["runs"][str(k)] = run_gpu_portfolio(
                 common, k, base_seed, out / "jobs" / family / sid / f"k{k}", args.budget,
             )
-            atomic_json(record_path, record)
+            save_record(record_path, record, item, args.budget, k_values)
 
 
 def gap_percent(objective, reference):
