@@ -111,8 +111,66 @@ def schedule(manifest, extra=False):
                                    seed=seed_for(c["key"], repetition))
 
 
-def assert_unchanged(manifest):
-    if manifest["sources"] != source_signature() or manifest["versions"] != versions():
+def hte_runtime_sources(manifest, out=None):
+    from .common import load_record
+    from .hte_compatibility import AMENDMENT_NAME, AMENDMENT_KIND, CONTRACT_NAME, check_repair_sources
+    amendment = load_record(Path(out) / AMENDMENT_NAME) if out is not None else None
+    if amendment is None:
+        return manifest["sources"]
+    if (not amendment.get("complete") or amendment.get("kind") != AMENDMENT_KIND
+            or amendment.get("manifest_hash") != digest(manifest)):
+        raise ValueError("Code/configuration changed without a compatible runtime amendment")
+    expected = amendment["sources"]
+    if (check_repair_sources(manifest, expected) != amendment.get("changed_sources")
+            or sha(Path(out) / CONTRACT_NAME) != amendment.get("feature_contract_sha256")):
+        raise ValueError("HTE runtime amendment/feature contract changed")
+    return expected
+
+
+def effective_sources(manifest, out=None, *, check_artifacts=False):
+    return verify_source_history(manifest, out, source_signature(), check_artifacts=check_artifacts)
+
+
+def verify_source_history(manifest, out, current, *, check_artifacts=False):
+    """Verify an observed source map, or a recorded predecessor during amendment."""
+    if current == manifest["sources"]:
+        return current
+    expected = hte_runtime_sources(manifest, out)
+    if current != expected:
+        from .common import load_record
+        from .pilot_io_repair import verify_repair, RECEIPT_NAME
+        receipt = load_record(Path(out) / RECEIPT_NAME) if out is not None else None
+        io_sources = receipt["sources"] if receipt else current
+        verify_repair(manifest, out, expected, io_sources, check_artifacts=check_artifacts)
+        if current != io_sources:
+            from .repair_integrality import verify_repair as verify_integrality, RECEIPT_NAME as INTEGER_RECEIPT
+            integer_receipt = load_record(Path(out) / INTEGER_RECEIPT)
+            integer_sources = integer_receipt["sources"] if integer_receipt else current
+            verify_integrality(manifest, out, io_sources, integer_sources, check_artifacts=check_artifacts)
+            if current != integer_sources:
+                from .repair_structural_fixes import verify_repair as verify_structural, RECEIPT_NAME as STRUCTURAL_RECEIPT
+                structural_receipt = load_record(Path(out) / STRUCTURAL_RECEIPT)
+                structural_sources = structural_receipt["sources"] if structural_receipt else current
+                verify_structural(manifest, out, integer_sources, structural_sources, check_artifacts=check_artifacts)
+                if current != structural_sources:
+                    from .solution_transfer_repair import verify_repair as verify_transfer, RECEIPT_NAME as TRANSFER_RECEIPT
+                    transfer_receipt = load_record(Path(out) / TRANSFER_RECEIPT)
+                    transfer_sources = transfer_receipt["sources"] if transfer_receipt else current
+                    verify_transfer(manifest, out, structural_sources, transfer_sources, check_artifacts=check_artifacts)
+                    if current != transfer_sources:
+                        from .calibration_outcomes import verify_policy, RECEIPT_NAME as OUTCOME_RECEIPT
+                        outcome_receipt = load_record(Path(out) / OUTCOME_RECEIPT)
+                        outcome_sources = outcome_receipt["sources"] if outcome_receipt else current
+                        verify_policy(manifest, out, transfer_sources, outcome_sources, check_artifacts=check_artifacts)
+                        if current != outcome_sources:
+                            from .budget_reserve import verify_policy as verify_reserve
+                            verify_reserve(manifest, out, outcome_sources, current, check_artifacts=check_artifacts)
+    return current
+
+
+def assert_unchanged(manifest, out=None):
+    effective_sources(manifest, out, check_artifacts=True)
+    if manifest["versions"] != versions():
         raise ValueError("Code/configuration/runtime changed: use a new output directory")
     for c in manifest["train"] + manifest["cohort"]:
         if sha(c["file"]) != c["scenario_sha256"]:

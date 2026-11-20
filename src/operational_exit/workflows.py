@@ -169,11 +169,14 @@ def build_dataset(manifest, out, progress):
     from src.milp.scenario_loader import load_scenario_data
     from src.uc_jepa.data.extract_uc_labels import extract_u_star
     from .physics import to_report
+    from .hte_compatibility import ensure_feature_contract, CONTRACT_NAME
     out = Path(out)
     source = Path(manifest["source"])
     if sha(source / "encoders/hierarchical_temporal_v3/best_encoder.pt") != manifest["hte_sha256"]:
         raise ValueError("Frozen HTE changed")
-    encoder = OnlineHTE(source / "encoders/hierarchical_temporal_v3/best_encoder.pt")
+    contract = ensure_feature_contract(manifest, out, progress)
+    encoder = OnlineHTE(source / "encoders/hierarchical_temporal_v3/best_encoder.pt",
+                        feature_contract=out / CONTRACT_NAME, manifest_hash=digest(manifest))
     entries, excluded, graph_checks = [], [], 0
     for i, case in enumerate(manifest["train"]):
         stored = load_record(report_path(out, case))
@@ -214,7 +217,7 @@ def build_dataset(manifest, out, progress):
         progress(i + 1, len(manifest["train"]), case["key"])
     save_record(out / "dataset.json", dict(complete=True, manifest_hash=digest(manifest), entries=entries,
                 excluded=excluded, hte_reuse="graph feature/hierarchy arrays compared before each new embedding",
-                graph_checks=len(entries), hte_sha256=manifest["hte_sha256"]))
+                graph_checks=len(entries), hte_sha256=manifest["hte_sha256"], hte_feature_contract_sha256=contract["sha256"]))
 
 
 def prepare_configs(manifest, out):

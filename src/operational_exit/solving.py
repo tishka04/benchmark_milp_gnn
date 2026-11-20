@@ -50,10 +50,14 @@ def solve_data(data, *, threads=16, seconds=600, seed=42, deadline=None, relaxat
         result.update(status="no_incumbent", solver_status=str(native.getModelStatus()))
         return result
     columns = adapter._pyomo_var_to_solver_var_map
+    # highspy materializes a fresh Python list on every col_value access.
+    # Fetch once: reading inside the variable loop copies the whole solution
+    # for every column and can exhaust the process-exit budget on large cases.
+    column_values = solution.col_value
     from pyomo.environ import Var
     for var in model.component_data_objects(Var):
         if id(var) in columns:
-            var.set_value(solution.col_value[columns[id(var)]], skip_validation=True)
+            var.set_value(column_values[columns[id(var)]], skip_validation=True)
     dispatch = extract_dispatch(model)
     check = validate_dispatch(data, dispatch)
     objective = clean(info.objective_function_value)
@@ -85,11 +89,48 @@ def make_repair_worker(settings):
     class OperationalRepair(LPWorkerTwoStage):
         deadline = math.inf
 
+        def _restore_structural_fixes(self, model):
+            for var, fixed_value in getattr(model, "_operational_structural_fixes", ()):
+                var.fix(fixed_value)
+
+        def _fix_all_binaries(self, model, targets, **kwargs):
+            from pyomo.environ import Var, value
+            # Capture the builder's fixed integer decisions BEFORE applying any
+            # decoder targets. These encode unavailable equipment, not choices
+            # which the subsequent repair stages may release.
+            if not hasattr(model, "_operational_structural_fixes"):
+                model._operational_structural_fixes = [
+                    (var, float(value(var))) for var in model.component_data_objects(Var)
+                    if var.fixed and var.is_integer()]
+            # An impossible decoder target must not consume a flip or impose a
+            # deviation penalty on a variable fixed by the physical model.
+            for var, fixed_value in model._operational_structural_fixes:
+                family = var.parent_component().local_name
+                if var.index() in targets.get(family, {}):
+                    targets[family][var.index()] = fixed_value
+            super()._fix_all_binaries(model, targets, **kwargs)
+            self._restore_structural_fixes(model)
+
+        def _unfix_subset(self, model, subset):
+            super()._unfix_subset(model, subset)
+            self._restore_structural_fixes(model)
+
+        def _unfix_subset_all(self, model, subset):
+            super()._unfix_subset_all(model, subset)
+            self._restore_structural_fixes(model)
+
         def _solve_with_timeout(self, model, time_limit):
+            # The legacy hard-fix stage relaxes every integer domain, including
+            # the unfixed import/export mode. Restore the original domains:
+            # decoder-fixed decisions stay fixed; remaining decisions are MILP.
+            if hasattr(model, "_relaxed_integer_vars"):
+                from pyomo.core import TransformationFactory
+                TransformationFactory("core.relax_integer_vars").apply_to(model, undo=True)
+            self._restore_structural_fixes(model)
+            apply_cost_units(model)
             remaining = min(time_limit, self.deadline - time.perf_counter())
             if remaining <= 0:
                 raise TimeoutError("cooperative repair deadline")
-            apply_cost_units(model)
             return super()._solve_with_timeout(model, remaining)
 
         def _extract_solution(self, model):

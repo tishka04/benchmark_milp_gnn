@@ -6,6 +6,7 @@ outputs/
 tmp/
 output/
 .poster_build/
+research/
 
 # --- Python virtual environments ---
 .venv/

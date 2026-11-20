@@ -8,6 +8,12 @@ L'ancienne campagne `outputs/thermal_transitions_v1/reference_criticality/state.
 
 Tout le nouveau travail va dans `outputs/thermal_transitions_v1/operational_exit_v1`. Une modification du code, des configurations sources, de l'environnement ou des scénarios après préparation entraîne un refus de reprise. Utiliser un nouveau `-OutputDir` pour un protocole modifié ; ne pas supprimer les échecs pour les rejouer.
 
+Exception documentée : la réparation HTE du 2 novembre 2026 ci-dessous autorise uniquement les adaptations nécessaires pour reproduire l'encodage météo historique. Elle conserve le manifeste initial et les identités des résultats physiques, avec un reçu séparé des sources corrigées.
+
+La réparation d'écriture Windows du 3 novembre 2026, décrite en fin de document, conserve également les étapes 1 à 8 et le premier pilote échoué. Elle ouvre une révision distincte du pilote avant toute calibration achevée ou évaluation, sans modifier les modèles ni les limites de temps.
+
+La correction d'intégralité du 4 novembre 2026 rétablit les domaines binaires d'origine dans la cascade de réparation. Elle conserve les modèles, le validateur et les pilotes antérieurs ; la calibration repart avec une révision explicite du code corrigé.
+
 ## Éléments conservés et adaptations
 
 | Élément existant | Utilisation dans le nouveau protocole |
@@ -71,6 +77,8 @@ Chaque couple scénario–méthode–budget est une exécution indépendante. Le
 
 Les bibliothèques, poids, contexte CUDA et processus de réparation sont préchargés sans identifiant, fichier, données, graphe, label ou embedding du scénario. Le signal READY termine le préchargement. L'horloge haute résolution démarre immédiatement avant l'envoi du scénario au processus principal. Elle inclut lecture et empreinte du scénario, graphe et HTE en ligne, génération, transfert, construction/réparation, sélection au plus faible coût physique valide, validation finale, écriture et fermeture de **tous** les processus.
 
+Les embeddings produits à l'étape 5 servent à l'apprentissage. Pour chaque essai d'inférence JEPA ou pipeline, `Generator.candidates` rappelle `OnlineHTE.encode` après le démarrage de l'horloge : graphe, normalisation, passage HTE et synchronisation CUDA sont recalculés dans le budget. Un seul embedding du scénario est partagé entre les 16 candidats du pipeline au sein de cet essai. Le préchargement statique reste dans `preload_s`, séparé du budget `exit_s` ; ce dernier mesure donc une réponse avec modèles déjà chargés, pas un démarrage à froid.
+
 Un objet Job Windows contient l'interpréteur et tous ses descendants. Le lanceur indirect de l'environnement virtuel est évité pour que son propre mécanisme de fermeture ne tue pas silencieusement un descendant. Le superviseur exige simultanément un Job vide et la sortie du processus principal. Un fichier déjà écrit ne termine pas l'horloge. Un résultat écrit alors qu'un descendant reste actif échoue.
 
 La limite coopérative de calcul est l'échéance globale moins la réserve de finalisation. Le budget n'est pas divisé par K ; tous les candidats partagent cette échéance. Les messages tardifs peuvent être vidés pour fermer les canaux, mais ne peuvent plus remplacer le candidat sélectionné. À l'échéance, le superviseur tue l'ensemble encore actif, confirme sa disparition et enregistre un échec, même si un fichier résultat existe. Les temps de préchargement, calcul, finalisation, sortie et dépassement observé sont séparés.
@@ -79,9 +87,9 @@ L'observation de sortie se fait par sondage conservateur à environ 1 ms : une s
 
 ## Calibration, ordre et répétitions
 
-Trente identifiants de validation interne sont sélectionnés par quantiles de taille, y compris les extrêmes. Le pilote exécute chaque méthode avec 120 secondes et une réserve provisoire de 30 secondes. Il doit confirmer la génération K16, les seize processus préchargés, une observation mémoire GPU et une finalisation naturelle, sans erreur d'implémentation/validation. Une erreur de pilote reste enregistrée ; elle ne doit pas être effacée pour recalibrer favorablement.
+Trente identifiants de validation interne sont sélectionnés par quantiles de taille, y compris les extrêmes. Le pilote exécute chaque méthode avec 120 secondes et une réserve provisoire de 30 secondes. Un dépassement (`forced_timeout`, `late_exit`) ou un arrêt coopératif sans résultat (`cooperative_deadline`) est compté comme un échec, puis le pilote poursuit les essais suivants. La disparition de tous les processus et le préchargement K16 restent contrôlés. Sur les essais disposant d'un résultat normal, la génération requise et la mesure mémoire GPU sont vérifiées. Les erreurs d'implémentation/validation restent bloquantes. Aucun échec terminé ne doit être effacé ou rejoué pour obtenir un succès.
 
-La réserve commune est ensuite figée : `max(0.050 s, 2 × maximum des finalisations observées)`. Elle peut rendre certains très petits budgets inutilisables ; ce sera un résultat du protocole. Les empreintes des modèles et des seuils sont enregistrées dans `calibration.json`. Elles sont vérifiées avant comparaison et à chaque préchargement. Le code/configuration est également vérifié à chaque nouvelle expérience. Une recalibration après démarrage de l'évaluation est interdite.
+La réserve commune est ensuite figée : `max(0.050 s, 2 × maximum des finalisations observées)`. Les sorties forcées ou tardives sans mesure exploitable restent inconnues et ne sont pas remplacées par zéro. Si aucune finalisation n'est observable, la réserve provisoire de 30 secondes est conservée, sans prétendre qu'elle a été mesurée. Les nombres d'essais par statut et de finalisations observées/inconnues figurent dans `calibration.json`. La réserve peut rendre certains très petits budgets inutilisables ; ce sera un résultat du protocole. Les empreintes des modèles et des seuils sont également enregistrées, puis vérifiées avant comparaison et à chaque préchargement. Le code/configuration est vérifié à chaque nouvelle expérience. Une recalibration après démarrage de l'évaluation est interdite.
 
 La comparaison principale comporte `600 × 7 × 4 = 16 800` expériences. Les familles sont entrelacées ; des rotations équilibrent les positions des méthodes et des budgets. Une seule expérience est active à la fois, sans concurrence GPU/solveur entre méthodes. La graine dépend de l'identifiant et de la répétition ; les graines de candidat ajoutent son index et sont indépendantes du budget.
 
@@ -166,7 +174,150 @@ Les tests synthétiques reproductibles sont :
 
 ```powershell
 .\.venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_operational_exit.py' -v
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_operational_embedding_timing.py' -v
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_operational_pilot_io.py' -v
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -p 'test_operational_repair_integrality.py' -v
 .\tests\test_operational_exit_launcher.ps1
 ```
 
+Le test de chronométrage des embeddings utilise le superviseur, le processus principal et le générateur réels, avec modèles CPU et réparations synthétiques. Pour chacune des deux méthodes apprises, un délai injecté dans `HTE.encode` doit apparaître dans les temps de calcul et de sortie ; un délai dépassant le budget doit provoquer un arrêt forcé et un échec. Ce test ne charge aucun checkpoint et ne lance ni calcul GPU ni résolution.
+
 Les observations de préparation ne démontrent ni la capacité K16 sur les plus grands graphes réels, ni une couverture opérationnelle, ni une accélération. Les étapes physiques, mémoire et pilote sont précisément les contrôles à exécuter avant la comparaison complète.
+
+## Reprise après le refus de compatibilité HTE du 2 novembre 2026
+
+Le constructeur historique utilise `hash(weather_profile) % 100` pour la deuxième caractéristique des nœuds météo. Le hachage Python des chaînes dépend du processus : reconstruire le même scénario dans un autre processus change donc cette colonne. Fixer une nouvelle graine de hachage ne reproduirait pas nécessairement celle qui a servi à entraîner le HTE.
+
+`hte_compatibility.py` retrouve la correspondance profil → code dans les seuls graphes d'entraînement historiques. Il exige une valeur unique par profil dans l'ensemble du corpus et à tous les instants. Il fige cette table dans `hte_feature_contract.json`, associée aux empreintes du HTE, du manifeste, des scénarios et des graphes examinés. Un profil inconnu ou des codes historiques contradictoires provoquent un refus explicite.
+
+Les graphes reconstruits doivent retrouver exactement les caractéristiques effectivement consommées par le HTE, les arêtes, leurs types, les identifiants de nœud et les correspondances hiérarchiques. La distance des lignes est une métadonnée auxiliaire historique : ni `TemporalGraphDatasetV3`, ni l'adaptateur en mémoire, ni le HTE ne la lisent. Seules les différences sur cette métadonnée sont admises ; les capacités de ligne et les autres attributs restent contrôlés.
+
+La table fixe est réutilisée pour reconstruire les graphes en ligne depuis chaque scénario. Elle ne contient ni label, ni embedding, ni graphe d'évaluation. Les poids et la normalisation du HTE sont conservés. Le contrat d'entrée fait aussi partie des empreintes figées avant le pilote et la comparaison.
+
+Pour la campagne existante, `runtime_amendment.json` consigne exactement les sources corrigées et l'empreinte du contrat. Le manifeste d'origine, l'audit physique, les 5 000 rapports de labels et les 600 références restent en place avec leurs identités initiales. L'enregistrement est interdit après production d'embeddings, entraînement ou évaluation ; toute modification extérieure aux fichiers de cette réparation est refusée. Pour une campagne préparée avec le code corrigé, le contrat est produit au début de l'étape 5.
+
+La commande de réparation, exécutée une seule fois sur la campagne existante, ne lance ni MILP, ni apprentissage, ni évaluation :
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.hte_compatibility
+```
+
+Une fois le reçu enregistré, la reprise reste :
+
+```powershell
+.\scripts\run_operational_exit.ps1 -Resume -StartStep 5 -EndStep 12
+```
+
+## Reprise après l'échec d'écriture du pilote du 3 novembre 2026
+
+Le premier essai HiGHS du pilote (`scenario_04790`) s'est terminé avec une erreur d'écriture, après environ 1,23 seconde et sans arrêt forcé. Le journal indiquait `FileNotFoundError` dans `atomic_json` : le résultat avait un chemin de 247 caractères, mais l'ajout du suffixe temporaire le portait à 284 caractères, au-delà de la limite classique Windows. Les chemins longs étaient désactivés sur la machine. Le message de calibration masquait cette cause par l'absence de mesure de finalisation.
+
+Les accès JSON atomiques utilisent désormais la syntaxe Windows de chemin étendu, y compris pour le fichier temporaire, le remplacement atomique et la récupération des copies. Le réglage système n'est pas modifié. L'écriture, sa synchronisation disque et la fermeture restent dans le même budget. Les erreurs du pilote indiquent désormais leur statut, le scénario, la méthode et le journal à consulter.
+
+`pilot_io_amendment.json` lie le correctif aux sources précédentes, au manifeste, aux modèles entraînés, aux fichiers conservés et au journal de l'échec. L'enregistrement est limité à cette panne d'écriture, après les étapes 1 à 8, avant toute calibration achevée ou évaluation. Il refuse un succès, un dépassement de temps, une erreur d'une autre origine ou une modification de la physique, de l'apprentissage ou de l'inférence.
+
+Le résultat échoué et son journal restent en place. Les nouveaux essais portent une identité `runtime_revision` différente : ils ne remplacent pas l'échec et aucune meilleure observation n'est choisie parmi des répétitions. La calibration enregistrée mentionne cette révision. Les étapes 1 à 8 ne sont pas rejouées.
+
+Vérification locale du 3 novembre : l'essai HiGHS qui bloquait a ensuite enregistré un dispatch valide et la sortie de tous les processus en 1,794 seconde, après 10,298 secondes de préchargement. Cette seule observation du pilote corrigé est enregistrée ; elle ne constitue pas une calibration complète. Les 16 221 fichiers existants de labels, références, configurations, dataset et entraînements ont conservé leurs tailles et dates ; les empreintes du manifeste, des modèles et des fichiers d'identité protégés ont aussi été vérifiées inchangées.
+
+Enregistrement du correctif, une seule fois :
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.pilot_io_repair
+```
+
+Puis reprise normale :
+
+```powershell
+.\scripts\run_operational_exit.ps1 -Resume -StartStep 9 -EndStep 12
+```
+
+## Réserve proportionnelle au budget et reprise de l'étape 10
+
+La calibration du 5 novembre 2026 a mesuré une finalisation maximale de 19,2298 s, soit une réserve de 38,4596 s au budget pilote de 120 s. La soustraire telle quelle aux budgets de 1 à 30 s empêchait toute résolution. La réserve effective devient `min(B / 2, max(0.05, R120 * min(1, B / 120)))`, où `B` est le budget total et `R120` la réserve issue du pilote. Cette règle utilise les observations du pilote, sans ajustement sur les coûts d'évaluation, et laisse au moins la moitié de chaque budget au calcul. Elle ne garantit pas la finalisation : les dépassements restent des échecs.
+
+Pour cette campagne, les réserves sont respectivement 0,3205 ; 0,6410 ; 1,6025 ; 3,2050 ; 9,6149 ; 19,2298 ; 38,4596 secondes aux budgets 1, 2, 5, 10, 30, 60, 120 secondes. Le chronométrage et le superviseur restent inchangés, avec embeddings en ligne et sortie complète de tous les processus inclus.
+
+La migration s'effectue après arrêt de l'invocation active, sous les deux verrous de campagne. `budget_reserve_amendment.json` conserve les empreintes du pilote, des modèles et de tous les anciens résultats terminés. Les étapes 1 à 9 restent acquises. Les résultats à 120 s conservent exactement leurs identités et sont réutilisés, succès comme échecs. Tous les essais aux budgets modifiés reçoivent une nouvelle identité incluant la révision et la réserve effective : les anciens restent présents, mais sont exclus du rapport corrigé. Un essai interrompu est archivé avant reprise ; aucun résultat brut d'un processus arrêté n'est récupéré comme succès.
+
+Enregistrement unique puis reprise habituelle :
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.budget_reserve
+.\scripts\run_operational_exit.ps1 -Resume -StartStep 10 -EndStep 12
+```
+
+Les nouvelles campagnes enregistrent directement cette règle dans la calibration. L'analyse des étapes 10 et 11 suit les identités corrigées ; elle ne choisit jamais le meilleur résultat entre deux révisions.
+
+## Correction de l'intégralité de la réparation du 4 novembre 2026
+
+Le pilote pipeline de `scenario_04790` avait généré ses 16 candidats, puis terminé et écrit son résultat en 3,616 secondes. Les 16 réparations annonçaient un optimum du premier étage, mais le validateur indépendant refusait leur dispatch. La cascade historique relaxait tous les domaines entiers au premier étage, dont le mode import/export resté libre. La reproduction du premier candidat donne un résidu physique maximal de `7,5e-12`, mais un résidu d'intégralité de `0,4912` sur `import_mode`, avec des imports et exports simultanés.
+
+L'adaptateur opérationnel restaure les domaines entiers d'origine avant toute résolution de réparation. Les décisions fixées par le décodeur restent fixées ; le mode import/export libre est résolu comme une décision binaire. Cette règle s'applique à la même cascade pour pipeline, JEPA et RH. Les contraintes physiques, seuils de validation, coûts, budgets, limites de threads et frontières du chronométrage restent inchangés. Les résidus et motifs du validateur sont désormais conservés pour chaque candidat dans `candidate_diagnostics`.
+
+Sur le candidat reproduit, le dispatch corrigé passe le même validateur, avec un résidu d'intégralité nul. Les labels et modèles appris ne sont pas régénérés : leur formulation MILP imposait déjà les domaines binaires corrects. La correction concerne l'exécution de la réparation à l'inférence.
+
+Vérification locale : les 225 tests passent. Sur le seul premier scénario du pilote, les quatre méthodes terminent avec un résultat valide et tous les processus fermés : HiGHS en 1,779 s, pipeline en 4,539 s, JEPA en 2,191 s et RH en 2,285 s, préchargement exclu selon le protocole. Les 16 réparations du pipeline sont valides. Ces quatre observations sont enregistrées et seront réutilisées à la reprise ; elles ne constituent pas une calibration complète. Les 16 232 fichiers préexistants contrôlés, dont les anciens pilotes, sont conservés inchangés, ainsi que les 34 empreintes vérifiées du manifeste, des modèles et des autres artefacts protégés.
+
+`repair_integrality_amendment.json` lie le correctif au précédent reçu d'écriture, aux sources, aux modèles, aux diagnostics avant/après et à tous les pilotes antérieurs conservés. L'enregistrement est interdit après calibration achevée ou début d'évaluation. La nouvelle identité `runtime_revision` s'applique à toute la calibration des quatre méthodes ; aucune meilleure observation n'est sélectionnée entre les révisions.
+
+La commande d'enregistrement vérifie les deux diagnostics et les artefacts conservés, sans relancer l'apprentissage :
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.repair_integrality
+```
+
+La reprise utilise ensuite la même commande des étapes 9 à 12.
+
+## Conservation des décisions physiques fixes dans la réparation
+
+Le pilote JEPA de `scenario_02050` échouait au deuxième étage de réparation avec une seule violation : `zero_capacity:b_charge_mode = 1`. Le modèle physique fixe ce mode à zéro lorsqu'une zone ne possède pas de batterie. La cascade historique libérait cette variable avec les autres décisions du sous-ensemble à réparer ; la pénalité d'écart au décodeur pouvait alors la ramener à un. L'intégralité était respectée, mais la décision restait interdite par le modèle physique et le validateur.
+
+L'adaptateur mémorise désormais les décisions entières fixées lors de la construction du modèle, avant l'application du candidat. Il les rétablit après la libération d'un sous-ensemble et avant chaque résolution. Les cibles correspondantes sont ajustées à leur valeur physique avant la construction des pénalités et du budget de changements : une demande impossible sur un équipement absent ne consomme donc aucun changement. Les décisions proposées pour les équipements présents restent réparables. La règle couvre aussi le thermique absent, le pompage absent, la flexibilité indisponible à une période et les échanges extérieurs indisponibles.
+
+Les modèles entraînés, les labels, les références, les contraintes physiques et les seuils du validateur restent identiques. Les embeddings calculés à l'inférence et la réparation restent à l'intérieur du chronométrage de décision existant.
+
+Vérification du 4 novembre 2026 : les 231 tests passent. Le scénario bloquant `scenario_02050` passe avec les quatre méthodes, sortie effective de tous les processus comprise : HiGHS 54,010 s, pipeline 44,555 s, JEPA 15,969 s et RH 6,522 s (préchargement exclu selon le protocole). Les 16 candidats du pipeline sont valides. JEPA conserve une énergie non servie de 1 015,662 MWh, autorisée et mesurée par le protocole ; la correction du dispatch ne constitue donc pas une validation de sa qualité comparative. Ces quatre essais sont enregistrés pour la reprise, mais ne constituent pas la calibration complète. Les 16 276 fichiers préexistants contrôlés restent inchangés, ainsi que les 80 empreintes vérifiées du manifeste, des modèles et des résultats conservés.
+
+Le reçu `repair_structural_fixes_amendment.json` lie cette correction aux reçus précédents et conserve tous les anciens pilotes, réussis ou échoués. Il exige un échec diagnostiqué de capacité nulle dans la réparation, les entraînements terminés et aucune calibration achevée ni évaluation commencée. La calibration des quatre méthodes utilise une nouvelle identité commune ; les observations des révisions antérieures ne sont pas mélangées avec les nouvelles.
+
+Enregistrement du correctif pour cette campagne :
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.repair_structural_fixes
+```
+
+Après cet enregistrement, reprise sans réentraînement :
+
+```powershell
+.\scripts\run_operational_exit.ps1 -Resume -StartStep 9 -EndStep 12
+```
+
+## Correction du transfert de solution HiGHS sur les grands scénarios
+
+Le pilote HiGHS de `scenario_02177` a atteint l'arrêt forcé à 120 secondes, après 76 essais réussis de la révision précédente. Son fichier brut a été inspecté uniquement pour le diagnostic : l'optimisation avait été interrompue après 85,93 secondes de solveur, mais la récupération des valeurs consommait encore une grande partie de la réserve. Le fichier présent ne rend pas cet essai réussi : le critère de sortie effective et son statut `forced_timeout` restent inchangés.
+
+`highspy` construit une nouvelle liste Python à chaque accès à `solution.col_value`. Le transfert parcourait toutes les variables en relisant cette propriété pour chacune, ce qui copiait le vecteur complet autant de fois qu'il contenait de variables. Le correctif lit ce vecteur une fois avant la boucle, puis indexe la liste obtenue. Sur les 66 168 colonnes du modèle bloquant, un diagnostic utilisant le même vecteur synthétique mesure 27,553 secondes avant et 0,025 seconde après ; les valeurs transférées sont identiques. Ce diagnostic ne résout pas de MILP et ne constitue pas un résultat de comparaison.
+
+`solution_transfer_amendment.json` conserve le manifeste, les modèles, les diagnostics et tous les pilotes antérieurs, y compris le dépassement. Les budgets, le superviseur, les équations physiques, les tolérances et les frontières du chronométrage ne changent pas. La nouvelle calibration des quatre méthodes utilise une révision commune du code corrigé ; aucune sortie brute d'un essai forcé n'est récupérée comme succès et aucune meilleure répétition n'est sélectionnée. Les étapes 1 à 8 restent réutilisées.
+
+Enregistrement de cette correction avant reprise :
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.solution_transfer_repair
+```
+
+Les essais réels du code corrigé confirment une sortie HiGHS valide en 92,643 secondes sur `scenario_02177` et en 92,728 secondes sur `scenario_01777`, le plus grand scénario du pilote. Les quatre méthodes passent sur `scenario_02177`. Le pipeline sur `scenario_01777` atteint en revanche `forced_timeout` à 120,001 secondes : cet échec reste enregistré et son éventuel fichier brut ne compte pas comme résultat. Le contrôle ciblé s'est arrêté à cette observation ; JEPA et RH n'ont pas été lancés sur ce dernier cas lors de ce contrôle.
+
+## Dépassements comptés comme échecs, sans bloquer la calibration
+
+Le 5 novembre 2026, la règle a été explicitée : un programme qui n'a pas fourni un résultat valide et terminé à temps échoue ; le protocole doit poursuivre les autres essais. La calibration exigeait à tort une finalisation normale pour chaque observation. Elle conserve maintenant les dépassements avec leur statut d'échec et les inclut dans son décompte. `-Resume` réutilise tout enregistrement terminé, réussi ou échoué, sans répétition à la recherche d'un succès. Les étapes de comparaison appliquaient déjà cette règle de poursuite.
+
+`calibration_outcomes_amendment.json` trace ce changement de comptabilisation. Les workers, solveurs, budgets et règles d'acceptation restent identiques à la révision d'exécution précédente. Cette modification ne crée donc pas de nouvelles identités d'essais : les cinq succès et l'échec du contrôle ciblé ci-dessus restent réutilisables. Les modèles et tous les anciens résultats sont conservés.
+
+Validation : les 240 tests passent, notamment la poursuite après échecs, leur réutilisation à la reprise, et le cas où aucune finalisation n'a pu être observée. Une vérification sur l'enregistrement réel du pipeline de `scenario_01777` confirme sa réutilisation inchangée, sans lancement de worker ni récupération du fichier brut. Les 16 584 fichiers préexistants contrôlés et les 390 empreintes protégées restent inchangés. La calibration complète reste à terminer à la reprise.
+
+```powershell
+.\.venv\Scripts\python.exe -B -u -m src.operational_exit.calibration_outcomes
+.\scripts\run_operational_exit.ps1 -Resume -StartStep 9 -EndStep 12
+```

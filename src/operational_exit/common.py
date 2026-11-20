@@ -26,9 +26,26 @@ def digest(obj):
                                      separators=(",", ":")).encode()).hexdigest()
 
 
+def io_path(path):
+    """Use Windows' extended path syntax without changing registry settings.
+
+    An otherwise valid result path can exceed MAX_PATH once the atomic write
+    appends its unique temporary suffix. Keep the temporary in the same folder.
+    """
+    path = Path(path)
+    if os.name != "nt":
+        return path
+    absolute = os.path.abspath(path)
+    if absolute.startswith("\\\\?\\"):
+        return Path(absolute)
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute[2:])
+    return Path("\\\\?\\" + absolute)
+
+
 def sha(path):
     h = hashlib.sha256()
-    with Path(path).open("rb") as f:
+    with io_path(path).open("rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
@@ -46,11 +63,11 @@ def retry_io(fn, deadline=None):
 
 
 def read_json(path):
-    return json.loads(retry_io(lambda: Path(path).read_text(encoding="utf-8")))
+    return json.loads(retry_io(lambda: io_path(path).read_text(encoding="utf-8")))
 
 
 def atomic_json(path, obj, *, deadline=None):
-    path = Path(path)
+    path = io_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     raw = json.dumps(obj, sort_keys=True, allow_nan=False, ensure_ascii=False).encode("utf-8")
     temp = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
@@ -81,7 +98,7 @@ def save_record(path, obj):
 
 
 def load_record(path, identity=None):
-    path = Path(path)
+    path = io_path(path)
     damaged, copies = [], {}
     for candidate in (path, Path(str(path) + ".bak")):
         if not candidate.exists():

@@ -14,7 +14,8 @@ import uuid
 
 from .common import (DEFAULT_OUT, ROOT, BUDGETS, METHODS, PHYSICS, THREAD_ENV, digest,
                      read_json, atomic_json, save_record, load_record, sha, seed_for)
-from .protocol import inventory, assert_unchanged, schedule
+from .protocol import inventory, assert_unchanged, schedule, effective_sources
+from .budget_reserve import POLICY as RESERVE_POLICY, RECEIPT_NAME as RESERVE_RECEIPT, evaluation_schedule
 
 STEPS = {
     1: "Inventaire, partitions et configurations figées (sans résolution)",
@@ -59,6 +60,7 @@ class Progress:
 def model_files(manifest, out):
     out = Path(out)
     return dict(hte=str(Path(manifest["source"]) / "encoders/hierarchical_temporal_v3/best_encoder.pt"),
+                hte_features=str(out / "hte_feature_contract.json"),
                 ae=str(out / "training/autoencoder/uc_ae_best.pt"),
                 jepa=str(out / "training/jepa/jepa_best.pt"),
                 ebm=str(out / "training/latent_ebm/latent_ebm_best.pt"))
@@ -66,7 +68,7 @@ def model_files(manifest, out):
 
 def settings(manifest, out, method, reserve, models):
     return dict(method=method, reserve_s=reserve, manifest_hash=digest(manifest), repair=manifest["repair"],
-                source_hashes=manifest["sources"], model_hashes=models,
+                source_hashes=effective_sources(manifest, out), model_hashes=models,
                 **model_files(manifest, out))
 
 
@@ -89,18 +91,22 @@ def one_run(manifest, out, case, item, reserve, area, models):
                                     attempt=str(attempt), error=repr(exc)))
         raise
     record["attempt"] = str(attempt)
+    record["reserve_s"] = reserve
     save_record(checkpoint, record)
     return record
 
 
 def calibrate(manifest, out, progress):
+    from .solution_transfer_repair import calibration_revision
     path = Path(out) / "calibration.json"
     fingerprint = {k: sha(v) for k, v in model_files(manifest, out).items()}
+    revision = calibration_revision(out, fingerprint)
     if fingerprint["hte"] != manifest["hte_sha256"]:
         raise ValueError("HTE changed after dataset certification")
     existing = load_record(path)
     if existing:
-        if existing["manifest_hash"] != digest(manifest) or existing["models"] != fingerprint:
+        if (existing["manifest_hash"] != digest(manifest) or existing["models"] != fingerprint
+                or existing.get("runtime_revision") != revision):
             raise ValueError("Frozen calibration/model stack changed; use a new output directory")
         return
     if list((Path(out) / "experiments").glob("*.json")):
@@ -112,24 +118,49 @@ def calibrate(manifest, out, progress):
             raise ValueError("Calibration must use internal validation only")
         for method in METHODS:
             item = dict(key=key, method=method, budget=120, repetition=0, seed=seed_for(key), purpose="calibration")
+            if revision is not None:
+                item["runtime_revision"] = revision
             record = one_run(manifest, out, cases[key], item, 30., "calibration_runs", fingerprint)
-            if record["forced"] or record["finalization_s"] is None or not record["all_processes_exited"]:
-                raise ValueError("Calibration failed to observe clean finalization; inspect pilot before freezing protocol")
+            if record["status"] in {"worker_error", "repair_error", "repair_crash", "invalid_dispatch", "missing_final_result"}:
+                raise ValueError(f"Pilot {record['status']} for {key} / {method}; "
+                                 f"inspect {Path(record['attempt']) / 'worker.log'}")
+            if not record["all_processes_exited"]:
+                raise ValueError(f"Calibration failed to observe clean finalization for {key} / {method} "
+                                 f"({record['status']}, exit={record['exit_s']:.3f}s); "
+                                 f"inspect {Path(record['attempt']) / 'worker.log'}")
             if method == "pipeline" and record["preload_metadata"].get("repair_processes") != 16:
                 raise ValueError("Pilot did not preload K16 repair pool")
+            # Deadline failures are benchmark outcomes, not a reason to retry
+            # or abort calibration. Forced/late results remain inaccessible.
+            if record["status"] in {"forced_timeout", "late_exit", "cooperative_deadline"}:
+                if record.get("success") or (record["status"] == "forced_timeout" and not record["forced"]):
+                    raise ValueError("Inconsistent deadline failure in pilot")
+                records.append(record)
+                progress(len(records), 120, key + " / " + method + " : " + record["status"])
+                continue
+            if record["forced"] or record["finalization_s"] is None:
+                raise ValueError(f"Missing natural finalization for {key} / {method}")
             payload = record.get("result") or {}
-            if record["status"] in {"worker_error", "repair_error", "repair_crash", "invalid_dispatch", "missing_final_result"}:
-                raise ValueError("Pilot implementation/validation failure; inspect before calibration")
             if method != "highs" and payload.get("generated_candidates") != (16 if method == "pipeline" else 1):
                 raise ValueError("Pilot did not finish the required candidate generation")
             if method in ("pipeline", "jepa") and not payload.get("gpu_peak_bytes"):
                 raise ValueError("Missing GPU memory observation in pilot")
             records.append(record)
             progress(len(records), 120, key + " / " + method)
-    maximum = max(r["finalization_s"] for r in records)
+    # A killed or late run has no eligible finalization measurement; never
+    # substitute zero or inspect its raw file to recover an observation.
+    finalizations = [r["finalization_s"] for r in records if not r["forced"]
+                     and r["status"] != "late_exit" and r["finalization_s"] is not None]
+    maximum = max(finalizations, default=None)
+    from collections import Counter
     save_record(path, dict(complete=True, manifest_hash=digest(manifest), models=fingerprint,
+                runtime_revision=revision,
                 scenarios=manifest["calibration_cases"], observations=len(records), maximum_finalization_s=maximum,
-                reserve_s=max(.05, 2 * maximum), rule="max(0.050 seconds, 2 * maximum observed finalization)",
+                outcome_policy="deadlines_are_failures_v1", status_counts=dict(Counter(r["status"] for r in records)),
+                finalization_observations=len(finalizations), unobserved_finalizations=len(records) - len(finalizations),
+                reserve_s=30. if maximum is None else max(.05, 2 * maximum),
+                reserve_policy=RESERVE_POLICY,
+                rule="max(0.050 seconds, 2 * maximum observed finalization); retain provisional 30 seconds if none observed",
                 provisional_reserve_s=30, evaluation_used=False))
 
 
@@ -140,9 +171,13 @@ def run_comparison(manifest, out, progress, extra=False):
     if calibration["models"] != {k: sha(v) for k, v in model_files(manifest, out).items()}:
         raise ValueError("Model/thresholds changed after calibration")
     cases = {c["key"]: c for c in manifest["cohort"]}
-    runs = list(schedule(manifest, extra=extra))
+    amendment = load_record(Path(out) / RESERVE_RECEIPT)
+    if amendment is None and calibration.get("reserve_policy") != RESERVE_POLICY:
+        raise ValueError("Legacy fixed reserve: register src.operational_exit.budget_reserve before resuming evaluation")
+    runs = list(evaluation_schedule(manifest, calibration, amendment, extra=extra))
     for i, item in enumerate(runs):
-        record = one_run(manifest, out, cases[item["key"]], item, calibration["reserve_s"], "experiments", calibration["models"])
+        reserve = item.get("reserve_s", calibration["reserve_s"])
+        record = one_run(manifest, out, cases[item["key"]], item, reserve, "experiments", calibration["models"])
         progress(i + 1, len(runs), f"{item['key']} {item['method']} {item['budget']}s : {record['status']}")
 
 
@@ -183,7 +218,7 @@ def run(args):
             manifest = load_record(manifest_path)
             if manifest is None:
                 raise ValueError("Frozen manifest has no valid copy")
-            assert_unchanged(manifest)
+            assert_unchanged(manifest, out)
             if manifest["source"] != str(source) or manifest["labels_extra_lp"] != args.with_label_relaxation:
                 raise ValueError("Source/label relaxation settings changed")
         else:

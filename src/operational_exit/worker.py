@@ -154,7 +154,7 @@ def main():
                         time.sleep(.001)
                 result = select_candidates(completed)
                 result["candidate_statuses"] = [r["status"] for r in completed]
-                result["candidate_diagnostics"] = [{k: v for k, v in r.items() if k not in ("dispatch", "validation")}
+                result["candidate_diagnostics"] = [{k: v for k, v in r.items() if k != "dispatch"}
                                                     for r in completed]
                 result["unfinished_candidates"] = len(pending)
                 result["candidate_seeds"] = seeds

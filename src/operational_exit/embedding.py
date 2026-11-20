@@ -48,10 +48,12 @@ def align_zone_embeddings(h, zones):
 
 
 class OnlineHTE:
-    def __init__(self, checkpoint_path):
+    def __init__(self, checkpoint_path, *, feature_contract, manifest_hash=None):
         import torch
+        from .hte_compatibility import load_feature_contract
         from src.demand_response import require_current_formulation
         from src.gnn.models.hierarchical_temporal_encoder import HierarchicalTemporalEncoder
+        self.weather_codes = load_feature_contract(feature_contract, checkpoint_path, manifest_hash)["weather_codes"]
         self.device = require_gpu()
         ck = torch.load(checkpoint_path, map_location=self.device, weights_only=False)
         require_current_formulation(ck)
@@ -75,12 +77,12 @@ class OnlineHTE:
         from torch_geometric.utils import add_self_loops
         from src.gnn.hetero_graph_dataset import build_hetero_temporal_record
         from src.gnn.embeddings.dataset import get_hierarchy_from_batch
+        from .hte_compatibility import apply_weather_codes, assert_graph_equal
         record = build_hetero_temporal_record(data, mode="supra", temporal_edges=("soc", "ramp", "dr"), time_encoding="sinusoidal")
+        apply_weather_codes(record, data, self.weather_codes)
         if check_graph is not None:
             with np.load(check_graph, allow_pickle=True) as old:
-                for key in ("node_features", "edge_index", "edge_types", "node_types", "zone_region_index"):
-                    if not np.array_equal(old[key], record[key]):
-                        raise ValueError(f"HTE reuse refused: {key} changed in {check_graph}")
+                assert_graph_equal(old, record, check_graph)
         batch = Batch.from_data_list([graph_data(record)]).to(self.device)
         batch.x = (batch.x - self.mean) / self.std
         N, T = int(batch.N_base[0]), int(batch.T[0])

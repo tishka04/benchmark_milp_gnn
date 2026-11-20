@@ -11,7 +11,7 @@ import statistics
 
 from .common import BUDGETS, METHODS, FAMILIES, digest, read_json, load_record, atomic_json, finite
 from .physics import validate_dispatch
-from .protocol import schedule
+from .budget_reserve import evaluation_schedule, RECEIPT_NAME as RESERVE_RECEIPT
 from .workflows import report_path
 
 
@@ -89,7 +89,10 @@ def analyze(out):
                 cost = check.get("cost") if valid else None
                 bound, optimal = result.get("bound"), result.get("proven_optimal", False)
         refs[key] = dict(valid=valid, cost=cost, bound=bound, optimal=optimal)
-    expected = list(schedule(manifest)) + list(schedule(manifest, extra=True))
+    calibration = load_record(out / "calibration.json")
+    amendment = load_record(out / RESERVE_RECEIPT)
+    expected = (list(evaluation_schedule(manifest, calibration, amendment))
+                + list(evaluation_schedule(manifest, calibration, amendment, extra=True)))
     for item in expected:
         identity = dict(item, manifest_hash=mh)
         path = out / "experiments" / (digest(identity) + ".json")
@@ -128,7 +131,9 @@ def analyze(out):
                       extra_completed=sum(r["repetition"] > 0 for r in rows),
                       valid_references=sum(r["valid"] for r in refs.values()),
                       missing_references=[k for k, r in refs.items() if not r["valid"]],
-                      invalid_or_late_successes=0, physical_costs_recomputed=True, manifest_hash=mh)
+                      invalid_or_late_successes=0, physical_costs_recomputed=True, manifest_hash=mh,
+                      timing_revision=amendment["sha256"] if amendment else None,
+                      superseded_experiments_preserved=amendment["counts"].get("superseded", 0) if amendment else 0)
     atomic_json(dest / "acceptance.json", acceptance)
     plots = []
     def save(fig, name):
@@ -205,6 +210,7 @@ def analyze(out):
 <p>Quatre méthodes, sept processus indépendants par scénario. Lecture, HTE en ligne, sélection par coût physique, validation, écriture et sortie de tous les processus sont chronométrés. ENS permise et mesurée. La cascade RH-MO+LP peut appeler des MILP.</p>
 <p>Chaque famille a un dénominateur fixe de 100. Les gaps utilisent |coût référence| ; les valeurs négatives sont conservées. Une référence nulle produit une différence absolue. Sans incumbent de référence valide, les succès restent comptés mais les gaps sont exclus. Les distributions communes indiquent leur effectif. Les répétitions ne sont jamais sélectionnées au meilleur résultat.</p>
 <p>Références valides : {acceptance['valid_references']} / 600. Optimum uniquement si démontré ; sinon incumbent à 600 secondes solveur.</p>
+<p>Révision de réserve : {acceptance['timing_revision'] or 'calibration initiale'}. {acceptance['superseded_experiments_preserved']} anciens essais conservés mais exclus de cette comparaison corrigée.</p>
 <p>{links}</p><pre>{html.escape(str(acceptance))}</pre>
 """
     body += "".join(f'<h2>{html.escape(name.replace("_", " "))}</h2><img src="{name}.png"><a href="{name}.svg">SVG</a>' for name in plots)

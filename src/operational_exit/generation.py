@@ -13,7 +13,7 @@ class Generator:
         from src.uc_jepa.latent_utils import load_frozen_ae, load_frozen_jepa, load_latent_ebm, threshold_vector
         from src.uc_jepa.sampling.latent_langevin import LatentLangevinSampler, LatentLangevinConfig
         self.device = require_gpu()
-        self.hte = OnlineHTE(settings["hte"])
+        self.hte = OnlineHTE(settings["hte"], feature_contract=settings["hte_features"], manifest_hash=settings["manifest_hash"])
         for name in ("ae", "jepa") + (("ebm",) if settings["method"] == "pipeline" else ()):
             ck = torch.load(settings[name], map_location="cpu", weights_only=False)
             if ck.get("physics") != PHYSICS or ck.get("training_manifest") != settings["manifest_hash"]:
