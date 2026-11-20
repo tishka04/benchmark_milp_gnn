@@ -1,0 +1,28 @@
+\begin{table}[htbp]\centering\small
+\begin{tabular}{lrrr}\toprule
+Preference & MSE reduction & Lower & Upper\\\midrule
+\multicolumn{4}{l}{\textit{Against projected linear: scenario folds}}\\
+Equal & 0.003446 & 0.002503 & 0.004390\\
+Cost & 0.007083 & 0.005680 & 0.008485\\
+CO$_2$ & 0.003886 & 0.002604 & 0.005168\\
+Time & 0.001578 & 0.001044 & 0.002113\\
+Service & 0.004415 & 0.003163 & 0.005667\\
+\addlinespace
+\multicolumn{4}{l}{\textit{Against projected linear: family holdout}}\\
+Equal & 0.021533 & 0.018697 & 0.024370\\
+Cost & 0.035560 & 0.031872 & 0.039249\\
+CO$_2$ & 0.014327 & 0.010906 & 0.017749\\
+Time & 0.006752 & 0.004630 & 0.008875\\
+Service & 0.026798 & 0.023384 & 0.030212\\
+\addlinespace
+\multicolumn{4}{l}{\textit{Against full fractional logit: family holdout}}\\
+Equal & 0.000529 & 0.000357 & 0.000701\\
+Cost & 0.000388 & 0.000095 & 0.000681\\
+CO$_2$ & 0.004940 & 0.003519 & 0.006361\\
+Time & 0.002151 & 0.001402 & 0.002900\\
+Service & 0.000459 & 0.000276 & 0.000642\\
+\addlinespace
+\bottomrule
+\end{tabular}
+\caption{Positive differences favor the realized fractional-logistic model without B9. Approximate 95\% simultaneous intervals cover 40 declared contrasts within each validation scheme, with 2,000 paired scenario resamples after averaging deadlines. They condition on the fitted predictions and do not account for post-hoc design selection or refitting uncertainty.}\label{tab:bounded_contrasts}
+\end{table}

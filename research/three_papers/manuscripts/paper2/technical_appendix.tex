@@ -1,0 +1,205 @@
+\section{Physical formulation and acceptance}
+\label{app:physical}
+For readability, subscripts $z,t$ are omitted where unambiguous. Let $d$ be
+demand, $q^-$ deferred demand and $q^+$ recovered demand. With line incidence
+$A_{z\ell}$, the balance is
+\begin{multline}
+ p^{\rm th}+p^{\rm nuc}+p^{\rm ren}+p^{\rm hydro}
+ +p^{\rm bat,dis}+p^{\rm pump,dis}
+ +\sum_\ell A_{z\ell}f_\ell+p^{\rm imp}+p^{\rm uns}\\
+ =d-q^-+q^++p^{\rm bat,ch}+p^{\rm pump,ch}+p^{\rm exp}+p^{\rm excess}.
+\end{multline}
+Imports and exports enter the designated trade-anchor zone; a system mode
+prevents simultaneous import/export. Each line has signed flow bounded by
+its capacity. Renewable output is bounded by its realized availability;
+unused availability is recorded as curtailment.
+
+Thermal commitment $u$, start-up $v$ and shutdown $w$ satisfy
+\begin{align}
+ u_t-u_{t-1}&=v_t-w_t,&v_t+w_t&\leq1,\\
+ \underline P u_t&\leq p_t\leq\overline P u_t,\\
+ p_t-p_{t-1}&\leq R u_{t-1}+S^{\rm up}v_t,&
+ p_{t-1}-p_t&\leq R u_t+S^{\rm down}w_t.
+\end{align}
+Initial output and commitment are fixed scenario data. Nuclear output obeys
+its installed capacity and minimum operating limits. The model represents
+aggregate zonal decisions, not an independently committed binary per graph asset.
+
+For each battery or pumped store, energy satisfies
+\begin{equation}
+ e_{t+1}=\rho e_t+\Delta t\left(\eta^{\rm ch}p_t^{\rm ch}
+                        -p_t^{\rm dis}/\eta^{\rm dis}\right),
+\end{equation}
+with power and energy bounds, mutually exclusive charging/discharging modes,
+initial energy and specified terminal lower/upper bounds. Reservoir energy
+additionally accounts for inflow, release and spill, with conversion
+efficiency and reservoir/generation capacity bounds.
+Demand response has causal backlog
+\begin{equation}
+ h_{t+1}=h_t+\Delta t(q_t^--q_t^+),\qquad h_t\geq0,\quad h_0=h_T=0.
+\end{equation}
+Deferral and recovery obey their power limits, activation restrictions and
+ramping constraints. A terminal equality prevents deferred demand from
+becoming unreported load shedding. Activation and block costs are included
+in the physical objective.
+
+Acceptance reconstructs these equations and costs from the dispatch, checks
+finite values and axis consistency, and checks binary integrality separately.
+ENS remains physically permitted and penalized. The $10^{-3}$ MWh service
+cap is an aggregated outcome tolerance, distinct from per-constraint physical
+and integrality tolerances.
+
+\section{Graph representation and learned strategies}
+\label{app:learned}
+\subsection{Graph and encoder contract}
+The graph contains system, region, zone, asset and weather nodes. Spatial
+relations include hierarchical containment, weather influence and transmission;
+temporal copies and relation templates describe storage, ramping and demand
+flexibility. Node attributes summarize capacities, exogenous trajectories,
+operating parameters and node type. The graph builder orders zones
+lexicographically; embeddings are explicitly reordered to the physical
+zone axis before decoding.
+
+The encoder uses sparse graph-attention layers for spatial aggregation,
+hierarchical pooling, a temporal Transformer and top-down context propagation.
+The deployed encoder receives node features, connectivity, node types and
+hierarchical assignments. Edge-type identifiers organize construction and
+hierarchy; they are not a separate learned relation-specific input at this
+interface. Transmission-distance metadata is not consumed by the encoder.
+This distinction prevents attributing predictive information to every
+attribute shown in a conceptual graph.
+
+Input standardization uses frozen training moments, including a checked
+categorical weather encoding. No evaluation label is used to construct an
+embedding. Encoder pretraining membership, supervised strategy splits and
+normalization provenance are separate audit objects: checking one does not
+certify the others.
+
+\subsection{Historical autoencoder, predictor and energy model}
+A bidirectional GRU encodes each zone's strategy trajectory. Time pooling
+and learned query-token cross-attention aggregate zones into 32 tokens of
+dimension 192. The decoder uses learned zone/time queries, cross-attention
+to the tokens and conditioning by 128-dimensional scenario embeddings. Its
+capacity is 300 zones and 24 periods. These limits do not establish the
+empirically observed training support.
+
+The autoencoder minimizes weighted binary cross-entropy (BCE), with positive
+class weights estimated on training data and capped at five. The predictor
+maps scenario embeddings to strategy tokens, with the autoencoder fixed.
+Its objective combines latent MSE, a variance term, decoded strategy BCE,
+auxiliary decision BCE and temporal regularization, with respective weights
+$1$, $0.1$, $5$, $2$ and $0.05$. The configured covariance penalty is zero.
+This supervised strategy-prediction objective is distinct from image JEPA.
+Training uses batch size eight, AdamW with initial learning rate $3\times10^{-4}$,
+weight decay $10^{-4}$, gradient clipping at one, and two warm-up epochs.
+AE/predictor epoch ceilings are 60/50 and early-stopping patience is 10/8.
+Validation macro-F1 selects the checkpoints; the selected epoch indices are
+29 and 36, respectively. The common supervised split has 4,500 training and
+500 validation cases; the 600 evaluation scenarios are a separate cohort.
+
+The energy model learns to rank reference latents below noisy or sampled
+negative latents using a softplus contrastive objective with energy
+regularization $10^{-3}$. It uses scenario context, hidden width 256 and
+bounded energies. Training has the same learning rate and weight decay,
+a 20-epoch ceiling, patience six, and validation energy-gap selection.
+The selected epoch index is ten. None of these validation criteria directly
+optimizes end-to-end service coverage.
+
+Both historical learned methods apply channel thresholds
+\begin{equation}
+ (0.20,0.30,0.20,0.30,0.20,0.35,0.45,0.80)
+\end{equation}
+in the order of Eq.~\eqref{eq:strategy}. They were selected on validation
+data from a 0.20--0.80 grid with 0.05 increments and frozen for evaluation.
+The same threshold contract is retained by the no-gradient control.
+
+For anchor $a$ and candidate latent $z_k$, a sampling step is
+\begin{equation}
+ z_{k+1}=\operatorname{clip}_{[-6,6]}\!\left[
+ z_k-\epsilon_k\widetilde\nabla E(z_k,a,h)
+ -0.02\epsilon_k(z_k-a)
+ +\sqrt{2\epsilon_k}\,\sigma_k\xi_k\right],
+ \quad \xi_k\sim\mathcal N(0,I).
+\end{equation}
+The gradient is elementwise clipped at one and then normalized by its
+candidate-wise Euclidean norm with floor $10^{-6}$. Initial step and noise
+scales are 0.02 and 0.05 with cosine annealing over twenty updates. Initialization
+mixes anchor perturbations of standard deviation 0.25 with a latent prior,
+using prior probability 0.5. Candidates have independent seeded random
+streams. The no-gradient control sets only $\widetilde\nabla E$ to zero,
+preserving the draws, drift, clipping and remaining operations.
+
+\subsection{Repair and operational timing}
+The first repair stage fixes the supplied seven-channel targets while
+retaining structural fixes and the original domains of other variables.
+The next stages release selected critical decisions, with a deviation penalty
+of $10^4$ and configured flip limits 100 and 1,000. Up to three stages are
+allowed. The cascade's internal slack trigger is 1 MWh; this internal trigger
+does not replace physical validation or the stricter service endpoint.
+Physical-cost selection compares only candidates validated and received
+before the computation cutoff.
+
+The finalization reserve was calibrated on 30 validation scenarios and four
+methods, giving 114 observed natural finalizations and six deadline failures.
+Twice the maximum observed finalization time, with a 0.05 s lower bound,
+gives $r_{120}=38.4596436$ s. Failures with unobserved finalization are not
+assigned zero time. For budget $b$, the unchanged rule is
+\begin{equation}
+ r(b)=\min\{0.5b,\max(0.05,r_{120}\min(1,b/120))\}.
+\end{equation}
+All online work must finish early enough to write and close normally before
+$b$. Static workers contain no evaluation scenario. The supervisor measures
+actual process-tree termination; forced termination never becomes a success.
+Stage timings for concurrent candidates are reported alongside, not summed
+into, elapsed wall-clock time.
+
+\section{Controlled changes and the variable-horizon extension}
+\label{app:extensions}
+New development and final base identifiers use separate deterministic seed
+namespaces. The audit checks UUIDs, realized physical inputs and shared base
+groups. All horizons of a training base belong to the same split, with a
+deterministic one-in-five validation rule. Labels are independently valid
+incumbents; certification is recorded separately, and failed labeling attempts
+are explicit exclusions, not silently redrawn cases.
+
+Network recabling preserves the number of lines and their capacity/distance
+multiset while ensuring connectivity. The fleet change multiplies thermal
+capacity, minimum output, ramp and transition limits by 0.8 and battery power,
+energy and initial/terminal bounds by 1.2. Duplication copies zones and
+resources, doubles import capacity and connects the copies with a bridge.
+Its starting bases have at most 150 zones. Permutation consistently remaps
+all zone-indexed data, line endpoints and the import anchor.
+
+For extended horizons, daily demand multipliers are 1, 0.95 and 1.05;
+the same factors apply to demand-response limits. Solar, wind and other
+renewable availability use daily multipliers 1, 0.90 and 0.85.
+Other repeated profiles retain their first-day values.
+Hourly resolution is unchanged, and terminal requirements apply at the new
+endpoint. These controls should not be interpreted as realistic weather
+forecast scenarios.
+
+The new autoencoder uses a bidirectional GRU and token attention but replaces
+learned zone/time-index queries with projections of scenario embeddings plus
+sinusoidal time positions. Its latent predictor pools scenario sequences;
+the energy network combines a candidate, its anchor and averaged scenario
+context. Token count/dimension remain 32/192, with four attention heads.
+The frozen graph encoder's sinusoidal buffer is extended analytically to
+72 periods; its weights and normalization are unchanged.
+
+Training uses single-instance batches with accumulation over eight examples,
+AdamW at $2\times10^{-4}$ with weight decay $10^{-4}$, gradient clipping at one
+and 60/50/20 epoch ceilings.
+The AE minimizes BCE with positive weights capped at twenty; the predictor
+minimizes latent MSE plus decoded BCE; the energy model minimizes
+$\operatorname{softplus}(E^+-E^-)+10^{-3}((E^+)^2+(E^-)^2)$.
+Validation loss selects each checkpoint. All channels use threshold 0.5.
+The sampler uses twenty updates, step size 0.02, additive noise scale 0.05,
+initial perturbation 0.15, elementwise gradient clipping at one and latent
+clipping at ten. Its matched control removes only the energy gradient.
+These are new-model settings, not a claim to reproduce the historical
+architecture or training objective.
+
+Seed 20261112 is primary; 20261113 and 20261114 measure sensitivity.
+The protocol, cohorts, development records and fitted models are frozen
+before independent evaluation. No test outcome informs thresholds,
+checkpoints or seed choice.

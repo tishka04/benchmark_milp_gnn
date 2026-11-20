@@ -1,0 +1,55 @@
+\section{Secondary sensitivities and execution variability}
+
+\label{app:robustness_results}
+
+All 48 declared preference/target specifications were fitted with the same outer folds. Across their anchor, priority and disjoint-cost variants, the pooled gain from a common direction to separate directions remains positive. This does not imply that individual coefficients or ranks are stable.
+
+\begin{table}[htbp]\centering\small\begin{tabular}{lrr}\toprule Preference & Minimum gain (\%) & Maximum gain (\%)\\\midrule
+
+Direct thermal CO$_2$ & 20.3 & 28.8\\
+
+Cost & 22.4 & 32.9\\
+
+Equal & 27.3 & 33.0\\
+
+Service & 25.3 & 30.3\\
+
+Time & 33.1 & 36.5\\
+
+\bottomrule\end{tabular}\caption{Descriptive sensitivity of the pooled MSE gain from changing direction beyond deadline-specific scaling. No variant is selected using test performance.}\end{table}
+
+\begin{table}[htbp]\centering\small\begin{tabular}{lrrr}\toprule Preference & Linear & Projected & Two-part\\\midrule
+
+Direct thermal CO$_2$ & 0.01753 & 0.01680 & 0.01355\\
+
+Cost & 0.02371 & 0.02208 & 0.01587\\
+
+Equal & 0.01353 & 0.01283 & 0.01004\\
+
+Service & 0.01728 & 0.01639 & 0.01300\\
+
+Time & 0.00873 & 0.00823 & 0.00679\\
+
+\bottomrule\end{tabular}\caption{Pooled held-out MSE for the separate linear, projected linear and bounded two-part models using all 22 descriptors.}\end{table}
+
+\begin{table}[htbp]\centering\small\begin{tabular}{rrrr}\toprule Deadline (s) & Repeated cases & Variable delivery & Variable ES\\\midrule
+
+5 & 30 & 0 & 0\\
+
+10 & 30 & 1 & 2\\
+
+30 & 30 & 1 & 2\\
+
+60 & 30 & 0 & 6\\
+
+120 & 30 & 0 & 6\\
+
+\bottomrule\end{tabular}\caption{Cases with differing outcomes across the primary run and two archived repetitions. The 30 selected cases do not establish deployment reliability.}\end{table}
+
+Archived logs separate aggregate computation, finalization, preload and process exit, but do not identify model construction and solver search individually. Therefore the fraction of short-deadline failures caused specifically by model construction cannot be estimated from these logs.
+
+The 383 certified and 217 uncertified reference cases differ in family and size. Subgroup losses and case-mix tables are released without treating the certified group as representative. No numerical dual bounds were retained in the 600 archived reference records. Stronger references are being computed in the separate campaign; the complete sensitivity analysis is pending. All historical predictive results reported here retain the original reference costs and labels.
+
+For the ES allocation, the 22-component gain over uniform allocation at 30 seconds per scenario is 74 successes; the conditional portfolio-bootstrap 95\% interval is approximately [59,90]. Relative to the size-only allocation, the point gain is 20 with interval approximately [10,31]. At 60 seconds, the gain over size is only 8 and its interval includes zero. These pointwise intervals condition on predictive fits and do not provide a simultaneous guarantee across budgets.
+
+The full code, normalized and raw descriptors, complete held-out predictions, selected penalties, convergence diagnostics, grouped weights, scenario parameters and decision allocations are retained under \path{research/paper1_revision}. The reproduction check covers 480 historical MSE cells and 400 Brier cells, and refitted baseline predictions agree with their archived counterparts.

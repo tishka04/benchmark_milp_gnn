@@ -1,0 +1,62 @@
+\subsection{Realized descriptors: extrapolation and bounded alternatives}
+\label{sec:bounded_results}
+The historical follow-up in Section~\ref{sec:bounded_method} first reveals a
+specific extrapolation failure. All historical networks are trees, so
+$B9^{\rm M}=|\mathcal L|/N=1-1/N$. When the low-criticality family is excluded,
+training cases contain 30--170 zones, compared with 4--30 in the omitted
+family. The training mean and standard deviation of $B9^{\rm M}$ are
+0.98940 and 0.00443. A four-zone case has $B9^{\rm M}=0.75$, or approximately
+$-54.0$ training standard deviations. For the service preference at five
+seconds, its B9 contribution is $-7.08793$, yielding an affine prediction
+of $-5.94420$ against an observed target of 0.04046. Positive coefficients
+do not prevent a negative prediction when centered features extrapolate.
+
+Across 100 omitted low-criticality scenarios, five deadlines and five
+preferences, 2,216 of 2,500 realized-descriptor linear predictions are
+negative. B9 supplies the most negative additive contribution in 1,898 of
+these cases. These are repeated predictions on 100 scenarios, not 2,500
+independent instances. The explanation is an exact decomposition of the
+fitted predictor, not evidence that B9 physically causes solver difficulty.
+
+Projecting both representations' saved linear predictions onto $[0,1]$
+reverses the aggregate comparison: realized descriptors reduce family-held-out
+MSE by 18.6--51.3\% relative to projected generator descriptors, depending on
+preference. Thus the very large unprojected losses should not be interpreted
+as a general failure of the realized feature set. Projection nevertheless
+collapses many easy-case predictions to zero and leaves other transfer errors.
+
+\input{paper1/results/bounded_milp_table}
+
+The fractional-logistic model with B9 removed reduces MSE relative to the
+projected realized-descriptor comparator by 19.1--30.6\% under scenario folds
+and by 38.1--60.8\% under family holdout (Table~\ref{tab:bounded_milp}). All
+five pooled contrasts in each scheme have positive lower bounds in the
+conditional simultaneous intervals. Removing B9 from the linear model alone
+instead increases MSE by 2.5--8.6\% and 37.2--108.7\%, respectively. The
+choice of predictive model therefore changes the interpretation of ablation:
+B9 can be useful to the linear approximation even though its extrapolation
+requires control.
+
+Within the bounded model, B9 removal further improves all five family-held-out
+losses, with positive conditional simultaneous lower bounds. The additional
+MSE reductions range from 1.5\% to 20.3\% relative to the full bounded model.
+Under scenario folds, effects are negligible for four preferences, and the
+time-priority MSE increases by 1.5\%. The historical transfer evidence favors
+the bounded model without B9 as a candidate, without establishing a universal
+advantage for dropping that coordinate.
+
+The original generator descriptors also benefit from fractional-logistic
+fitting (Appendix~\ref{app:bounded_followup}). With the same bounded model
+and B9 ablation, realized descriptors have lower MSE for all five preferences
+under scenario folds and for four under family holdout. The exception is
+CO$_2$ priority, whose family-held-out MSE is 2.7\% higher. Accordingly, the
+large improvements over projected linear predictions must not be attributed
+entirely to descriptor recomputation.
+
+Transfer remains imperfect. For the bounded realized model without B9,
+family-held-out MSE is 1.38--1.64 times the corresponding scenario-fold MSE.
+Within the low-criticality family itself, four preferences improve relative
+to the projected comparator, but time-priority MSE rises from 0.01006 to
+0.01293. These historical results neither establish deployment calibration
+nor revise the ES-allocation results in Section~\ref{sec:revision_allocation}.
+No outcome from the independent campaign is used in these fits or comparisons.

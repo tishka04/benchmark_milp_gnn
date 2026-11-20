@@ -1,0 +1,83 @@
+\subsection{Exploratory follow-up: realized descriptors and bounded regression}
+\label{sec:bounded_method}
+An additional historical comparison distinguishes the original generator-based
+descriptor values, $X^{\rm G}$, from 22 descriptors recomputed on the loaded
+instance and constructed MILP, $X^{\rm M}$. The latter use input profiles,
+capacities, terminal-storage constraints and declared model dimensions before
+presolve. They use no incumbent, optimized flow, solver-search statistic or
+outcome as an explanatory variable. Coordinate names A1--B10 retain their
+positions for correspondence, but several definitions change; this is a
+separate representation rather than a silent correction of the original index.
+In particular, A3 uses the actual aggregate demand peak and valley, B3 counts
+unfixed binary variables before presolve, B8 uses realized storage durations
+and terminal windows, and $B9^{\rm M}=|\mathcal L|/N$ uses actual lines.
+The original raw values precede the reference normalization, while retaining
+any clipping intrinsic to their original formulas.
+
+For each representation, feature means and population standard deviations
+are learned only on the relevant training fold, including every inner fold:
+\begin{equation}
+ \widetilde x_{sj}=(x_{sj}-\mu_j^{\rm train})/\sigma_j^{\rm train}.
+\end{equation}
+A training-constant coordinate receives a zero coefficient, even if it varies
+at test time. Both representations use the same historical observations,
+preferences, five deadlines and scenario folds. The projected comparator in
+this follow-up is the saved deadline-specific positive linear predictor on
+these standardized raw features,
+\begin{equation}
+ \widehat Y^{\rm proj}_{sb}=\min\{1,\max\{0,a_b+\boldsymbol\beta_b^\top
+ \widetilde{\boldsymbol x}_s\}\},\qquad\boldsymbol\beta_b\geq0.
+ \label{eq:followup_projection}
+\end{equation}
+It is distinct from the reference-normalized models in
+Table~\ref{tab:revision_models}; their historical losses are preserved.
+Projection cannot increase squared error when the response is in $[0,1]$.
+
+After inspecting the realized-descriptor extrapolations on the historical
+cohort, we fitted three explicitly exploratory alternatives: positive linear
+regression with B9 removed and predictions projected as above, positive
+fractional-logistic regression with all coordinates, and the same bounded
+regression with B9 removed. Removal deletes only $B9^{\rm G}$ or $B9^{\rm M}$
+from the respective feature set; all remaining coefficients and the penalty
+are refitted. For preference $p$ and deadline $b$, the bounded model is
+\begin{align}
+ \eta_s&=a_b^{(p)}+\boldsymbol\beta_b^{(p)\top}\widetilde{\boldsymbol x}_s,
+ &\widehat Y^{(p)}_{sb}&=(1+\exp(-\eta_s))^{-1},\nonumber\\
+ (\widehat a,\widehat{\boldsymbol\beta})
+ &=\underset{a,\,\boldsymbol\beta\geq0}{\operatorname{argmin}}\,
+ \left\{\frac1n\sum_{s=1}^n
+ [\log(1+\exp(\eta_s))-Y^{(p)}_{sb}\eta_s]
+ +\frac{\kappa}{2}\|\boldsymbol\beta\|_2^2\right\}.
+ \label{eq:bounded_fractional}
+\end{align}
+The continuous responses are not rounded to binary labels. The output
+estimates a mean operational loss, not a binary failure probability.
+The intercept is unpenalized and constant-response training folds use their
+observed constant. This changes the link and fitting loss jointly, retaining
+the positivity assumption; it is not an isolated test of the link function.
+
+The same candidate penalties $\{0,10^{-4},10^{-3},10^{-2},10^{-1},1,10\}$
+are selected inside the training data. Five outer scenario folds use three
+inner scenario folds. Six family-held-out evaluations use the five remaining
+families as inner folds; no family indicator is a predictor. The linear
+ablation retains the original unprojected inner-MSE selection criterion,
+whereas fractional-logistic tuning uses the MSE of its bounded predictions.
+Final evaluation uses delivered bounded predictions for every arm. Thus the
+linear ablation matches the original fitting procedure, while the bounded
+model is a different predictive procedure. The design comprises 330 saved
+outer-fold fits, each containing five deadline models, or 1,650 models in total.
+
+Paired loss contrasts average the five deadlines within each scenario before
+2,000 scenario bootstrap resamples. Within each validation scheme, 40
+simultaneous contrasts cover three alternatives against the projected
+comparator and bounded B9 removal against the full bounded model, for both
+representations and all five preferences. These conditional intervals do not
+include refitting uncertainty or adjust for choosing this follow-up after
+examining historical results. Neither nested folds nor simultaneous intervals
+make this a confirmatory independent test.
+
+This follow-up changes no physical dispatch, historical reference, E/ES
+classifier or time-allocation policy. Constructing the realized descriptors
+takes a median 1.02 seconds per historical scenario and is outside the
+archived operational deadlines. Predictive gains therefore do not establish
+net online decision gains.

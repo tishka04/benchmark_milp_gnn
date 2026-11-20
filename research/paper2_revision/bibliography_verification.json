@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-12",
+  "scope": "Bibliographic identities and status of cited editions; selective methodological framing, not a systematic literature review.",
+  "entries": [
+    {
+      "key": "beiranvand2017",
+      "status": "published article",
+      "primary_notice": "https://doi.org/10.1007/s11081-017-9366-1"
+    },
+    {
+      "key": "gasse2019",
+      "status": "published proceedings",
+      "primary_notice": "https://proceedings.neurips.cc/paper/2019/hash/d14c2267d848abeb81fd590f371d39bd-Abstract.html"
+    },
+    {
+      "key": "bengio2021",
+      "status": "published article",
+      "primary_notice": "https://doi.org/10.1016/j.ejor.2020.07.063",
+      "note": "Publisher notice: https://www.sciencedirect.com/science/article/pii/S0377221720306895 ; volume 290(2), 405-421, 2021."
+    },
+    {
+      "key": "nair2021",
+      "status": "cited preprint version",
+      "primary_notice": "https://arxiv.org/abs/2012.13349v3",
+      "note": "Version 3 dated 29 July 2021; first submission 2020. Preprint status refers to the cited arXiv edition; no assertion that no later venue exists."
+    },
+    {
+      "key": "sonnerat2022",
+      "status": "cited preprint version",
+      "primary_notice": "https://arxiv.org/abs/2107.10201v3",
+      "note": "Version 3 dated 20 May 2022; first submission 2021. Preprint status refers to the cited arXiv edition."
+    },
+    {
+      "key": "xavier2021",
+      "status": "published article",
+      "primary_notice": "https://doi.org/10.1287/ijoc.2020.0976",
+      "note": "INFORMS volume 33(2), 739-756 is the 2021 issue; first online 9 October 2020. Primary notice: https://pubsonline.informs.org/doi/abs/10.1287/ijoc.2020.0976?journalCode=ijoc"
+    },
+    {
+      "key": "yang2025lns",
+      "status": "cited preprint version",
+      "primary_notice": "https://arxiv.org/abs/2505.14408",
+      "note": "arXiv submission 20 May 2025; the cited notice does not provide a journal reference."
+    },
+    {
+      "key": "assran2023",
+      "status": "published proceedings",
+      "primary_notice": "https://openaccess.thecvf.com/content/CVPR2023/html/Assran_Self-Supervised_Learning_From_Images_With_a_Joint-Embedding_Predictive_Architecture_CVPR_2023_paper.html",
+      "note": "CVF HTML and PDF currently return HTTP 403. Authors/title checked against https://arxiv.org/abs/2301.08243 ; CVPR 2023 proceedings citation retained. Direct CVF page access remains unavailable in this verification."
+    },
+    {
+      "key": "welling2011",
+      "status": "published proceedings",
+      "primary_notice": "https://icml.cc/2011/papers/398_icmlpaper.pdf"
+    },
+    {
+      "key": "du2019",
+      "status": "published proceedings",
+      "primary_notice": "https://papers.nips.cc/paper_files/paper/2019/hash/378a063b8fdb1db941e34f4bde584c7d-Abstract.html"
+    },
+    {
+      "key": "yehudai2021",
+      "status": "published proceedings",
+      "primary_notice": "https://proceedings.mlr.press/v139/yehudai21a.html"
+    },
+    {
+      "key": "efron1979",
+      "status": "published article",
+      "primary_notice": "https://doi.org/10.1214/aos/1176344552"
+    },
+    {
+      "key": "cawley2010",
+      "status": "published article",
+      "primary_notice": "https://www.jmlr.org/papers/v11/cawley10a.html"
+    },
+    {
+      "key": "huangfu2018",
+      "status": "published article",
+      "primary_notice": "https://doi.org/10.1007/s12532-017-0130-5",
+      "note": "Publisher gives first online 14 December 2017 and issue March 2018; citation uses issue year."
+    },
+    {
+      "key": "gurobi2026",
+      "status": "software documentation",
+      "primary_notice": "https://docs.gurobi.com/projects/optimizer/en/current/",
+      "note": "Current official manual checked 12 November 2026 (page updated 10 November). Actual installed engine version will be sealed at preflight; no Gurobi runs have been performed."
+    }
+  ]
+}

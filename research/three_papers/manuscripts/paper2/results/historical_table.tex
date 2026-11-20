@@ -1,0 +1,12 @@
+\begin{table}[htbp]\centering\small
+\begin{tabular}{lrrrr}\toprule
+Method & Valid & No ENS & Cost $\leq5\%$ & Joint\\\midrule
+HiGHS & 600 & 482 & 505 & 475\\
+RH & 577 & 577 & 76 & 76\\
+JEPA & 467 & 253 & 259 & 222\\
+Pipeline & 311 & 265 & 269 & 248\\
+\bottomrule\end{tabular}
+\caption{Primary historical outcomes at 120 s; counts out of 600. Every count requires a valid dispatch and complete exit before the deadline. The joint criterion combines economic quality and ENS $\leq10^{-3}$ MWh.}\label{tab:coverage}
+\end{table}
+Joint coverage and pointwise 95\% scenario-bootstrap intervals are HiGHS 79.2\% [77.0, 81.3]; RH 12.7\% [10.5, 14.8]; JEPA 37.0\% [34.3, 39.7]; Pipeline 41.3\% [38.7, 44.0]. These intervals describe resampling within the six constructed families.
+A degenerate interval at 100\% observed coverage is not a zero-risk deployment guarantee.

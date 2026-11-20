@@ -1,0 +1,110 @@
+{
+  "protocol": "three_papers_service_v2_by_deadline",
+  "campaign": "outputs/thermal_transitions_v1/operational_exit_v1",
+  "physics": "thermal_transitions_v1+load_shifting_v1+energy_cost_dt_v1",
+  "seed": 20261111,
+  "quality_thresholds": [
+    0.01,
+    0.05,
+    0.1
+  ],
+  "reference_zero_eur": 1,
+  "near_zero_absolute_tolerance_eur": 1,
+  "extension_budgets": [
+    5,
+    10,
+    30,
+    60,
+    120
+  ],
+  "reference_seconds": 600,
+  "reference_threads": 16,
+  "reference_wall_cap_seconds": 900,
+  "bootstrap_samples": 2000,
+  "folds": 5,
+  "oracle_minimum_gain": 0.02,
+  "new_cases_per_family": 20,
+  "controlled_cases_per_family": 5,
+  "training_bases_per_family": 30,
+  "training_horizons": [
+    12,
+    24,
+    48
+  ],
+  "multi_horizon": {
+    "architecture": "dynamic_time_conditioned_tokens_v1",
+    "latent_dim": 192,
+    "tokens": 32,
+    "heads": 4,
+    "epochs": {
+      "ae": 60,
+      "jepa": 50,
+      "ebm": 20
+    },
+    "learning_rate": 0.0002,
+    "accumulation": 8,
+    "gradient_clip": 1,
+    "seed": 20261106,
+    "langevin_steps": 20,
+    "langevin_step": 0.02,
+    "langevin_noise": 0.05,
+    "initial_noise": 0.15
+  },
+  "service_routing": {
+    "schema": "service_routing_v2_by_deadline",
+    "zero_ens_tolerance_mwh": 0.001,
+    "selection_reserve_s": 0.01,
+    "minimum_training_groups": 8,
+    "calibration_folds": 3,
+    "coverage_noninferiority_margin": 0.01,
+    "minimum_secondary_gain": {
+      "cost": 0.01,
+      "time": 0.5
+    },
+    "minimum_paired_groups": 20,
+    "known_portfolio_fraction": 0.9,
+    "profiles": [
+      {
+        "id": "urgent_continuity",
+        "cost_tolerance": null,
+        "ens_cap_mwh": "zero",
+        "alpha": 0.05,
+        "priority": "cost"
+      },
+      {
+        "id": "balanced_service",
+        "cost_tolerance": 0.05,
+        "ens_cap_mwh": "zero",
+        "alpha": 0.05,
+        "priority": "time"
+      },
+      {
+        "id": "economic_precision",
+        "cost_tolerance": 0.01,
+        "ens_cap_mwh": null,
+        "alpha": 0.05,
+        "priority": "time"
+      },
+      {
+        "id": "precision_continuity",
+        "cost_tolerance": 0.01,
+        "ens_cap_mwh": "zero",
+        "alpha": 0.05,
+        "priority": "time"
+      }
+    ],
+    "ens_sensitivity_caps_mwh": [
+      0.001,
+      1,
+      10,
+      100
+    ],
+    "deadlines_s": [
+      5,
+      10,
+      30,
+      60,
+      120
+    ]
+  }
+}

@@ -1,0 +1,428 @@
+\input{preamble}
+\usepackage{tikz}
+\setlength{\emergencystretch}{1em}
+\input{paper2/results/evidence_status}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc}
+\definecolor{scenarioBlue}{HTML}{3269A8}
+\definecolor{encoderPurple}{HTML}{7954A1}
+\definecolor{graphGreen}{HTML}{348F70}
+\definecolor{ebmOrange}{HTML}{D68B23}
+\definecolor{samplerTeal}{HTML}{298F99}
+\definecolor{milpRed}{HTML}{B54D52}
+\date{12 November 2026}
+\title{Which Optimization Method Delivers the Required Energy Service?\\
+Deadline-Constrained Comparisons and Limits of Learned Proposals}
+\begin{document}
+\maketitle
+\begin{abstract}
+Energy-system optimization must return an actionable dispatch before a deadline,
+but physical validity, economic quality and continuity of service are distinct
+requirements. We compare direct HiGHS optimization, rolling-horizon proposals
+with repair, a single learned latent proposal, and an energy-guided portfolio
+of sixteen proposals on 600 constructed scenarios. Independent execution
+budgets include all online computation and process closure. At 120 seconds,
+HiGHS delivers 600 valid outputs and 505 within five percent of a common
+reference, whereas rolling horizon preserves service without unserved energy
+on 577 scenarios, compared with 482 for HiGHS. Requiring both economic quality
+and continuity yields 475 successes for HiGHS, 248 for the portfolio, 222 for
+the single learned proposal and 76 for rolling horizon. Paired comparisons
+identify narrower opportunities for learned proposals, including useful
+short-budget coverage on renewable/storage scenarios. They do not establish
+an incremental benefit of the learned energy: candidate count and repair
+remain competing explanations. We specify independent, matched-ablation and
+structural-transfer evaluations, including a separately trained variable-horizon
+model and an external solver. \pIIExtensionStatus
+The supported conclusion is conditional: the useful method depends
+on the requested service and allocated time, while generalization and
+prospective selection require additional evidence.
+\end{abstract}
+
+\section{Introduction}
+Operational energy decisions coordinate generation, storage, flexible demand
+and exchanges under intertemporal constraints. A dispatch delivered after its
+decision deadline is unavailable when needed. A dispatch delivered on time
+may still shed load, and one preserving all demand may have a substantial
+economic penalty. Comparing optimization methods therefore requires a
+specified service requirement, rather than a single unconstrained ranking.
+
+Mixed-integer linear programming (MILP) represents commitment and operating
+modes jointly with continuous energy flows. Learning can accelerate different
+parts of this process \citep{bengio2021}. Graph-based branching learns decisions
+inside an exact search \citep{gasse2019}; Neural Diving generates partial
+assignments completed by a solver \citep{nair2021}; learned large-neighborhood
+search chooses subsequent optimization neighborhoods \citep{sonnerat2022}.
+In unit commitment, historical solutions can support constraint screening,
+initial solutions and restricted search \citep{xavier2021}. Recent work combines
+graph-based commitment prediction, feasibility restoration and large-neighborhood
+search \citep{yang2025lns}. These approaches establish the relevance of
+learning-assisted optimization, but their guarantees and computational budgets
+are not interchangeable.
+
+Our learned methods propose zonal operating strategies in a latent space,
+then reconstruct a dispatch through a common repair cascade. Their operational
+value depends on the complete chain: scenario encoding, proposal quality,
+repair effort, validation and termination. Comparing one proposal with sixteen
+energy-guided proposals confounds guidance with search breadth. Likewise,
+feasibility after substantial repair does not demonstrate that the proposal
+itself generalized. Fair benchmarking must expose these distinctions and
+retain unsuccessful executions \citep{beiranvand2017}.
+
+A graph representation can accept variable-size inputs while its learned
+mapping fails on changed local structures \citep{yehudai2021}. The complete
+optimization stack may also contain fixed index embeddings or horizon limits.
+New draws, structural transformations and horizons absent from training
+consequently answer different questions; none follows from architectural
+compatibility alone.
+
+We ask: \emph{under the same operational deadline, which methods deliver a
+physically valid, economically acceptable dispatch that preserves service,
+and how robust are their useful regimes to changes in the scenario?}
+The study has three components: a failure-aware map of time--cost--service
+trade-offs; a matched design isolating energy guidance; and separate tests of
+frozen-model transfer and a newly trained variable-horizon chain. The first
+component is supported by a completed campaign. \pIIIntroStatus
+This separation prevents
+planned controls from being mistaken for demonstrated contributions.
+
+\section{Methods}
+\subsection{Scenario and physical optimization problem}
+One scenario specifies zones $\mathcal Z$, periods $\mathcal T$, hourly duration
+$\Delta t$, a capacitated transport network, demand, renewable availability,
+installed capacities, operating limits, initial and terminal states, and costs.
+These inputs remain fixed across methods and deadlines. Different deadlines
+create different executions of the same physical instance.
+
+The MILP coordinates aggregate zonal thermal commitment, nuclear generation,
+renewable curtailment, batteries, reservoir and pumped hydro, demand response,
+line flows and external trade. At every zone and period, generation, storage
+flows, exchanges and flexible demand satisfy nodal balance, with explicitly
+penalized unserved demand and excess generation. The objective is
+\begin{equation}
+ C=\sum_{z,t}\Delta t\bigl(c^{\rm gen}_{zt}+c^{\rm flex}_{zt}
+       +c^{\rm cyc}_{zt}+c^{\rm spill}_{zt}+v_zP^{\rm uns}_{zt}\bigr)
+       +\sum_{z,t}c_z^{\rm start}v_{zt}
+       +C^{\rm import}-R^{\rm export}.
+ \label{eq:cost}
+\end{equation}
+The parenthesized terms are cost rates; start-up costs are charged per event.
+Export revenues can make net costs negative. Thermal transitions obey
+$u_t-u_{t-1}=v_t-w_t$, with mutually exclusive start-up and shutdown events and
+explicit ramp limits. Storage tracks efficiency, retention and terminal
+bounds. Demand response is lossless shifting: a causal energy backlog records
+deferred demand and must be repaid at the terminal period.
+
+The network constrains transport capacities but does not impose Kirchhoff's
+laws or contingency security. Commitment is aggregated by zone, so equipment
+counts and graph nodes are not counts of independent commitment binaries.
+Appendix~\ref{app:physical} gives the operational equations. All methods face
+this same model and the same independent output checks.
+
+\subsection{From a scenario to a heterogeneous temporal graph}
+The scenario becomes an attributed graph with system, region, zone, asset
+and weather nodes. Relations express containment, weather influence,
+transmission and temporal couplings. Figures~\ref{fig:graph_spatial}
+and~\ref{fig:graph_temporal} illustrate the construction. No solution or
+reference objective is an input to the graph.
+
+The hierarchical temporal encoder aggregates spatial information from assets
+to zones, regions and the system, models temporal dependence, and distributes
+context back to the zone sequence. Frozen training means and standard
+deviations normalize the inputs; they are not refitted on evaluation data.
+Online graph construction and embedding are timed. The graph supplies
+descriptive context; the optimization model and validator enforce physical
+constraints. A temporal edge is not itself a certificate of energy balance
+or a commitment transition.
+\input{paper2/figures/scenario_graphs}
+
+\subsection{Compared methods and shared reconstruction}
+Table~\ref{tab:methods} defines the actual search and reconstruction mechanisms.
+HiGHS is the open-source direct baseline; its components include the parallel
+dual simplex method \citep{huangfu2018}. Rolling horizon constructs a proposal
+from physical inputs with a six-period look-ahead, then invokes the same repair
+engine as the learned methods. It is not a solver-free method.
+
+\begin{table}[htbp]\centering\small
+\begin{tabular}{p{.17\linewidth}p{.42\linewidth}p{.29\linewidth}}\toprule
+Method & Proposal or search & Online resources\\\midrule
+HiGHS & Direct corrected MILP & 16 solver threads\\
+RH & Rolling-horizon strategy, then repair & One repair, 16 threads\\
+JEPA & Decode one predicted latent anchor, then repair & GPU; one repair, 16 threads\\
+Pipeline & Sixteen energy-guided latent candidates, then repair & GPU; 16 concurrent repairs, one thread each\\
+No-gradient control & Same sampler, energy gradient set to zero & Same envelope as pipeline\\
+Gurobi & Independent direct solution of the same MILP & 16 solver threads\\\bottomrule
+\end{tabular}
+\caption{Methods and resource allocation. The no-gradient control and Gurobi belong to the prepared extensions. Every accepted output undergoes the same independent physical validation.}\label{tab:methods}
+\end{table}
+
+A strategy has eight channels per zone and time,
+\begin{equation}
+ u_{zt}=[b^{\rm ch},b^{\rm dis},p^{\rm ch},p^{\rm dis},d^{\rm DR},v^{\rm th},u^{\rm th},i^{\rm imp}]_{zt}.
+ \label{eq:strategy}
+\end{equation}
+Storage channels indicate positive activity and allow idle periods. The import
+label is a system binary broadcast over zones. Only the first seven channels
+enter repair targets; import/export remains a reconstruction decision.
+An autoencoder maps reference strategies to 32 tokens of dimension 192.
+A scenario-to-latent predictor supplies an anchor without observing the
+reference strategy. This follows the broad idea of predicting representations,
+while differing from image-based self-supervised JEPA in its inputs, targets
+and losses \citep{assran2023}.
+
+JEPA decodes the anchor once. The pipeline initializes sixteen latents around
+the anchor or from a learned prior, then applies gradient-and-noise updates
+with drift toward the anchor. Energy-based modeling and Langevin updates
+motivate the construction \citep{du2019,welling2011}; twenty finite updates do
+not establish equilibrium sampling. Both methods use the same frozen feature
+thresholds. Appendix~\ref{app:learned} specifies architectures, training
+objectives, thresholds and update equations.
+
+\input{paper2/figures/method_chain}
+
+The repair cascade first fixes supplied targets, then releases selected
+decisions under deviation penalties and flip limits. Original integer domains
+and structural fixes are retained: later stages may solve MILPs. Among
+independently valid candidates completed before the computation cutoff, the
+pipeline returns the lowest physical cost, with candidate index breaking ties.
+It does not retrospectively select another candidate to satisfy an ENS cap.
+All child processes must still exit before the global deadline.
+
+\subsection{What the matched energy ablation identifies}
+The prepared control removes only the energy-gradient term. Candidate count,
+models, initialization, random streams, noise, drift, clipping, update count,
+thresholds and repair resources are matched. Both variants receive the same
+deadline; removing gradient computation can leave more time for repair.
+Their difference measures the operational contribution of that term under
+this resource envelope. It does not establish a universal EBM advantage or
+equate realized computation time. The one-candidate comparison alone cannot
+answer this question.
+
+\section{Experimental setup}
+\subsection{Completed cohort and computational protocol}
+The completed campaign contains 600 constructed scenarios, 100 per family:
+low, medium and high criticality; renewable generation with batteries;
+network-focused systems; and combinatorially constrained systems. The families
+combine different generator and selection regimes, rather than forming six
+ordered severity levels. Historical scenarios have 24 hourly periods.
+There are 16,800 primary executions over seven independent budgets and 1,680
+additional executions from two extra repetitions on 30 preselected scenarios.
+The main analysis uses five budgets from 5 to 120 seconds; 1/2-second records
+remain part of the historical record.
+
+Execution uses one machine and an envelope of 16 CPU solver threads; learned
+inference uses an RTX 4050. Static preload includes libraries, model weights
+and repair workers, but no evaluation scenario or embedding. The timed
+interval includes reading, graph construction, inference, repair, validation,
+writing and full process exit. A fixed budget-dependent reserve leaves time
+for finalization. Forced termination, late output and a still-running child
+are failures, even if a valid incumbent existed earlier. The reserve remains
+unchanged across the prepared extensions.
+
+The validator reconstructs balances and costs from dispatches independently
+of solver-reported objectives. Absolute physical and integrality tolerances
+are $10^{-3}$ and $10^{-5}$. All 600 common references are valid; 383 are
+certified optimal, while the remainder are validated incumbents from a
+600-second HiGHS solve. Reference computation and training are excluded from
+online timing and reported separately. A small reference-relative gap or zero
+ENS is not a security or robustness guarantee.
+
+\subsection{Outcomes and statistical comparisons}
+Let $F_{smb}$ indicate valid output and complete timely exit for scenario $s$,
+method $m$ and allocation $b$. Delivered unserved energy is
+$E_{smb}=\sum_{z,t}P^{\rm uns}_{smbzt}\Delta t$. With reference $C_s^{\rm ref}$,
+\begin{equation}
+ Q_{smb}(\tau)=\begin{cases}
+ \ind\{(C_{smb}-C_s^{\rm ref})/|C_s^{\rm ref}|\leq\tau\},&|C_s^{\rm ref}|>1\ {m EUR},\\
+ \ind\{C_{smb}-C_s^{\rm ref}\leq1\ {m EUR}\},&\text{otherwise}.
+ \end{cases}
+\end{equation}
+The primary joint endpoint is
+\begin{equation}
+ Y_{smb}=F_{smb}Q_{smb}(0.05)\ind\{E_{smb}\leq10^{-3}\ {\rm MWh}\}.
+ \label{eq:joint}
+\end{equation}
+An observed failure has outcome zero without assigning fictitious cost or ENS.
+Missing trials or necessary measurements remain unknown. Disabled conditions
+do not require the corresponding measurement. Secondary endpoints separate
+validity, continuity and economic quality; sensitivity uses 1/10\% cost
+thresholds and ENS caps of 1/10/100 MWh. Absolute cost differences and ENS
+relative to demand complement percentage comparisons.
+
+Coverage retains observed failures. Conditional cost and time comparisons
+use common acceptable supports and report their sizes. Pointwise 95\%
+intervals use 2,000 paired bootstrap samples, resampling scenario bases within
+families \citep{efron1979}. Variants, deadlines and repetitions of a base remain
+together. Repetitions do not increase the number of independent scenarios.
+The completed cohort was inspected during development, so its contrasts are
+exploratory.
+
+On the independent test, 25 primary contrasts are fixed in advance: RH, JEPA,
+pipeline and Gurobi against HiGHS, plus pipeline against the no-gradient
+control, at each deadline. Exact paired binary tests use discordant outcomes,
+with Holm correction over all 25 comparisons. Missing comparisons cannot
+become significant and do not reduce the correction family. Structural and
+seed-sensitivity intervals remain descriptive. These distinctions address
+selection-induced optimism \citep{cawley2010}.
+
+\subsection{Independent and transfer extensions}
+\label{sec:extensions}
+\begin{table}[htbp]\centering\small
+\begin{tabular}{p{.24\linewidth}p{.40\linewidth}p{.24\linewidth}}\toprule
+Block & Sampling and separation & Evidence status\\\midrule
+Historical comparison & 600 scenarios; six families; 24 h & Complete\\
+Independent comparison & 120 development and 120 final cases; 20 per family in each & Prepared\\
+Structural controls & 30 development and 30 final bases; seven conditions per base & Prepared\\
+Multi-horizon labels & 180 separate bases at 12/24/48 h; grouped train/validation assignment & Prepared\\
+External direct solver & 120 fixed historical and 120 independent final cases & Prepared\\\bottomrule
+\end{tabular}
+\caption{Distinct evidence blocks. New cases share family parameter spaces but not the historical selection procedure, so they are not an unqualified IID replication. Final outcomes remain unavailable until the design and models are locked.}\label{tab:cohorts}
+\end{table}
+
+Structural conditions comprise a 24-hour control, duplicated system within
+300 zones, recabled network, modified thermal/storage capacities, consistent
+zone permutation, and 48/72-hour extensions. Permutation preserves the physical
+problem up to relabeling, including the trade anchor. Duplication changes both
+size and structure. Horizon extensions preserve the first day and apply
+declared daily demand/renewable scalings; they test controlled synthetic shift,
+not independent forecasting errors. Transformations act on realized physical
+data shared by all methods.
+
+The historical decoder is limited to 24 periods. Longer-horizon cells are
+inapplicable, not failures. A separate autoencoder, predictor and energy model
+use content-conditioned queries and sinusoidal time positions, while reusing
+the frozen graph encoder and normalization. Training uses 12/24/48-hour
+instances; 72 hours is absent from training. Three fixed training seeds
+quantify sensitivity without selecting a winner on the test. The primary seed
+is evaluated across the control suite; the other two use 24/48/72 hours and
+30/120-second budgets.
+
+Gurobi solves the same physical MILP directly \citep{gurobi2026}; it does not
+replace the repair backend. HiGHS references are preserved, so an improved
+incumbent can have a negative gap. Two extra repetitions on 30 independent
+final cases at 30/120 seconds assess variability of the principal methods
+and matched ablation.
+
+\section{Results}
+\subsection{The service requirement changes the useful method}
+\input{paper2/results/historical_table}
+HiGHS has the strongest economic and joint coverage at 120 seconds. RH instead
+provides more outputs without ENS, at a substantial cost premium. The pipeline
+returns fewer valid outputs than JEPA but more outputs meeting the joint
+criterion. These are properties of the evaluated implementations and resource
+envelope, rather than general rankings of exact, heuristic and learned methods.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\linewidth]{paper2/results/coverage.pdf}
+\caption{Historical continuity, economic and joint coverage. Shading shows pointwise scenario-bootstrap intervals. Each deadline is an independent execution; these are not incumbent trajectories or time-to-target curves.}\label{fig:coverage}
+\end{figure}
+
+At 30 seconds, RH preserves service on all 100 high-criticality cases while
+HiGHS does so on eight. At 120 seconds, HiGHS reaches the joint requirement
+on 61 of those cases; the learned methods reach it on only one JEPA and two
+pipeline cases. Conversely, on the renewable/battery family at ten seconds,
+HiGHS meets the joint requirement on 46 cases and JEPA on 38. The union of
+all four methods covers 59, including six cases served only by JEPA. This is
+localized complementarity, not general superiority on that family.
+
+\subsection{Faster acceptable outputs exist on restricted supports}
+Figure~\ref{fig:paired} compares outputs meeting the same joint requirement
+at the same 120-second allocation. JEPA can finish earlier on selected cases,
+including 43 renewable/battery and 25 medium-criticality cases. Such comparisons
+complement coverage; they cannot remove scenarios where JEPA fails. Nor does
+fast completion under a 120-second allocation establish the same outcome
+under an independently allocated shorter deadline.
+
+\begin{figure}[htbp]\centering
+\includegraphics[width=\linewidth]{paper2/results/paired_tradeoffs.pdf}
+\caption{Paired differences against HiGHS at 120 seconds where both methods meet the joint criterion. Negative horizontal values denote earlier completion by the comparator; negative vertical values denote lower cost. Conditional support is stated in each panel.}\label{fig:paired}
+\end{figure}
+
+\subsection{Execution overhead and limits of component attribution}
+\begin{figure}[htbp]\centering
+\includegraphics[width=.94\linewidth]{paper2/results/execution_time.pdf}
+\caption{Execution components and separate static preload at 120 seconds. Medians use terminal records with available timing, including failures. Different success supports prevent interpreting these medians as paired speedups. Concurrent repair times cannot be summed into wall-clock time.}\label{fig:time}
+\end{figure}
+The smaller pipeline coverage and its overhead caution against equating broader
+candidate generation with greater usefulness. The pipeline--JEPA difference
+mixes candidate count, initialization, energy guidance and repair opportunities.
+Prepared instrumented runs additionally separate encoding, generation, repair
+waiting, validation and child closure, and count changed decisions only where
+the corresponding technology is present. This diagnostic measures repair
+extent, not a causal mechanism.
+
+\subsection{Sensitivity, repetition and independent evidence}
+At 120 seconds, a retrospective perfect choice among the four outputs meets
+the joint criterion on 477 cases, compared with 475 for HiGHS. The two additional
+cases have about 0.121 and 0.682 MWh of ENS in the HiGHS outputs. With a 1 MWh
+cap, HiGHS itself covers 477 cases. A small strict-continuity gain thus need
+not survive a different operational tolerance.
+
+On the 30 historically repeated cases at 120 seconds, the joint outcome changes
+across repetitions for six HiGHS cases, three pipeline cases, one JEPA case
+and no RH case. These counts do not establish deployment reliability, and
+stable failure would not constitute useful reliability.
+\input{paper2/results/extension_results}
+\IfFileExists{paper2/results/energy_ablation.pdf}{
+\begin{figure}[htbp]\centering\includegraphics[width=.94\linewidth]{paper2/results/energy_ablation.pdf}
+\caption{Matched energy ablation, with development and independent test separate. Both methods use sixteen candidates and the same resource envelope.}\label{fig:ablation}\end{figure}}{}
+\IfFileExists{paper2/results/generalization.pdf}{
+\begin{figure}[htbp]\centering\includegraphics[width=\linewidth]{paper2/results/generalization.pdf}
+\caption{Independent structural and horizon evaluation. N/A denotes an unsupported configuration, not a failure. Multi-horizon results use the predetermined primary seed.}\label{fig:generalization}\end{figure}}{}
+
+\section{Discussion and limitations}
+The completed evidence favors request-specific interpretation. RH offers rapid
+continuity on several difficult families; HiGHS supplies stronger economic
+coverage, especially with longer allocations; JEPA provides selected acceptable
+outputs earlier and some unique short-budget successes. The pipeline has not
+demonstrated a broad advantage, and the current comparison does not attribute
+any improvement specifically to energy guidance. Negative ablation or transfer
+outcomes would refine this conclusion rather than invalidate the question.
+
+The study concerns deterministic, constructed systems with aggregated
+commitment and a transport network. It does not evaluate AC feasibility,
+contingency security, uncertain forecasts or deployment. Family selection
+and size are partly confounded. Bootstrap intervals condition on the sampled
+family mixture and do not correct this design. Complete pretraining membership
+of the graph encoder requires its own provenance audit: disjoint supervised
+labels alone do not certify that every learned stage is free of evaluation
+exposure.
+
+Reference-relative quality compares to a common benchmark, not an unknown
+optimum. Certified-reference subsets and lower bounds provide complementary
+information but can select easier cases. ENS is penalized in the objective
+and reported separately, so cost and continuity are related but not
+interchangeable. An absolute ENS tolerance has different relative importance
+at different physical scales.
+
+Training, labels and static preload are real costs. Excluding them from the
+online interval defines a warm-service setting. Sixteen one-thread repairs
+and one sixteen-thread solve have the same thread envelope, not identical
+parallel efficiency. One machine and a common repair backend limit timing
+portability. The variable-horizon extension changes architecture and training
+data; its results will characterize that new chain, not isolate an
+architectural improvement or demonstrate zero-shot transfer of the old stack.
+
+\section{Conclusion}
+Within the completed cohort, no method dominates all requested services.
+At 120 seconds, HiGHS supplies the broadest joint economic/service coverage,
+while RH supplies the broadest continuity coverage. Learned proposals offer
+narrower time and coverage opportunities, and the sixteen-candidate pipeline's
+overhead limits its usefulness. These observations answer the comparative
+question within the tested envelope. The incremental value of energy guidance
+and robustness under structural or temporal changes remain to be established
+by the specified independent experiments.
+
+\subsection*{Subsequent work}
+Observed complementarity defines an opportunity for selection, not a selection
+policy. Subsequent work will test whether information available before solving
+can identify useful methods for a stated deadline and service requirement.
+It must compare against fixed methods and simple baselines, use independent
+evaluation, and charge feature computation and selection to the same deadline.
+The criticality descriptors studied previously are candidate inputs; predictive
+value for one solver does not establish a cross-method routing gain.
+
+\appendix
+\input{paper2/technical_appendix}
+\begingroup\interlinepenalty=10000
+\bibliographystyle{unsrtnat}\bibliography{paper2/references}
+\endgroup
+\end{document}

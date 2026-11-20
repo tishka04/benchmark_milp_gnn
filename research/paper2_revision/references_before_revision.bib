@@ -1,0 +1,1136 @@
+% Bibliography for paper 2 -- checked 2026-11-05
+% Curated reference reservoir. Only cited entries appear in the manuscript.
+% Sources, roles and publication status: ../../bibliography/catalogue.json
+% Selection rationale and priority reading: README.md
+% No solver, statistical analysis, BibTeX or LaTeX compilation was executed.
+% Preprint status refers to the version cited, not a claim about all later versions.
+
+% ====================================================================
+% Unit commitment: formulations and computational structure
+% ====================================================================
+
+% Role: Contraintes intertemporelles et compromis nombre de variables/contraintes et performance de résolution.
+% Status: published; checked 2026-11-05
+% Verification: https://ieeexplore.ieee.org/document/1664974/
+@article{carrion2006,
+  author = {Carri{\'{o}}n, Miguel and Arroyo, Jos{\'{e}} M.},
+  title = {{A computationally efficient mixed-integer linear formulation for the thermal unit commitment problem}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2006},
+  volume = {21},
+  number = {3},
+  pages = {1371--1378},
+  doi = {10.1109/TPWRS.2006.876672},
+  url = {https://doi.org/10.1109/TPWRS.2006.876672},
+}
+
+% Role: Formulation thermique et effet du resserrement sur la résolution; référence de modèle, pas identité avec la formulation locale.
+% Status: published; checked 2026-11-05
+% Verification: https://research.tudelft.nl/en/publications/tight-and-compact-milp-formulation-for-the-thermal-unit-commitmen/
+% Original MILP-GNN.bib key: morales_espana_tight_2013
+@article{moralesespana2013,
+  author = {Morales-Espa{\~{n}}a, Germ{\'{a}}n and Latorre, Jesus M. and Ramos, Andres},
+  title = {{Tight and Compact MILP Formulation for the Thermal Unit Commitment Problem}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2013},
+  volume = {28},
+  number = {4},
+  pages = {4897--4908},
+  doi = {10.1109/TPWRS.2013.2251373},
+  url = {https://doi.org/10.1109/TPWRS.2013.2251373},
+}
+
+% Role: Comparer familles de formulations UC et effets sur le temps de calcul; fondement pour interpréter la difficulté.
+% Status: published; checked 2026-11-05
+% Verification: https://pubsonline.informs.org/doi/10.1287/ijoc.2019.0944
+@article{knueven2020,
+  author = {Knueven, Bernard and Ostrowski, James and Watson, Jean-Paul},
+  title = {{On Mixed-Integer Programming Formulations for the Unit Commitment Problem}},
+  journal = {INFORMS Journal on Computing},
+  year = {2020},
+  volume = {32},
+  number = {4},
+  pages = {857--876},
+  doi = {10.1287/ijoc.2019.0944},
+  url = {https://doi.org/10.1287/ijoc.2019.0944},
+}
+
+% Role: Lien entre réserves, structure polyédrale et difficulté de résolution; les contraintes du papier ne sont pas toutes celles du modèle local.
+% Status: published; checked 2026-11-05
+% Verification: https://research.polyu.edu.hk/en/publications/cutting-planes-for-security-constrained-unit-commitment-with-regu/
+% Original MILP-GNN.bib key: huang_cutting_2021
+@article{huang2021,
+  author = {Huang, Jianqiu and Pan, Kai and Guan, Yongpei},
+  title = {{Cutting planes for security-constrained unit commitment with regulation reserve}},
+  journal = {IISE Transactions},
+  year = {2021},
+  volume = {53},
+  number = {4},
+  pages = {437--452},
+  doi = {10.1080/24725854.2020.1823533},
+  url = {https://doi.org/10.1080/24725854.2020.1823533},
+}
+
+% ====================================================================
+% Physical stress and power-system flexibility
+% ====================================================================
+
+% Role: Indicateurs de disponibilité des ressources de rampe et échelles temporelles; risque physique distinct de la difficulté informatique.
+% Status: published; checked 2026-11-05
+% Verification: https://researchrepository.ucd.ie/entities/publication/c68c6298-d018-4950-830f-5d9ba1472659
+@article{lannoye2012,
+  author = {Lannoye, Eamonn and Flynn, Damian and O'Malley, Mark},
+  title = {{Evaluation of Power System Flexibility}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2012},
+  volume = {27},
+  number = {2},
+  pages = {922--931},
+  doi = {10.1109/TPWRS.2011.2177280},
+  url = {https://doi.org/10.1109/TPWRS.2011.2177280},
+}
+
+% Role: Interprétation physique des capacités de flexibilité; ne mesure pas la difficulté MILP.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0142061515001118
+@article{ulbig2015,
+  author = {Ulbig, Andreas and Andersson, G{\"{o}}ran},
+  title = {{Analyzing operational flexibility of electric power systems}},
+  journal = {International Journal of Electrical Power \& Energy Systems},
+  year = {2015},
+  volume = {72},
+  pages = {155--164},
+  doi = {10.1016/j.ijepes.2015.02.028},
+  url = {https://doi.org/10.1016/j.ijepes.2015.02.028},
+}
+
+% Role: Besoins de flexibilité selon plusieurs échelles temporelles et leurs déterminants.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0306261919302107
+@article{heggarty2019,
+  author = {Heggarty, Thomas and Bourmaud, Jean-Yves and Girard, Robin and Kariniotakis, Georges},
+  title = {{Multi-temporal assessment of power system flexibility requirement}},
+  journal = {Applied Energy},
+  year = {2019},
+  volume = {238},
+  pages = {1327--1336},
+  doi = {10.1016/j.apenergy.2019.01.198},
+  url = {https://doi.org/10.1016/j.apenergy.2019.01.198},
+}
+
+% ====================================================================
+% Instance features and empirical computational difficulty
+% ====================================================================
+
+% Role: Évaluer les zones de réussite et d’échec dans l’espace des instances, au-delà des moyennes globales.
+% Status: published; checked 2026-11-05
+% Verification: https://orca.cardiff.ac.uk/id/eprint/53966/
+@article{smithmiles2014,
+  author = {Smith-Miles, Kate and Baatar, Davaatseren and Wreford, Brendan and Lewis, Rhyd},
+  title = {{Towards objective measures of algorithm performance across instance space}},
+  journal = {Computers \& Operations Research},
+  year = {2014},
+  volume = {45},
+  pages = {12--24},
+  doi = {10.1016/j.cor.2013.11.015},
+  url = {https://doi.org/10.1016/j.cor.2013.11.015},
+}
+
+% ====================================================================
+% Computational benchmarking and quality versus time
+% ====================================================================
+
+% Role: Comparer la performance sur un ensemble d’instances; ne remplace pas la mesure de sortie complète du processus.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.1007/S101070100263
+@article{dolan2002,
+  author = {Dolan, Elizabeth D. and Mor{\'{e}}, Jorge J.},
+  title = {{Benchmarking optimization software with performance profiles}},
+  journal = {Mathematical Programming},
+  year = {2002},
+  volume = {91},
+  pages = {201--213},
+  doi = {10.1007/s101070100263},
+  url = {https://doi.org/10.1007/s101070100263},
+}
+
+% Role: Situer les courbes qualité-temps et l’intégrale primale; distinguer incumbent disponible et programme terminé.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0167637713001181
+@article{berthold2013,
+  author = {Berthold, Timo},
+  title = {{Measuring the impact of primal heuristics}},
+  journal = {Operations Research Letters},
+  year = {2013},
+  volume = {41},
+  number = {6},
+  pages = {611--614},
+  doi = {10.1016/j.orl.2013.08.007},
+  url = {https://doi.org/10.1016/j.orl.2013.08.007},
+}
+
+% Role: Comparaison équitable, ressources, jeux d’instances et présentation des résultats.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.1007/s11081-017-9366-1
+@article{beiranvand2017,
+  author = {Beiranvand, Vahid and Hare, Warren and Lucet, Yves},
+  title = {{Best practices for comparing optimization algorithms}},
+  journal = {Optimization and Engineering},
+  year = {2017},
+  volume = {18},
+  pages = {815--848},
+  doi = {10.1007/s11081-017-9366-1},
+  url = {https://doi.org/10.1007/s11081-017-9366-1},
+}
+
+% Role: Diversité et sélection d’instances MILP; bibliothèque externe, pas description du générateur énergétique local.
+% Status: published; checked 2026-11-05
+% Verification: https://miplib.zib.de/
+% Verification: https://publications.rwth-aachen.de/record/811575?ln=en
+@article{gleixner2021,
+  author = {Gleixner, Ambros and Hendel, Gregor and Gamrath, Gerald and Achterberg, Tobias and Bastubbe, Michael and Berthold, Timo and Christophel, Philipp M. and Jarck, Kati and Koch, Thorsten and Linderoth, Jeff and L{\"{u}}bbecke, Marco E. and Mittelmann, Hans D. and Ozyurt, Derya and Ralphs, Ted K. and Salvagnin, Domenico and Shinano, Yuji},
+  title = {{MIPLIB 2017: data-driven compilation of the 6th mixed-integer programming library}},
+  journal = {Mathematical Programming Computation},
+  year = {2021},
+  volume = {13},
+  number = {3},
+  pages = {443--490},
+  doi = {10.1007/s12532-020-00194-3},
+  url = {https://doi.org/10.1007/s12532-020-00194-3},
+}
+
+% ====================================================================
+% Learning to guide mixed-integer optimization
+% ====================================================================
+
+% Role: Branchement appris sur graphe biparti; distinguer guidage de recherche exacte et génération de candidats.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper/2019/hash/d14c2267d848abeb81fd590f371d39bd-Abstract.html
+% Original MILP-GNN.bib key: gasse_exact_2019
+@inproceedings{gasse2019,
+  author = {Gasse, Maxime and Ch{\'{e}}telat, Didier and Ferroni, Nicola and Charlin, Laurent and Lodi, Andrea},
+  title = {{Exact Combinatorial Optimization with Graph Convolutional Neural Networks}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume = {32},
+  year = {2019},
+  url = {https://proceedings.neurips.cc/paper/2019/hash/d14c2267d848abeb81fd590f371d39bd-Abstract.html},
+}
+
+% Role: Taxonomie des interactions entre apprentissage et optimisation et choix des distributions d’entraînement.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0377221720306895
+@article{bengio2021,
+  author = {Bengio, Yoshua and Lodi, Andrea and Prouvost, Antoine},
+  title = {{Machine learning for combinatorial optimization: A methodological tour d'horizon}},
+  journal = {European Journal of Operational Research},
+  year = {2021},
+  volume = {290},
+  number = {2},
+  pages = {405--421},
+  doi = {10.1016/j.ejor.2020.07.063},
+  url = {https://doi.org/10.1016/j.ejor.2020.07.063},
+}
+
+% Role: Neural Diving et Neural Branching; point de comparaison direct pour les affectations apprises complétées par un solveur.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2012.13349
+@misc{nair2021,
+  author = {Nair, Vinod and Bartunov, Sergey and Gimeno, Felix and von Glehn, Ingrid and Lichocki, Pawel and Lobov, Ivan and O'Donoghue, Brendan and Sonnerat, Nicolas and Tjandraatmadja, Christian and Wang, Pengming and Addanki, Ravichandra and Hapuarachchi, Tharindi and Keck, Thomas and Keeling, James and Kohli, Pushmeet and Ktena, Ira and Li, Yujia and Vinyals, Oriol and Zwols, Yori},
+  title = {{Solving Mixed Integer Programs Using Neural Networks}},
+  year = {2021},
+  eprint = {2012.13349},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  url = {https://arxiv.org/abs/2012.13349v3},
+  note = {Preprint, version 3; first submitted in 2020},
+}
+
+% Role: Choix appris des voisinages MILP; comparer le rôle du solveur et le coût complet de l’amélioration.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2107.10201
+% Verification: https://github.com/google-deepmind/neural_lns
+@misc{sonnerat2022,
+  author = {Sonnerat, Nicolas and Wang, Pengming and Ktena, Ira and Bartunov, Sergey and Nair, Vinod},
+  title = {{Learning a Large Neighborhood Search Algorithm for Mixed Integer Programs}},
+  year = {2022},
+  eprint = {2107.10201},
+  archivePrefix = {arXiv},
+  primaryClass = {cs.LG},
+  url = {https://arxiv.org/abs/2107.10201v3},
+  note = {Preprint, version 3; first submitted in 2021},
+}
+
+% Role: Revue étendue des GNN pour optimisation; remplace la version courte IJCAI 2021.
+% Status: published; checked 2026-11-05
+% Verification: https://www.jmlr.org/papers/v24/21-0449.html
+@article{cappart2023,
+  author = {Cappart, Quentin and Ch{\'{e}}telat, Didier and Khalil, Elias B. and Lodi, Andrea and Morris, Christopher and Veli{\v{c}}kovi{\'{c}}, Petar},
+  title = {{Combinatorial Optimization and Reasoning with Graph Neural Networks}},
+  journal = {Journal of Machine Learning Research},
+  year = {2023},
+  volume = {24},
+  number = {130},
+  pages = {1--61},
+  url = {https://www.jmlr.org/papers/v24/21-0449.html},
+}
+
+% ====================================================================
+% Learning for unit commitment: direct related work
+% ====================================================================
+
+% Role: Apprentissage guidant une recherche UC sous incertitude; les informations et objectifs diffèrent du benchmark déterministe local.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0306261921008990
+@article{demars2021,
+  author = {de Mars, Patrick and O'Sullivan, Aidan},
+  title = {{Applying reinforcement learning and tree search to the unit commitment problem}},
+  journal = {Applied Energy},
+  year = {2021},
+  volume = {302},
+  pages = {117519},
+  doi = {10.1016/j.apenergy.2021.117519},
+  url = {https://doi.org/10.1016/j.apenergy.2021.117519},
+}
+
+% Role: Antécédent direct pour contraintes, solutions initiales et réduction d’espace apprises en SCUC; année du fascicule 2021, mise en ligne 2020.
+% Status: published; checked 2026-11-05
+% Verification: https://pubsonline.informs.org/doi/10.1287/ijoc.2020.0976
+% Metadata: Année du fascicule 2021; première publication en ligne en octobre 2020.
+@article{xavier2021,
+  author = {Xavier, {\'{A}}linson S. and Qiu, Feng and Ahmed, Shabbir},
+  title = {{Learning to Solve Large-Scale Security-Constrained Unit Commitment Problems}},
+  journal = {INFORMS Journal on Computing},
+  year = {2021},
+  volume = {33},
+  number = {2},
+  pages = {739--756},
+  doi = {10.1287/ijoc.2020.0976},
+  url = {https://doi.org/10.1287/ijoc.2020.0976},
+}
+
+% Role: Réduction des contraintes par modèle de coût; méthode d’accélération distincte des candidats appris.
+% Status: published; checked 2026-11-05
+% Verification: https://researchportal.hkust.edu.hk/en/publications/fast-unit-commitment-constraint-screening-with-learning-based-cos/
+@inproceedings{he2024,
+  author = {He, Xuan and Wen, Honglin and Zhang, Yufan and Chen, Yize and Tsang, Danny H. K.},
+  title = {{Fast Unit Commitment Constraint Screening with Learning-Based Cost Model}},
+  booktitle = {2024 IEEE International Conference on Communications, Control, and Computing Technologies for Smart Grids},
+  year = {2024},
+  pages = {295--300},
+  doi = {10.1109/SmartGridComm60555.2024.10738113},
+  url = {https://doi.org/10.1109/SmartGridComm60555.2024.10738113},
+}
+
+% Role: Confiance, fixation partielle et réparation de faisabilité sur un problème opérationnel de grande taille.
+% Status: published; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2211.15755
+% Verification: https://repository.gatech.edu/server/api/core/bitstreams/f5377676-1314-4f11-876b-cfd85df90d39/content
+% Original MILP-GNN.bib key: park_confidence-aware_2023
+@article{park2024,
+  author = {Park, Seonho and Chen, Wenbo and Han, Dahye and Tanneau, Mathieu and Van Hentenryck, Pascal},
+  title = {{Confidence-Aware Graph Neural Networks for Learning Reliability Assessment Commitments}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2024},
+  volume = {39},
+  number = {2},
+  pages = {3839--3850},
+  doi = {10.1109/TPWRS.2023.3298735},
+  url = {https://doi.org/10.1109/TPWRS.2023.3298735},
+}
+
+% Role: Prédiction UC et garanties sous hypothèses; comparateur non GNN pour discuter performance hors échantillon.
+% Status: published; checked 2026-11-05
+% Verification: https://orbit.dtu.dk/en/publications/unit-commitment-predictor-with-a-performance-guarantee-a-support-/
+% Verification: https://backend.orbit.dtu.dk/ws/portalfiles/portal/359853413/SVM.pdf
+@article{pourahmadi2025,
+  author = {Pourahmadi, Farzaneh and Kazempour, Jalal},
+  title = {{Unit Commitment Predictor With a Performance Guarantee: A Support Vector Machine Classifier}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2025},
+  volume = {40},
+  number = {1},
+  pages = {715--727},
+  doi = {10.1109/TPWRS.2024.3400405},
+  url = {https://doi.org/10.1109/TPWRS.2024.3400405},
+}
+
+% Role: Graphe physique hiérarchique, neural diving et branching pour UC; voisin scientifique central.
+% Status: published; checked 2026-11-05
+% Verification: https://ieeexplore.ieee.org/document/10971920/
+% Verification: https://arxiv.org/abs/2311.15216
+% Original MILP-GNN.bib key: qin_solve_2023
+@article{qin2025,
+  author = {Qin, Jingtao and Yu, Nanpeng},
+  title = {{Solve Large-Scale Unit Commitment Problems by Physics-Informed Graph Learning}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2025},
+  volume = {40},
+  number = {6},
+  pages = {4439--4451},
+  doi = {10.1109/TPWRS.2025.3562886},
+  url = {https://doi.org/10.1109/TPWRS.2025.3562886},
+}
+
+% Role: Intégrer des prédictions comme contraintes non obligatoires; autre stratégie de traitement des erreurs de prédiction.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.1016/j.apenergy.2024.124923
+@article{venkatesh2025,
+  author = {Venkatesh, Bala and Shekeew, Mohamed Ibrahim Abdelaziz and Ma, Jessie},
+  title = {{Feasibility-guaranteed machine learning unit commitment: Fuzzy Optimization approaches}},
+  journal = {Applied Energy},
+  year = {2025},
+  volume = {379},
+  pages = {124923},
+  doi = {10.1016/j.apenergy.2024.124923},
+  url = {https://doi.org/10.1016/j.apenergy.2024.124923},
+}
+
+% Role: Solutions proches de l’optimum pour augmenter l’apprentissage puis réparation; voisin direct du pipeline à documenter dans l’état de l’art.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S030626192401715X
+@article{wei2025,
+  author = {Wei, Lishen and Ai, Xiaomeng and Fang, Jiakun and Cui, Shichang and Gao, Liqian and Li, Kun and Wen, Jinyu},
+  title = {{Data-augmentation acceleration framework by graph neural network for near-optimal unit commitment}},
+  journal = {Applied Energy},
+  year = {2025},
+  volume = {377},
+  pages = {124332},
+  doi = {10.1016/j.apenergy.2024.124332},
+  url = {https://doi.org/10.1016/j.apenergy.2024.124332},
+}
+
+% Role: Fixation stable et hybride GNN-LP; comparer explicitement la récupération de faisabilité.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.3390/app15084498
+% Original MILP-GNN.bib key: yang_stable_2025
+@article{yang2025fixation,
+  author = {Yang, Linfeng and Li, Peilun and Chen, Shifei and Zheng, Haiyan},
+  title = {{Stable Variable Fixation for Accelerated Unit Commitment via Graph Neural Network and Linear Programming Hybrid Learning}},
+  journal = {Applied Sciences},
+  year = {2025},
+  volume = {15},
+  number = {8},
+  pages = {4498},
+  doi = {10.3390/app15084498},
+  url = {https://doi.org/10.3390/app15084498},
+}
+
+% Role: Prédiction initiale, restauration de faisabilité puis voisinages appris; comparaison très proche de la chaîne candidats-réparation.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2505.14408
+% Original MILP-GNN.bib key: yang_solving_nodate
+@misc{yang2025lns,
+  author = {Yang, Linfeng and Li, Peilun and Jian, Jinbao},
+  title = {{Solving Unit Commitment Problems with Graph Neural Network based Initial Commitment Prediction and Large Neighborhood Search}},
+  year = {2025},
+  eprint = {2505.14408},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2505.14408},
+  note = {Preprint},
+}
+
+% Role: Initialisations différenciées selon la confiance des prédictions; numéro de volume non renseigné faute de confirmation primaire.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0378779626002014
+% Metadata: DOI, titre, auteurs, année et numéro d’article confirmés par la notice éditeur; volume non renseigné car absent de la notice consultable.
+@article{dong2026,
+  author = {Dong, Jizhe and Xu, Chongshan and Zheng, Danchen and Zhu, Meng and Zhang, Yanbin and Zhao, Zehao and Han, Shunjie},
+  title = {{A deep learning unit commitment method based on confidence intervals}},
+  journal = {Electric Power Systems Research},
+  year = {2026},
+  pages = {112908},
+  doi = {10.1016/j.epsr.2026.112908},
+  url = {https://doi.org/10.1016/j.epsr.2026.112908},
+}
+
+% Role: Seuils de confiance tenant compte des conséquences économiques des erreurs de fixation; antécédent récent à discuter avec prudence.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2609.39396
+@misc{fritz2026,
+  author = {Fritz, Benjamin and Makrides, Andreas and Fetanat, Maryam and Pinson, Pierre},
+  title = {{Learning to Fix: Optimisation-Aware Machine Learning for Accelerated Unit Commitment}},
+  year = {2026},
+  eprint = {2609.39396},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2609.39396},
+  note = {Preprint, submitted 30 September 2026},
+}
+
+% Role: Résultats négatifs et diagnostic du sur-engagement; comparaison entre politique autonome et politique guidant MILP.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2610.25544
+@misc{pramita2026,
+  author = {Pramita, Maharani Devira and O'Sullivan, Aidan},
+  title = {{Reinforcement learning on the EPRI AI-ccelerating Unit Commitment benchmark: diagnosing over-commitment and guiding MILP with learned policies}},
+  year = {2026},
+  eprint = {2610.25544},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2610.25544},
+  note = {Preprint, submitted 18 October 2026},
+}
+
+% Role: Accélération interne de MILP par hypergraphes et coupes, distincte de la génération externe de stratégies.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0957417426014326
+@article{wang2026cuts,
+  author = {Wang, Mengchang and Yu, Yuanxin and Ye, Jun and Huang, He and Chen, Yiping and Zhao, Huashi and Ma, Qian},
+  title = {{Adaptive cut generation via hypergraph neural networks for unit commitment problems}},
+  journal = {Expert Systems with Applications},
+  year = {2026},
+  volume = {324},
+  pages = {132519},
+  doi = {10.1016/j.eswa.2026.132519},
+  url = {https://doi.org/10.1016/j.eswa.2026.132519},
+}
+
+% Role: Séparation décisions discrètes/dispatch continu et correction physique; comparer hypothèses et contraintes avant tout rapprochement chiffré.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0142061526002632
+@article{xu2026uc,
+  author = {Xu, Hanyang and Zhou, Siyi and Xia, Min and Liang, Shi and Geng, Jian and Liu, Jun},
+  title = {{Graph neural network with physics-informed optimization layer for unit commitment and economic dispatch}},
+  journal = {International Journal of Electrical Power \& Energy Systems},
+  year = {2026},
+  volume = {177},
+  pages = {111821},
+  doi = {10.1016/j.ijepes.2026.111821},
+  url = {https://doi.org/10.1016/j.ijepes.2026.111821},
+}
+
+% ====================================================================
+% Feasibility repair and search neighborhoods
+% ====================================================================
+
+% Role: Voisinages MILP autour d’un candidat; antécédent conceptuel de réparation/amélioration, sans prétendre que la cascade locale implémente local branching.
+% Status: published; checked 2026-11-05
+% Verification: https://publications.polymtl.ca/25914/
+@article{fischetti2003,
+  author = {Fischetti, Matteo and Lodi, Andrea},
+  title = {{Local branching}},
+  journal = {Mathematical Programming},
+  year = {2003},
+  volume = {98},
+  number = {1--3},
+  pages = {23--47},
+  doi = {10.1007/s10107-003-0395-5},
+  url = {https://doi.org/10.1007/s10107-003-0395-5},
+}
+
+% Role: RINS et plongeons guidés; situer les améliorations par solveur face à une proposition apprise.
+% Status: published; checked 2026-11-05
+% Verification: https://link.springer.com/article/10.1007/s10107-004-0518-7
+@article{danna2005,
+  author = {Danna, Emilie and Rothberg, Edward and Le Pape, Claude},
+  title = {{Exploring relaxation induced neighborhoods to improve MIP solutions}},
+  journal = {Mathematical Programming},
+  year = {2005},
+  volume = {102},
+  number = {1},
+  pages = {71--90},
+  doi = {10.1007/s10107-004-0518-7},
+  url = {https://doi.org/10.1007/s10107-004-0518-7},
+}
+
+% Role: La faisabilité des entiers est un problème distinct de l’arrondi; référence de contexte, pas identité algorithmique.
+% Status: published; checked 2026-11-05
+% Verification: https://leeds-faculty.colorado.edu/glover/fred%20pubs/347%20-%20feasibility%20pump%20-%20w%20Fischetti%20%26%20Lodi%20published.pdf
+@article{fischetti2005,
+  author = {Fischetti, Matteo and Glover, Fred and Lodi, Andrea},
+  title = {{The feasibility pump}},
+  journal = {Mathematical Programming},
+  year = {2005},
+  volume = {104},
+  pages = {91--104},
+  doi = {10.1007/s10107-004-0570-3},
+  url = {https://doi.org/10.1007/s10107-004-0570-3},
+}
+
+% Role: Projection différentiable sous contraintes linéaires; distinguer satisfiabilité linéaire bornée et intégralité de la solution UC.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper_files/paper/2024/hash/dd73f39426a03131c38c8d943153d44b-Abstract-Conference.html
+% Original MILP-GNN.bib key: zeng_glinsat_2024
+@inproceedings{zeng2024,
+  author = {Zeng, Hongtai and Yang, Chao and Zhou, Yanzhen and Yang, Cheng and Guo, Qinglai},
+  title = {{GLinSAT: The General Linear Satisfiability Neural Network Layer By Accelerated Gradient Descent}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year = {2024},
+  volume = {37},
+  url = {https://proceedings.neurips.cc/paper_files/paper/2024/hash/dd73f39426a03131c38c8d943153d44b-Abstract-Conference.html},
+}
+
+% ====================================================================
+% Representation and neural-architecture foundations
+% ====================================================================
+
+% Role: Source du GRU employé dans les encodeurs temporels; l’application initiale est la traduction.
+% Status: published; checked 2026-11-05
+% Verification: https://aclanthology.org/D14-1179/
+@inproceedings{cho2014,
+  author = {Cho, Kyunghyun and van Merri{\"{e}}nboer, Bart and Gulcehre, Caglar and Bahdanau, Dzmitry and Bougares, Fethi and Schwenk, Holger and Bengio, Yoshua},
+  title = {{Learning Phrase Representations using RNN Encoder--Decoder for Statistical Machine Translation}},
+  booktitle = {Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing},
+  year = {2014},
+  pages = {1724--1734},
+  publisher = {Association for Computational Linguistics},
+  doi = {10.3115/v1/D14-1179},
+  url = {https://doi.org/10.3115/v1/D14-1179},
+}
+
+% Role: Attention et encodage positionnel; ne constitue pas une garantie de transfert vers de nouveaux horizons.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html
+% Original MILP-GNN.bib key: vaswani2017attention
+@inproceedings{vaswani2017,
+  author = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, {\L}ukasz and Polosukhin, Illia},
+  title = {{Attention Is All You Need}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year = {2017},
+  volume = {30},
+  url = {https://proceedings.neurips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html},
+}
+
+% Role: Agrégation de cardinalité variable par attention et tokens; distinguer cette propriété de l’équivariance du décodeur entier.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v97/lee19d.html
+@inproceedings{lee2019,
+  author = {Lee, Juho and Lee, Yoonho and Kim, Jungtaek and Kosiorek, Adam and Choi, Seungjin and Teh, Yee Whye},
+  title = {{Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks}},
+  booktitle = {Proceedings of the 36th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  volume = {97},
+  pages = {3744--3753},
+  year = {2019},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v97/lee19d.html},
+}
+
+% Role: Attention avec types de nœuds et de relations; référence conceptuelle, le sigle HTE local ne signifie pas que HGT est implémenté à l’identique.
+% Status: published; checked 2026-11-05
+% Verification: https://arxiv.org/pdf/2003.01332
+% Metadata: DOI et conférence confirmés dans la première page du manuscrit auteur; pagination finale omise, distincte de la longueur du préprint.
+@inproceedings{hu2020,
+  author = {Hu, Ziniu and Dong, Yuxiao and Wang, Kuansan and Sun, Yizhou},
+  title = {{Heterogeneous Graph Transformer}},
+  booktitle = {Proceedings of The Web Conference 2020},
+  year = {2020},
+  publisher = {ACM},
+  doi = {10.1145/3366423.3380027},
+  url = {https://doi.org/10.1145/3366423.3380027},
+}
+
+% Role: Référence complémentaire sur la non-dégénérescence des représentations; ne pas prétendre utiliser VICReg sans vérifier les pertes locales.
+% Status: published; checked 2026-11-05
+% Verification: https://openreview.net/pdf?id=iWpcWZ8phD
+@inproceedings{bardes2022,
+  author = {Bardes, Adrien and Ponce, Jean and LeCun, Yann},
+  title = {{VICReg: Variance-Invariance-Covariance Regularization for Self-Supervised Learning}},
+  booktitle = {International Conference on Learning Representations},
+  year = {2022},
+  url = {https://openreview.net/forum?id=iWpcWZ8phD},
+}
+
+% Role: Référence GATv2 pour l’attention de graphe; utiliser seulement pour les blocs effectivement présents.
+% Status: published; checked 2026-11-05
+% Verification: https://openreview.net/pdf?id=F72ximsx7C1
+% Original MILP-GNN.bib key: brody_how_2022
+@inproceedings{brody2022,
+  author = {Brody, Shaked and Alon, Uri and Yahav, Eran},
+  title = {{How Attentive Are Graph Attention Networks?}},
+  booktitle = {International Conference on Learning Representations},
+  year = {2022},
+  url = {https://openreview.net/forum?id=F72ximsx7C1},
+}
+
+% Role: Origine du principe de prédiction dans l’espace latent; I-JEPA image n’est pas la méthode énergétique locale ni une validation de celle-ci.
+% Status: published; checked 2026-11-05
+% Verification: https://openaccess.thecvf.com/content/CVPR2023/html/Assran_Self-Supervised_Learning_From_Images_With_a_Joint-Embedding_Predictive_Architecture_CVPR_2023_paper.html
+@inproceedings{assran2023,
+  author = {Assran, Mahmoud and Duval, Quentin and Misra, Ishan and Bojanowski, Piotr and Vincent, Pascal and Rabbat, Michael and LeCun, Yann and Ballas, Nicolas},
+  title = {{Self-Supervised Learning From Images With a Joint-Embedding Predictive Architecture}},
+  booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  year = {2023},
+  pages = {15619--15629},
+  url = {https://openaccess.thecvf.com/content/CVPR2023/html/Assran_Self-Supervised_Learning_From_Images_With_a_Joint-Embedding_Predictive_Architecture_CVPR_2023_paper.html},
+}
+
+% ====================================================================
+% Energy-based models and candidate sampling
+% ====================================================================
+
+% Role: Définition de l’énergie comme fonction de compatibilité et distinction entre inférence, apprentissage et normalisation probabiliste.
+% Status: technical_manuscript; checked 2026-11-05
+% Verification: https://yann.lecun.org/exdb/publis/pdf/lecun-06.pdf
+@misc{lecun2006,
+  author = {LeCun, Yann and Chopra, Sumit and Hadsell, Raia and Ranzato, Marc'Aurelio and Huang, Fu Jie},
+  title = {{A Tutorial on Energy-Based Learning}},
+  year = {2006},
+  url = {https://yann.lecun.org/exdb/publis/pdf/lecun-06.pdf},
+  note = {Tutorial manuscript, version 1.0, 19 August 2006},
+}
+
+% Role: Fondement des mises à jour gradient-bruit; ne justifie pas une convergence stationnaire pour seize candidats ou un nombre fini de pas.
+% Status: published; checked 2026-11-05
+% Verification: https://ora.ox.ac.uk/objects/uuid%3A13ec7031-519b-4223-81cb-dd8de9213836
+@inproceedings{welling2011,
+  author = {Welling, Max and Teh, Yee Whye},
+  title = {{Bayesian Learning via Stochastic Gradient Langevin Dynamics}},
+  booktitle = {Proceedings of the 28th International Conference on Machine Learning},
+  year = {2011},
+  pages = {681--688},
+  url = {https://ora.ox.ac.uk/objects/uuid:13ec7031-519b-4223-81cb-dd8de9213836},
+}
+
+% Role: Entraînement et génération avec EBM continus; titre final différent de la version arXiv sur la généralisation.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper_files/paper/2019/file/378a063b8fdb1db941e34f4bde584c7d-Paper.pdf
+% Metadata: Titre final NeurIPS: Implicit Generation and Modeling with Energy Based Models; ne pas créer de doublon avec le titre arXiv Implicit Generation and Generalization in Energy-Based Models.
+@inproceedings{du2019,
+  author = {Du, Yilun and Mordatch, Igor},
+  title = {{Implicit Generation and Modeling with Energy Based Models}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year = {2019},
+  volume = {32},
+  url = {https://papers.nips.cc/paper_files/paper/2019/hash/378a063b8fdb1db941e34f4bde584c7d-Abstract.html},
+}
+
+% Role: Lien EBM et optimisation combinatoire avec recuit; ne pas confondre énergie d’objectif et énergie latente apprise.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2207.11542
+% Verification: https://opt-ml.org/oldopt/papers/2022/paper58.pdf
+% Original MILP-GNN.bib key: sun_annealed_2022
+@misc{sun2022,
+  author = {Sun, Haoran and Guha, Etash K. and Dai, Hanjun},
+  title = {{Annealed Training for Combinatorial Optimization on Graphs}},
+  year = {2022},
+  eprint = {2207.11542},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2207.11542},
+  note = {Preprint; also presented at the OPT 2022 workshop},
+}
+
+% Role: Comparaison contrôlée des échantillonneurs; le pipeline local échantillonne un latent continu, distinction à conserver.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper_files/paper/2023/hash/f9ad87c1ebbae8a3555adb31dbcacf44-Abstract-Datasets_and_Benchmarks.html
+% Original MILP-GNN.bib key: goshvadi_discs_2023
+@inproceedings{goshvadi2023,
+  author = {Goshvadi, Katayoon and Sun, Haoran and Liu, Xingchao and Nova, Azade and Zhang, Ruqi and Grathwohl, Will and Schuurmans, Dale and Dai, Hanjun},
+  title = {{DISCS: A Benchmark for Discrete Sampling}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year = {2023},
+  volume = {36},
+  pages = {79035--79066},
+  url = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/f9ad87c1ebbae8a3555adb31dbcacf44-Abstract-Datasets_and_Benchmarks.html},
+}
+
+% Role: Génération de candidats au service de la recherche; retenir le cadre générique, sans revendiquer d’avantage quantique pour ce projet.
+% Status: published; checked 2026-11-05
+% Verification: https://www.nature.com/articles/s41467-024-46959-5
+% Original MILP-GNN.bib key: alcazar_enhancing_2024
+@article{alcazar2024,
+  author = {Alcazar, Javier and Vakili, Mohammad Ghazi and Kalayci, Can B. and Perdomo-Ortiz, Alejandro},
+  title = {{Enhancing combinatorial optimization with classical and quantum generative models}},
+  journal = {Nature Communications},
+  year = {2024},
+  volume = {15},
+  pages = {2761},
+  doi = {10.1038/s41467-024-46959-5},
+  url = {https://doi.org/10.1038/s41467-024-46959-5},
+}
+
+% ====================================================================
+% Generalization, graph size and distribution shift
+% ====================================================================
+
+% Role: Invariance aux permutations des ensembles; utile pour l’audit de renumérotation et la conception de la future architecture.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper/2017/hash/f22e4747da1aa27e363d86d40ff442fe-Abstract.html
+@inproceedings{zaheer2017,
+  author = {Zaheer, Manzil and Kottur, Satwik and Ravanbakhsh, Siamak and Poczos, Barnabas and Salakhutdinov, Ruslan and Smola, Alexander J.},
+  title = {{Deep Sets}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year = {2017},
+  volume = {30},
+  url = {https://proceedings.neurips.cc/paper/2017/hash/f22e4747da1aa27e363d86d40ff442fe-Abstract.html},
+}
+
+% Role: Pouvoir expressif des agrégateurs de graphes et limites de distinction entre structures.
+% Status: published; checked 2026-11-05
+% Verification: https://openreview.net/pdf?id=ryGs6iA5Km
+@inproceedings{xu2019,
+  author = {Xu, Keyulu and Hu, Weihua and Leskovec, Jure and Jegelka, Stefanie},
+  title = {{How Powerful are Graph Neural Networks?}},
+  booktitle = {International Conference on Learning Representations},
+  year = {2019},
+  url = {https://openreview.net/forum?id=ryGs6iA5Km},
+}
+
+% Role: Évaluation séparée des changements de distribution; benchmark externe, sans preuve de transfert pour les cas énergétiques locaux.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v139/koh21a.html
+@inproceedings{koh2021,
+  author = {Koh, Pang Wei and Sagawa, Shiori and Marklund, Henrik and Xie, Sang Michael and Zhang, Marvin and Balsubramani, Akshay and Hu, Weihua and Yasunaga, Michihiro and Phillips, Richard Lanas and Gao, Irena and Lee, Tony and David, Etienne and Stavness, Ian and Guo, Wei and Earnshaw, Berton and Haque, Imran and Beery, Sara M. and Leskovec, Jure and Kundaje, Anshul and Pierson, Emma and Levine, Sergey and Finn, Chelsea and Liang, Percy},
+  title = {{WILDS: A Benchmark of in-the-Wild Distribution Shifts}},
+  booktitle = {Proceedings of the 38th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  year = {2021},
+  volume = {139},
+  pages = {5637--5664},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v139/koh21a.html},
+}
+
+% Role: La capacité à traiter différentes tailles n’implique pas une généralisation à leurs structures locales.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v139/yehudai21a.html
+@inproceedings{yehudai2021,
+  author = {Yehudai, Gilad and Fetaya, Ethan and Meirom, Eli and Chechik, Gal and Maron, Haggai},
+  title = {{From Local Structures to Size Generalization in Graph Neural Networks}},
+  booktitle = {Proceedings of the 38th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  volume = {139},
+  pages = {11975--11986},
+  year = {2021},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v139/yehudai21a.html},
+}
+
+% Role: Protocole de généralisation en optimisation neuronale; TSP est un domaine méthodologique adjacent, pas UC.
+% Status: published; checked 2026-11-05
+% Verification: https://link.springer.com/article/10.1007/s10601-022-09327-y
+@article{joshi2022,
+  author = {Joshi, Chaitanya K. and Cappart, Quentin and Rousseau, Louis-Martin and Laurent, Thomas},
+  title = {{Learning the travelling salesperson problem requires rethinking generalization}},
+  journal = {Constraints},
+  year = {2022},
+  volume = {27},
+  pages = {70--98},
+  doi = {10.1007/s10601-022-09327-y},
+  url = {https://doi.org/10.1007/s10601-022-09327-y},
+}
+
+% Role: Limites d’expressivité des GNN sur les MILP; empêcher d’inférer une garantie de résolution à partir de l’architecture.
+% Status: published; checked 2026-11-05
+% Verification: https://openreview.net/pdf?id=4gc3MGZra1d
+% Original MILP-GNN.bib key: chen_representing_2023
+@inproceedings{chen2023,
+  author = {Chen, Ziang and Liu, Jialin and Wang, Xinshang and Lu, Jianfeng and Yin, Wotao},
+  title = {{On Representing Mixed-Integer Linear Programs by Graph Neural Networks}},
+  booktitle = {International Conference on Learning Representations},
+  year = {2023},
+  url = {https://openreview.net/forum?id=4gc3MGZra1d},
+}
+
+% Role: Diversité des classes MILP et transfert hors des classes d’entraînement; contexte récent pour les limites des cohortes synthétiques.
+% Status: published; checked 2026-11-05
+% Verification: https://openreview.net/pdf?id=6yENDA7J4G
+% Verification: https://www.microsoft.com/en-us/research/publication/towards-foundation-models-for-mixed-integer-linear-programming/
+@inproceedings{li2025foundation,
+  author = {Li, Sirui and Kulkarni, Janardhan and Menache, Ishai and Wu, Cathy and Li, Beibin},
+  title = {{Towards Foundation Models for Mixed Integer Linear Programming}},
+  booktitle = {International Conference on Learning Representations},
+  year = {2025},
+  url = {https://openreview.net/forum?id=6yENDA7J4G},
+}
+
+% ====================================================================
+% Power-grid graph learning: adjacent applications
+% ====================================================================
+
+% Role: Transfert en taille pour calcul de flux; domaine adjacent, distinct de l’UC mixte entier et de la certification de faisabilité.
+% Status: published; checked 2026-11-05
+% Verification: https://ieeexplore.ieee.org/document/8851855/
+% Verification: https://hal.science/hal-02175989v1/file/Graph_Neural_Solver-7.pdf
+% Original MILP-GNN.bib key: donon_graph_2019
+@inproceedings{donon2019,
+  author = {Donon, Balthazar and Donnot, Benjamin and Guyon, Isabelle and Marot, Antoine},
+  title = {{Graph Neural Solver for Power Systems}},
+  booktitle = {2019 International Joint Conference on Neural Networks},
+  year = {2019},
+  pages = {1--8},
+  doi = {10.1109/IJCNN.2019.8851855},
+  url = {https://doi.org/10.1109/IJCNN.2019.8851855},
+}
+
+% Role: Adaptation topologique et régularisation physique en AC-OPF; ne pas assimiler adaptation avec réentraînement et transfert figé.
+% Status: published; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2205.10129
+% Original MILP-GNN.bib key: liu_topology-aware_2023
+% Metadata: Titre, auteurs et méthode relus dans le dépôt auteur arXiv. Métadonnées de la version IEEE conservées du fichier MILP-GNN.bib fourni; page éditeur non récupérable pendant cette recherche.
+@article{liu2023,
+  author = {Liu, Shaohui and Wu, Chengyang and Zhu, Hao},
+  title = {{Topology-Aware Graph Neural Networks for Learning Feasible and Adaptive AC-OPF Solutions}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2023},
+  volume = {38},
+  number = {6},
+  pages = {5660--5670},
+  doi = {10.1109/TPWRS.2022.3230555},
+  url = {https://doi.org/10.1109/TPWRS.2022.3230555},
+}
+
+% Role: Prédiction du risque physique et topologies changeantes; distinguer prédiction de risque et prédiction du succès informatique.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2405.07343
+% Original MILP-GNN.bib key: zhang_graph_2024
+@misc{zhang2024risk,
+  author = {Zhang, Yadong and Karve, Pranav M. and Mahadevan, Sankaran},
+  title = {{Graph neural networks for power grid operational risk assessment under evolving grid topology}},
+  year = {2024},
+  eprint = {2405.07343},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2405.07343},
+  note = {Preprint},
+}
+
+% Role: Prédiction rapide de sorties d’un modèle énergétique et identification de cas critiques; surrogate de planification, pas résolution UC complète sous délai.
+% Status: published; checked 2026-11-05
+% Verification: https://ieeexplore.ieee.org/abstract/document/11305443
+% Verification: https://portal.fis.tum.de/en/publications/graph-neural-network-surrogates-for-energy-system-modeling/
+% Original MILP-GNN.bib key: pjetri_graph_nodate
+% Metadata: Remplace la notice Authorea sans date du fichier initial par la publication ISGT Europe 2025.
+@inproceedings{pjetri2025,
+  author = {Pjetri, Gerild and Mohapatra, Anurag and Baecker, Beneharo Reveron and Hock, Maximilian and Hamacher, Thomas},
+  title = {{Graph Neural Network Surrogates for Energy System Modeling}},
+  booktitle = {2025 IEEE PES Innovative Smart Grid Technologies Conference Europe},
+  year = {2025},
+  doi = {10.1109/ISGTEurope64741.2025.11305443},
+  url = {https://doi.org/10.1109/ISGTEurope64741.2025.11305443},
+}
+
+% ====================================================================
+% Decision-focused learning: related but distinct problem setting
+% ====================================================================
+
+% Role: Aligner prédiction et coût de décision, avec applications énergétiques; distinct de l’imitation de stratégies connues.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.neurips.cc/paper/2017/file/3fc2c60b5782f641f76bcefc39fb2392-Paper.pdf
+% Original MILP-GNN.bib key: donti_task_2017
+@inproceedings{donti2017,
+  author = {Donti, Priya L. and Amos, Brandon and Kolter, J. Zico},
+  title = {{Task-based End-to-end Model Learning in Stochastic Optimization}},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year = {2017},
+  volume = {30},
+  url = {https://proceedings.neurips.cc/paper/2017/file/3fc2c60b5782f641f76bcefc39fb2392-Paper.pdf},
+}
+
+% Role: Apprentissage à travers une relaxation de problème combinatoire; cadre voisin à distinguer du générateur latent local.
+% Status: published; checked 2026-11-05
+% Verification: https://ojs.aaai.org/index.php/AAAI/article/view/3982
+% Original MILP-GNN.bib key: wilder_melding_2019
+@inproceedings{wilder2019,
+  author = {Wilder, Bryan and Dilkina, Bistra and Tambe, Milind},
+  title = {{Melding the Data-Decisions Pipeline: Decision-Focused Learning for Combinatorial Optimization}},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  year = {2019},
+  volume = {33},
+  number = {1},
+  pages = {1658--1665},
+  doi = {10.1609/aaai.v33i01.33011658},
+  url = {https://doi.org/10.1609/aaai.v33i01.33011658},
+}
+
+% Role: Évaluer l’effet aval d’une prédiction; ne pas présenter le routage ou JEPA comme une implémentation de SPO.
+% Status: published; checked 2026-11-05
+% Verification: https://pubsonline.informs.org/doi/abs/10.1287/mnsc.2020.3922
+% Original MILP-GNN.bib key: elmachtoub_smart_2022
+@article{elmachtoub2022,
+  author = {Elmachtoub, Adam N. and Grigas, Paul},
+  title = {{Smart ``Predict, then Optimize''}},
+  journal = {Management Science},
+  year = {2022},
+  volume = {68},
+  number = {1},
+  pages = {9--26},
+  doi = {10.1287/mnsc.2020.3922},
+  url = {https://doi.org/10.1287/mnsc.2020.3922},
+}
+
+% Role: Revue et benchmark pour distinguer apprentissage de paramètres, de décisions et de politiques de résolution.
+% Status: published; checked 2026-11-05
+% Verification: https://www.jair.org/index.php/jair/article/view/15320
+% Verification: https://arxiv.org/abs/2307.13565
+% Original MILP-GNN.bib key: mandi_decision_2024
+% Metadata: Volume 80 retenu selon JAIR, qui prime sur des notices institutionnelles indiquant 81.
+@article{mandi2024,
+  author = {Mandi, Jayanta and Kotary, James and Berden, Senne and Mulamba, Maxime and Bucarey, Victor and Guns, Tias and Fioretto, Ferdinando},
+  title = {{Decision-Focused Learning: Foundations, State of the Art, Benchmark and Future Opportunities}},
+  journal = {Journal of Artificial Intelligence Research},
+  year = {2024},
+  volume = {80},
+  pages = {1623--1701},
+  doi = {10.1613/jair.1.15320},
+  url = {https://doi.org/10.1613/jair.1.15320},
+}
+
+% Role: Tension entre qualité et faisabilité lorsque les contraintes contiennent des paramètres prédits; contexte différent de la réparation sous paramètres connus.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2510.04951
+% Original MILP-GNN.bib key: mandi_feasibility_2025
+@misc{mandi2025,
+  author = {Mandi, Jayanta and Defresne, Marianne and Berden, Senne and Guns, Tias},
+  title = {{Feasibility-Aware Decision-Focused Learning for Predicting Parameters in the Constraints}},
+  year = {2025},
+  eprint = {2510.04951},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2510.04951},
+  note = {Preprint},
+}
+
+% Role: Application énergétique récente de SPO à des prévisions; différencier prévision des entrées et génération d’une stratégie.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.1109/tii.2026.3671325
+% Verification: https://scholars.cityu.edu.hk/en/publications/smart-predict-then-optimize-based-unit-commitment-for-integrated-/
+% Original MILP-GNN.bib key: wu_smart_2026
+@article{wu2026,
+  author = {Wu, Yemin and Lu, Shuai and Gu, Wei and Zeng, Bo and Xu, Yijun and Dong, Zhaoyang},
+  title = {{Smart Predict-Then-Optimize-Based Unit Commitment for Integrated Energy Systems}},
+  journal = {IEEE Transactions on Industrial Informatics},
+  year = {2026},
+  volume = {22},
+  number = {7},
+  pages = {5736--5747},
+  doi = {10.1109/TII.2026.3671325},
+  url = {https://doi.org/10.1109/TII.2026.3671325},
+}
+
+% ====================================================================
+% Algorithm selection, portfolios and selection costs
+% ====================================================================
+
+% Role: Complémentarité et variabilité des algorithmes; exécution parallèle ou entrelacée à distinguer du routage vers une seule méthode.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0004370200000813
+@article{gomes2001,
+  author = {Gomes, Carla P. and Selman, Bart},
+  title = {{Algorithm portfolios}},
+  journal = {Artificial Intelligence},
+  year = {2001},
+  volume = {126},
+  number = {1--2},
+  pages = {43--62},
+  doi = {10.1016/S0004-3702(00)00081-3},
+  url = {https://doi.org/10.1016/S0004-3702(00)00081-3},
+}
+
+% ====================================================================
+% Statistical validation, calibration and uncertainty
+% ====================================================================
+
+% Role: Fondement du rééchantillonnage; dans ce projet l’unité doit rester le groupe scénario, pas chaque cellule budget.
+% Status: published; checked 2026-11-05
+% Verification: https://sites.stat.washington.edu/courses/stat527/s13/readings/ann_stat1979.pdf
+@article{efron1979,
+  author = {Efron, Bradley},
+  title = {{Bootstrap Methods: Another Look at the Jackknife}},
+  journal = {The Annals of Statistics},
+  year = {1979},
+  volume = {7},
+  number = {1},
+  pages = {1--26},
+  doi = {10.1214/aos/1176344552},
+  url = {https://doi.org/10.1214/aos/1176344552},
+}
+
+% Role: Comparaisons multiples et unités indépendantes; ne pas traiter les budgets répétés d’un même scénario comme des jeux indépendants.
+% Status: published; checked 2026-11-05
+% Verification: https://jmlr.org/papers/v7/demsar06a.html
+@article{demsar2006,
+  author = {Dem{\v{s}}ar, Janez},
+  title = {{Statistical Comparisons of Classifiers over Multiple Data Sets}},
+  journal = {Journal of Machine Learning Research},
+  year = {2006},
+  volume = {7},
+  number = {1},
+  pages = {1--30},
+  url = {https://jmlr.org/papers/v7/demsar06a.html},
+}
+
+% Role: Séparer choix des modèles et évaluation finale; prévenir l’optimisme dû aux comparaisons répétées.
+% Status: published; checked 2026-11-05
+% Verification: https://www.jmlr.org/papers/v11/cawley10a.html
+@article{cawley2010,
+  author = {Cawley, Gavin C. and Talbot, Nicola L. C.},
+  title = {{On Over-fitting in Model Selection and Subsequent Selection Bias in Performance Evaluation}},
+  journal = {Journal of Machine Learning Research},
+  year = {2010},
+  volume = {11},
+  number = {70},
+  pages = {2079--2107},
+  url = {https://www.jmlr.org/papers/v11/cawley10a.html},
+}
+
+% Role: Validation par groupes et transferts structurés; justification méthodologique, non étude de systèmes énergétiques.
+% Status: published; checked 2026-11-05
+% Verification: https://nsojournals.onlinelibrary.wiley.com/doi/full/10.1111/ecog.02881
+@article{roberts2017,
+  author = {Roberts, David R. and Bahn, Volker and Ciuti, Simone and Boyce, Mark S. and Elith, Jane and Guillera-Arroita, Gurutzeta and Hauenstein, Severin and Lahoz-Monfort, Jos{\'{e}} J. and Schr{\"{o}}der, Boris and Thuiller, Wilfried and Warton, David I. and Wintle, Brendan A. and Hartig, Florian and Dormann, Carsten F.},
+  title = {{Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure}},
+  journal = {Ecography},
+  year = {2017},
+  volume = {40},
+  number = {8},
+  pages = {913--929},
+  doi = {10.1111/ecog.02881},
+  url = {https://doi.org/10.1111/ecog.02881},
+}
+
+% Role: Prévenir la fuite entre scénarios apparentés, prétraitement, sélection de modèle et test final.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S2666389923001599
+@article{kapoor2023,
+  author = {Kapoor, Sayash and Narayanan, Arvind},
+  title = {{Leakage and the reproducibility crisis in machine-learning-based science}},
+  journal = {Patterns},
+  year = {2023},
+  volume = {4},
+  number = {9},
+  pages = {100804},
+  doi = {10.1016/j.patter.2023.100804},
+  url = {https://doi.org/10.1016/j.patter.2023.100804},
+}
+
+% ====================================================================
+% Software and external benchmark resources
+% ====================================================================
+
+% Role: Référence recommandée par HiGHS; article sur le simplexe LP, pas validation de performances UC ou de tous les composants MIP.
+% Status: published; checked 2026-11-05
+% Verification: https://ergo-code.github.io/HiGHS/dev/
+% Verification: https://link.springer.com/article/10.1007/S12532-017-0130-5
+@article{huangfu2018,
+  author = {Huangfu, Q. and Hall, J. A. J.},
+  title = {{Parallelizing the dual revised simplex method}},
+  journal = {Mathematical Programming Computation},
+  year = {2018},
+  volume = {10},
+  number = {1},
+  pages = {119--142},
+  doi = {10.1007/s12532-017-0130-5},
+  url = {https://doi.org/10.1007/s12532-017-0130-5},
+}
+
+% Role: Benchmark externe et formulations publiques; ce logiciel n’est pas utilisé comme provenance des résultats locaux.
+% Status: software; checked 2026-11-05
+% Verification: https://github.com/ANL-CEEESA/UnitCommitment.jl
+@misc{xavier2024ucjl,
+  author = {Xavier, Alinson S. and Kazachkov, Aleksandr M. and Yurdakul, Og{\"{u}}n and He, Jun and Qiu, Feng},
+  title = {{UnitCommitment.jl: A Julia/JuMP Optimization Package for Security-Constrained Unit Commitment}},
+  year = {2024},
+  howpublished = {Zenodo},
+  doi = {10.5281/zenodo.4269874},
+  note = {Version 0.4; concept DOI as recommended by the project},
+  url = {https://doi.org/10.5281/zenodo.4269874},
+}
+
+% Role: Référence fournisseur pour l’adaptateur et les futurs essais; ne présume pas que Gurobi a été exécuté ni qu’il est une action du sélecteur.
+% Status: software; checked 2026-11-05
+% Verification: https://support.gurobi.com/hc/en-us/articles/360013195592-How-do-I-cite-Gurobi-software-for-an-academic-publication
+@misc{gurobi2026,
+  author = {{Gurobi Optimization, LLC}},
+  title = {{Gurobi Optimizer Reference Manual}},
+  year = {2026},
+  url = {https://www.gurobi.com},
+  note = {Software documentation; record the version actually used in the experiments},
+}
+

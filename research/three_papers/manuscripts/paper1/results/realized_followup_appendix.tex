@@ -1,0 +1,34 @@
+\section{Bounded-regression follow-up: controls and provenance}
+\label{app:bounded_followup}
+This supplement concerns only the historical follow-up in
+Section~\ref{sec:bounded_method}. It does not report the independent campaign.
+The original raw descriptors and the realized descriptors have different
+semantics; applying the same model family to each helps distinguish predictive
+procedure improvements from representation improvements. B9 removal refers
+to the respective coordinate and does not assert that their definitions match.
+
+\input{paper1/results/bounded_legacy_table}
+\input{paper1/results/bounded_low_family_table}
+\input{paper1/results/bounded_contrasts_table}
+
+The realized feature dictionary, extraction times and original frozen
+comparison are retained in
+\path{research/paper1_revision/runs/revision_v1/realized_milp_v1}.
+The follow-up uses a separate code package,
+\path{research/paper1_revision/bounded_ablation}, and separate outputs,
+\path{research/paper1_revision/runs/revision_v1/bounded_ablation_v1}.
+The latter contain the declared follow-up design, all 330 checkpoints,
+240,000 held-out predictions including the projected comparators, losses by
+family and deadline, and all 80 conditional contrasts across the two schemes.
+Its declaration follows examination of historical extrapolations; it is not
+a replacement for the pre-execution independent-test freeze.
+
+Eight numerical and leakage checks passed. Replaying all 1,650 saved models
+reproduced their predictions exactly, and their scaling statistics matched
+their respective training folds. Delivered predictions all lie in $[0,1]$;
+nonnegative slopes and optimizer stationarity were checked. No new MILP was
+solved for this analysis, no independent outcome was used, and verification
+of the original frozen models, predictions and source hashes was unchanged.
+The manuscript tables are exported directly from the saved CSV reports;
+\path{paper1/results/bounded_manuscript_provenance.json} records their sources
+and hashes.

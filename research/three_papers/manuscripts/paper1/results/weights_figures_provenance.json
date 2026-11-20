@@ -1,0 +1,22 @@
+{
+  "source_run": "research/paper1_weights/runs/weights_v2_variants",
+  "manifest_sha256": "3311d30a960cdb904af5a2d785d3667148294b32a83f155d7c2ffc8f3fdfdb45",
+  "reported_profiles": [
+    "equal4",
+    "cost_priority",
+    "co2_priority",
+    "time_priority",
+    "service4_co2"
+  ],
+  "source_sha256": {
+    "weights_by_deadline.csv": "6ea1474cb426528c36c7813713632e5ad8b001358085f2dd828ad52d17fc120e",
+    "paired_predictive_gains.csv": "79fe90e67cf2a1fd58ed808aa13d6b73eab497998c81fe38ed120363b5f3a89e"
+  },
+  "operation": "Rendering saved estimates and intervals only; no refitting, resampling, or solver execution",
+  "renderer_sha256": "1a1cc7d628ae64459beaa454f9fd1baf41334768fff605f5d422ed0e77c89aeb",
+  "figure_sha256": {
+    "weights_variants_predictive_gain.pdf": "291eecbfbfc930b1ea11e93d7fcb5c5dfd613a67440858e5e092e22b28a0b57d",
+    "weights_variants_deadline_heatmap.pdf": "fd8afd4b55df15c4c1355caf42e207a912338f7bb9f25a6105ea58ccd944b01d",
+    "weights_variants_leading_intervals.pdf": "7705728a5931bfe3694ca905935769005e490344f4c6a07f7d4a47cfa1b8e7a0"
+  }
+}

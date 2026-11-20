@@ -1,0 +1,75 @@
+\subsection{Physical model and independently checked output}
+The study reuses the multilayer flexibility formulation and graph representation
+developed in the accompanying project manuscript, while applying the corrected
+\texttt{thermal\_transitions\_v1} and \texttt{load\_shifting\_v1} implementations.
+The model coordinates thermal generation, nuclear generation, renewable
+curtailment, batteries, reservoir and pumped hydro, demand response, line flows
+and external trade. Its objective combines operating costs, thermal start-up
+costs, flexibility activation, storage cycling, curtailment, unserved energy
+and overgeneration penalties. Power-related terms are multiplied by the time
+step in hours; start-up costs are charged per event.
+
+Thermal commitment uses exact transition relations, initial conditions and
+operating, start-up and shutdown ramp limits. Demand response is lossless load
+shifting with a causal energy backlog and terminal repayment; historical prose
+describing exponentially disappearing rebound energy does not apply. Storage
+tracks efficiencies, retention, initial conditions and terminal bounds. The
+network is a capacitated transport model. It does not impose Kirchhoff's laws,
+security constraints or individual commitment for every equipment node.
+Equipment counts, graph size and the number of free integer decisions are
+therefore reported as different quantities.
+
+The shared validator reconstructs physical balances and costs from the complete
+dispatch, independently of solver residuals and reported objectives. It checks
+finite values, axes, integrality, transitions, ramps, storage, demand-response
+repayment, line and trade limits, and nodal balances. The absolute physical and
+integrality tolerances are respectively $10^{-3}$ and $10^{-5}$. A feasible
+dispatch may include unserved energy because the model permits this penalized
+action; the delivered unserved energy is reported separately.
+
+\subsection{Operational success and reference quality}
+For scenario $s$, method $m$ and independently allocated budget $b$, let
+$F_{smb}$ denote delivery of a physically valid output and normal termination
+of the entire process tree within $b$. The measured interval includes scenario
+reading, graph construction, online embeddings, candidate generation, repair,
+validation, output writing and closure. Static model and library preload is
+excluded and reported separately. A forced stop, a late dispatch or an incumbent
+owned by a still-running process does not satisfy $F_{smb}$.
+
+A scenario has one common reference cost $C_s^{\rm ref}$, obtained with a
+600-second solver limit and 16 CPU threads. We distinguish a certified optimum,
+a validated incumbent and a lower bound. A time-limited incumbent is not an
+optimum. Training-label computations use their own resource allocation and are
+not included in solver timing comparisons. For $|C_s^{\rm ref}|>\epsilon$, define
+\begin{equation}
+ g_{smb}=\frac{C_{smb}-C_s^{\rm ref}}{|C_s^{\rm ref}|},\qquad
+ Y_{smb}(\tau)=F_{smb}\,\ind\{g_{smb}\leq\tau\},\quad \tau=0.05.
+ \label{eq:economic}
+\end{equation}
+Negative gaps are retained: a new method can improve an incumbent reference.
+For $|C_s^{\rm ref}|\leq\epsilon=1$ euro, the relative gap is undefined and the
+quality condition instead requires $C_{smb}-C_s^{\rm ref}\leq1$ euro. This is an
+explicit absolute-tolerance convention, not a relative percentage. Sensitivity
+outcomes use $\tau\in\{0.01,0.10\}$, feasibility alone, costs and unserved energy.
+If a valid reference is missing, the economic outcome is unknown. An unexecuted
+trial is also unknown; neither is encoded as an observed failure.
+
+\subsection{Provenance and statistical units}
+The main cohort comprises 600 scenarios, 100 in each of six generator families.
+The three persona families and the low, medium and high criticality families
+are six distributions, not six ordered severity levels. Four methods are
+evaluated at budgets $1,2,5,10,30,60,120$ seconds, giving 16,800 planned primary
+trials. Two extra repetitions on 30 preselected cases add 1,680 trials.
+Each budget is a new execution; the grid is not a single solver trajectory or
+an exact time-to-first-solution observation.
+
+The reserve amendment supersedes identities for affected short budgets while
+retaining unchanged 120-second identities, including failures. Analyses reconstruct
+the amended schedule rather than enumerate every historical result file.
+Source, model, scenario and reference hashes are frozen. Historical files are
+read without invoking routines that repair or rewrite checkpoints.
+All rows from a scenario, across methods, budgets and repetitions, remain in
+one statistical group. A controlled variant shares the group of its base.
+Preprocessing is fitted within training groups. The primary coverage analysis
+uses the first repetition; repeated trials describe variability separately.
+Confidence intervals resample independent scenario groups, not individual rows.

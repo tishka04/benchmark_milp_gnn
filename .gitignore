@@ -6,7 +6,62 @@ outputs/
 tmp/
 output/
 .poster_build/
-research/
+
+# --- Research: keep source code, protocols and manuscript figures ---
+# Generated campaigns, datasets and checkpoints stay local.
+/research/**/runs/
+/research/**/data/
+/research/**/datasets/
+/research/**/checkpoints/
+/research/**/cache/
+
+# Data exports (including copies outside campaign directories).
+/research/**/*.csv
+/research/**/*.tsv
+/research/**/*.jsonl
+/research/**/*.ndjson
+/research/**/*.parquet
+/research/**/*.feather
+/research/**/*.arrow
+/research/**/*.json
+# Small configuration and reproduction metadata belong with the code.
+!/research/**/config.json
+!/research/**/protocol.json
+!/research/**/bibliography/*.json
+!/research/**/bibliography_verification.json
+!/research/**/verification.json
+!/research/**/*provenance.json
+
+# Numerical arrays, trained models and archives.
+/research/**/*.npy
+/research/**/*.npz
+/research/**/*.pt
+/research/**/*.pth
+/research/**/*.ckpt
+/research/**/*.safetensors
+/research/**/*.joblib
+/research/**/*.pkl
+/research/**/*.pickle
+/research/**/*.h5
+/research/**/*.hdf5
+/research/**/*.onnx
+/research/**/*.zip
+/research/**/*.tar
+/research/**/*.gz
+/research/**/*.7z
+/research/**/*.rar
+
+# Temporary files and LaTeX compilation by-products.
+/research/**/*.bak
+/research/**/*.tmp
+/research/**/*.log
+/research/**/.writer.lock
+/research/**/*.aux
+/research/**/*.bbl
+/research/**/*.blg
+/research/**/*.fls
+/research/**/*.fdb_latexmk
+/research/**/*.synctex.gz
 
 # --- Python virtual environments ---
 .venv/

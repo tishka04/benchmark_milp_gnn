@@ -1,0 +1,20 @@
+{
+  "version": "bounded_ablation_v1",
+  "scope": "Exploratory historical follow-up after observing the low-family extrapolation failure. Not an independently validated amendment of the frozen campaign.",
+  "representations": ["legacy_raw", "realized"],
+  "schemes": ["nested", "lofo"],
+  "arms": ["linear_no_b9_clip", "fractional_logit", "fractional_logit_no_b9"],
+  "baseline": "current_clip",
+  "baseline_definition": "Saved positive linear held-out predictions, projected onto [0,1]; no refit or new tuning.",
+  "ablation_definition": "Remove raw_B9 or real_B9 only, refit all remaining coefficients and tune within the original inner folds.",
+  "linear_training": "Same nonnegative squared-error ridge fit and unbounded inner MSE selection as the original full model. Project only the delivered predictions onto [0,1].",
+  "bounded_training": "Fractional Bernoulli cross entropy with sigmoid link, nonnegative slopes, free intercept, ridge on standardized slopes. Ridge selected by bounded inner MSE.",
+  "preprocessing": "Mean and population standard deviation learned in each training fold. Training-constant coordinates receive zero coefficients even if they change at test time.",
+  "ridge_grid": [0, 0.0001, 0.001, 0.01, 0.1, 1, 10],
+  "bootstrap_samples": 2000,
+  "seed": 20261112,
+  "contrasts": "Each of the 3 new arms versus current_clip, plus fractional_logit_no_b9 versus fractional_logit. 40 simultaneous contrasts per validation scheme (2 representations x 5 targets x 4 comparisons). Scenario-level paired bootstrap averages the five deadlines first. Conditional on fitted predictions; does not cover post-hoc model-design selection or retraining uncertainty.",
+  "external_outcomes_used": false,
+  "new_milp_solves": false,
+  "threads": 1
+}

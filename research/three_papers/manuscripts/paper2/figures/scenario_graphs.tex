@@ -1,0 +1,126 @@
+\begin{figure}[htbp]
+\centering
+\resizebox{0.78\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    nation/.style={circle, draw=scenarioBlue!80!black, fill=scenarioBlue!25, minimum size=1.1cm, line width=1pt, font=\scriptsize\bfseries},
+    region/.style={circle, draw=encoderPurple!80!black, fill=encoderPurple!20, minimum size=0.9cm, line width=0.8pt, font=\scriptsize\bfseries},
+    zone/.style={circle, draw=graphGreen!80!black, fill=graphGreen!20, minimum size=0.8cm, line width=0.8pt, font=\scriptsize},
+    asset/.style={circle, draw=ebmOrange!80!black, fill=ebmOrange!15, minimum size=0.55cm, line width=0.6pt, font=\tiny},
+    weather/.style={diamond, draw=samplerTeal!80!black, fill=samplerTeal!15, minimum size=0.7cm, line width=0.6pt, font=\tiny},
+    contain/.style={->, >=Stealth, draw=gray!70, line width=0.8pt},
+    trans/.style={<->, >=Stealth, draw=milpRed!70, line width=1pt, dashed},
+    weath/.style={->, >=Stealth, draw=samplerTeal!50, line width=0.6pt, dotted},
+    layerlabel/.style={font=\footnotesize\bfseries, text=gray!70!black},
+]
+\node[nation] (N) at (2.5, 6) {Nat};
+\node[region] (R1) at (0.5, 4) {$r_1$};
+\node[region] (R2) at (4.5, 4) {$r_2$};
+\node[zone] (Z1) at (-0.8, 2) {$z_1$};
+\node[zone] (Z2) at (1.8, 2) {$z_2$};
+\node[zone] (Z3) at (3.5, 2) {$z_3$};
+\node[zone] (Z4) at (5.8, 2) {$z_4$};
+\node[asset] (A1th) at (-2.0, 0.3) {Th};
+\node[asset] (A1sol) at (-1.1, 0.3) {Sol};
+\node[asset] (A1bat) at (-0.2, 0.3) {Bat};
+\node[asset] (A2th) at (1.1, 0.3) {Th};
+\node[asset] (A2wnd) at (1.9, 0.3) {Wnd};
+\node[asset] (A2dr) at (2.7, 0.3) {DR};
+\node[asset] (A1nuc) at (-0.5, 3) {Nuc};
+\node[asset] (A3th) at (3.5, 0.3) {Th};
+\node[asset] (A2phs) at (5.5, 3) {PHS};
+\node[asset] (A4sol) at (5.3, 0.3) {Sol};
+\node[asset] (A4wnd) at (6.3, 0.3) {Wnd};
+\node[weather] (W1) at (-1.5, 4) {$w_1$};
+\node[weather] (W2) at (6.5, 4) {$w_2$};
+\draw[contain] (N) -- (R1); \draw[contain] (N) -- (R2);
+\draw[contain] (R1) -- (Z1); \draw[contain] (R1) -- (Z2);
+\draw[contain] (R2) -- (Z3); \draw[contain] (R2) -- (Z4);
+\draw[contain] (Z1) -- (A1th); \draw[contain] (Z1) -- (A1sol); \draw[contain] (Z1) -- (A1bat);
+\draw[contain] (Z2) -- (A2th); \draw[contain] (Z2) -- (A2wnd); \draw[contain] (Z2) -- (A2dr);
+\draw[contain] (R1) -- (A1nuc); \draw[contain] (R2) -- (A2phs);
+\draw[contain] (Z3) -- (A3th); \draw[contain] (Z4) -- (A4sol); \draw[contain] (Z4) -- (A4wnd);
+\draw[trans] (Z1) -- (Z2) node[midway, above, font=\tiny, text=milpRed!80!black] {$\overline{F}$};
+\draw[trans] (Z2) -- (Z3); \draw[trans] (Z3) -- (Z4);
+\draw[weath] (W1) -- (Z1); \draw[weath] (W1) -- (Z2); \draw[weath] (W1) to[bend left=15] (A1sol);
+\draw[weath] (W2) -- (Z3); \draw[weath] (W2) -- (Z4); \draw[weath] (W2) to[bend right=15] (A4sol); \draw[weath] (W2) to[bend right=10] (A4wnd);
+\node[layerlabel, anchor=west] at (7.3, 6) {Layer 0: Nation};
+\node[layerlabel, anchor=west] at (7.3, 4) {Layer 1: Regions};
+\node[layerlabel, anchor=west] at (7.3, 3) {\scriptsize Regional assets};
+\node[layerlabel, anchor=west] at (7.3, 2) {Layer 2: Zones};
+\node[layerlabel, anchor=west] at (7.3, 0.3) {\scriptsize Zonal assets};
+\draw[gray!30, dashed] (-2.5, 5) -- (7, 5);
+\draw[gray!30, dashed] (-2.5, 3) -- (7, 3);
+\draw[gray!30, dashed] (-2.5, 1) -- (7, 1);
+\node[anchor=north west] at (-2.5, -0.7) {
+\begin{tabular}{@{}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{}}
+\tikz\draw[contain] (0,0) -- (0.5,0); & \scriptsize Containment &
+\tikz\draw[trans] (0,0) -- (0.5,0); & \scriptsize Transmission &
+\tikz\draw[weath] (0,0) -- (0.5,0); & \scriptsize Weather influence \\
+\end{tabular}
+};
+\end{tikzpicture}
+}
+\caption{Spatial structure of the multi-layer heterogeneous graph at a single time step. The containment hierarchy (nation $\to$ regions $\to$ zones) forms a tree; assets attach at the appropriate level---regional assets (nuclear, pumped hydro) are children of regions, while zonal assets (thermal, solar, wind, battery, DR) are children of zones. Bidirectional transmission edges connect zones, and weather influence edges reach zones and renewable assets.}
+\label{fig:graph_spatial}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\resizebox{0.78\textwidth}{!}{%
+\begin{tikzpicture}[
+    every node/.style={font=\small},
+    zone/.style={circle, draw=graphGreen!80!black, fill=graphGreen!20, minimum size=0.8cm, line width=0.8pt, font=\scriptsize},
+    asset/.style={circle, draw=ebmOrange!80!black, fill=ebmOrange!15, minimum size=0.55cm, line width=0.6pt, font=\tiny},
+    contain/.style={->, >=Stealth, draw=gray!70, line width=0.8pt},
+    temporal/.style={->, >=Stealth, draw=ebmOrange!70, line width=1pt},
+    layerlabel/.style={font=\footnotesize\bfseries, text=gray!70!black},
+    timelabel/.style={font=\scriptsize\itshape, text=gray!60!black},
+]
+\draw[->, gray!50, line width=0.8pt] (0, -0.5) -- (14, -0.5) node[right, font=\scriptsize] {$t$};
+\node[timelabel] at (1.5, -0.9) {$t{=}0$};
+\node[timelabel] at (4.5, -0.9) {$t{=}1$};
+\node[timelabel] at (7.5, -0.9) {$t{=}2$};
+\node[timelabel] at (11, -0.9) {$\cdots$};
+\node[zone, minimum size=0.7cm] (Z1t0) at (1.5, 5.5) {$z_1$};
+\node[asset, minimum size=0.55cm] (Batt0) at (0.5, 3.5) {Bat};
+\node[asset, minimum size=0.55cm] (Tht0) at (2.5, 2.5) {Th};
+\node[asset, minimum size=0.55cm] (DRt0) at (1.5, 1.5) {DR};
+\draw[contain] (Z1t0) -- (Batt0); \draw[contain] (Z1t0) -- (Tht0); \draw[contain] (Z1t0) -- (DRt0);
+\node[zone, minimum size=0.7cm] (Z1t1) at (4.5, 5.5) {$z_1$};
+\node[asset, minimum size=0.55cm] (Batt1) at (3.5, 3.5) {Bat};
+\node[asset, minimum size=0.55cm] (Tht1) at (5.5, 2.5) {Th};
+\node[asset, minimum size=0.55cm] (DRt1) at (4.5, 1.5) {DR};
+\draw[contain] (Z1t1) -- (Batt1); \draw[contain] (Z1t1) -- (Tht1); \draw[contain] (Z1t1) -- (DRt1);
+\node[zone, minimum size=0.7cm] (Z1t2) at (7.5, 5.5) {$z_1$};
+\node[asset, minimum size=0.55cm] (Batt2) at (6.5, 3.5) {Bat};
+\node[asset, minimum size=0.55cm] (Tht2) at (8.5, 2.5) {Th};
+\node[asset, minimum size=0.55cm] (DRt2) at (7.5, 1.5) {DR};
+\draw[contain] (Z1t2) -- (Batt2); \draw[contain] (Z1t2) -- (Tht2); \draw[contain] (Z1t2) -- (DRt2);
+\draw[temporal] (Batt0) -- (Batt1) node[midway, above, font=\tiny, text=ebmOrange!80!black] {SOC};
+\draw[temporal] (Batt1) -- (Batt2);
+\draw[temporal, draw=milpRed!60] (Tht0) -- (Tht1) node[midway, above, font=\tiny, text=milpRed!70!black] {Ramp};
+\draw[temporal, draw=milpRed!60] (Tht1) -- (Tht2);
+\draw[temporal, draw=encoderPurple!60] (DRt0) -- (DRt1) node[midway, above, font=\tiny, text=encoderPurple!70!black] {DR};
+\draw[temporal, draw=encoderPurple!60] (DRt0) to[bend right=25] (DRt2);
+\draw[temporal, draw=encoderPurple!60] (DRt1) -- (DRt2);
+\node at (10, 5.5) {\Large$\cdots$};
+\node at (9.5, 3.5) {\Large$\cdots$};
+\node at (10.5, 3.5) {\Large$\cdots$};
+\node at (10, 1.5) {\Large$\cdots$};
+\node[layerlabel, anchor=west] at (11.5, 4.2) {\scriptsize SOC ($t{\to}t{+}1$)};
+\node[layerlabel, anchor=west, text=milpRed!70!black] at (11.5, 3.5) {\scriptsize Ramp ($t{\to}t{+}1$)};
+\node[layerlabel, anchor=west, text=encoderPurple!70!black] at (11.5, 2.8) {\scriptsize DR ($t{\to}t{+}\delta$)};
+\node[anchor=north west] at (0, -1.5) {
+\begin{tabular}{@{}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{\hspace{14pt}}l@{\hspace{6pt}}l@{}}
+\tikz\draw[contain] (0,0) -- (0.5,0); & \scriptsize Containment &
+\tikz\draw[temporal] (0,0) -- (0.5,0); & \scriptsize Temporal (SOC) &
+\tikz\draw[temporal, draw=milpRed!60] (0,0) -- (0.5,0); & \scriptsize Temporal (Ramp) \\
+& & \tikz\draw[temporal, draw=encoderPurple!60] (0,0) -- (0.5,0); & \scriptsize Temporal (DR) & & \\
+\end{tabular}
+};
+\end{tikzpicture}
+}
+\caption{Temporal extension of the heterogeneous graph into a supra-graph, illustrated for a single zone~$z_1$ with three asset types. Each base node is replicated at every time step. Temporal relation templates provide context for storage (SOC), generation ramps and demand flexibility (DR). Actual feasibility is enforced by the physical model; demand response uses a causal backlog with terminal repayment, not energy decay or a guarantee supplied by these edges.}
+\label{fig:graph_temporal}
+\end{figure}

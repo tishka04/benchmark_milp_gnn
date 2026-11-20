@@ -1,0 +1,41 @@
+{
+  "protocol": "paper2_methods_v1",
+  "campaign": "outputs/thermal_transitions_v1/operational_exit_v1",
+  "historical_rows": "research/three_papers/runs/v2_service_by_deadline/main_rows.json",
+  "physics": "thermal_transitions_v1+load_shifting_v1+energy_cost_dt_v1",
+  "seed": 20261112,
+  "quality_thresholds": [0.01, 0.05, 0.10],
+  "reference_zero_eur": 1,
+  "near_zero_absolute_tolerance_eur": 1,
+  "ens_caps_mwh": [0.001, 1, 10, 100],
+  "extension_budgets": [5, 10, 30, 60, 120],
+  "reference_seconds": 600,
+  "reference_threads": 16,
+  "reference_wall_cap_seconds": 900,
+  "bootstrap_samples": 2000,
+  "new_cases_per_family": 20,
+  "controlled_cases_per_family": 5,
+  "training_bases_per_family": 30,
+  "training_horizons": [12, 24, 48],
+  "training_seeds": [20261112, 20261113, 20261114],
+  "repeat_cases_per_family": 5,
+  "repeat_budgets": [30, 120],
+  "extra_repetitions": [1, 2],
+  "multi_horizon": {
+    "architecture": "dynamic_time_conditioned_tokens_v1",
+    "latent_dim": 192, "tokens": 32, "heads": 4,
+    "epochs": {"ae": 60, "jepa": 50, "ebm": 20},
+    "learning_rate": 0.0002, "weight_decay": 0.0001, "accumulation": 8, "gradient_clip": 1,
+    "seed": 20261112, "langevin_steps": 20, "langevin_step": 0.02,
+    "langevin_noise": 0.05, "initial_noise": 0.15
+  },
+  "primary_inference": {
+    "partition": "final", "endpoint": "joint_5",
+    "contrasts": [["rh", "highs", "four"], ["jepa", "highs", "four"],
+      ["pipeline", "highs", "four"], ["gurobi", "highs", "gurobi_four"],
+      ["pipeline", "perturb16", "ablation"]],
+    "multiplicity": "Holm across all 25 planned contrasts",
+    "unit": "scenario base; family-stratified paired bootstrap",
+    "alpha": 0.05
+  }
+}

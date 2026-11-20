@@ -1,0 +1,79 @@
+Le fil conducteur du papier 2 pourrait être : la valeur d’une méthode dépend du service opérationnel attendu, et cette valeur change avec la famille du scénario et le temps disponible. Le papier caractérise ces compromis ; le routeur apprend ensuite à choisir selon le besoin exprimé.
+
+Les chiffres ci-dessous portent sur les 126 scénarios entièrement évalués, soit 21 par famille, du dernier graphique.
+
+Un résultat important apparaît en ajoutant la continuité du service.
+
+Une solution « valide » peut comporter de l’énergie non servie, puisque le modèle l’autorise en la pénalisant économiquement. Cela change fortement l’interprétation :
+Besoin et famille	RH : sortie valide sans énergie non servie	HiGHS : même critère
+Criticité moyenne, délai de 10 s	21/21	4/21
+Réseau, délai de 30 s	21/21	7/21
+Forte criticité, délai de 30 s	21/21	0/21
+Mathématicien, délai de 30 s	21/21	0/21
+Mathématicien, délai de 120 s	21/21	5/21
+
+
+Ces différences ne viennent pas de petits résidus numériques. Sur les scénarios mathématiciens à 30 secondes, la médiane d’énergie non servie de HiGHS dépasse 9 300 MWh, contre zéro pour RH.
+
+RH possède donc déjà une utilité clairement observable : fournir rapidement une solution qui préserve le service, en acceptant un coût économique souvent supérieur.
+
+On peut maintenant raconter le rôle des quatre méthodes plus précisément.
+
+HiGHS : convertir le temps disponible en qualité économique.
+
+Son intérêt apparaît particulièrement quand l’opérateur peut attendre et privilégie le coût. En forte criticité, il passe de 3 scénarios sur 21 à moins de 5 % de la référence à 30 secondes, à 17 sur 21 à 120 secondes.
+
+En faible criticité, il est également très rapide : les 21 scénarios sont à moins de 1 % de la référence dès 5 secondes. Cette famille montre qu’un problème facile peut déjà être très bien traité directement, laissant peu de gain accessible aux méthodes apprises.
+
+Son avantage économique ne garantit cependant pas une meilleure continuité du service sous délai, comme le montre le tableau précédent.
+
+RH : privilégier une réponse rapide et la continuité du service.
+
+En criticité moyenne, RH fournit les 21 sorties sans énergie non servie dès 10 secondes. Il répond donc à un besoin d’urgence, même si ses coûts restent éloignés de la référence.
+
+Sur la famille mathématicien à 30 secondes, son intérêt est encore plus net : RH coûte moins cher que HiGHS dans 16 des 21 scénarios, tout en évitant l’énergie non servie dans tous les cas. À 120 secondes, HiGHS reprend l’avantage économique médian, mais RH conserve son avantage de continuité du service.
+
+C’est un exemple concret d’un choix qui change avec l’échéance et la priorité opérationnelle.
+
+JEPA : rechercher une réponse plus rapide avec une dégradation économique acceptable.
+
+Son domaine potentiel se situe entre la réponse rapide de RH et l’optimisation économique de HiGHS.
+
+Dans les essais disposant de 120 secondes :
+- En criticité moyenne, JEPA termine plus vite que HiGHS sur 11 scénarios. Sur 5 scénarios, il combine ce gain de temps, un coût à moins de 5 % de la référence et aucune énergie non servie.
+- Sur la famille réseau, il termine plus vite sur 18 scénarios. 4 scénarios réunissent également ces deux exigences de qualité et de service.
+- Sur VRE + batteries, 3 scénarios réunissent ces trois avantages.
+Il existe donc une niche observée. Le défi du routeur sera de reconnaître ces scénarios avant de les résoudre. Les performances moyennes de la famille ne suffisent pas à faire ce choix.
+
+Le pipeline : améliorer la qualité des propositions apprises, avec un surcoût important.
+
+Sa valeur apparaît surtout par comparaison avec JEPA lorsque l’exigence économique se resserre. À 120 secondes :
+- En criticité moyenne, 12/21 scénarios atteignent un coût à moins de 1 % de la référence avec le pipeline, contre 5/21 avec JEPA.
+- Sur VRE + batteries, ce sont 15/21, contre 11/21 pour JEPA.
+Cela soutient l’idée qu’une recherche parmi plusieurs propositions peut améliorer la qualité obtenue. En revanche, HiGHS reste meilleur sur ces mêmes critères actuellement. Le domaine où le pipeline serait le meilleur choix parmi les quatre reste donc à établir. Le papier peut expliquer cette limite sans attribuer artificiellement une spécialité gagnante à chaque méthode.
+
+Pour le papier 2, je construirais donc une carte des usages.
+Famille	Lecture opérationnelle actuelle
+Faible criticité	HiGHS résout déjà vite et bien ; faible marge de gain pour l’apprentissage.
+Criticité moyenne	RH pour l’urgence et le service ; JEPA pour certains compromis de temps et de coût ; HiGHS pour une qualité économique exigeante.
+Forte criticité	Compromis marqué entre continuité rapide avec RH et amélioration économique avec HiGHS lorsque le délai augmente.
+VRE + batteries	Bon domaine de qualité pour les méthodes apprises, mais avantage de rapidité encore ponctuel.
+Réseau	Complémentarité intéressante : RH pour préserver rapidement le service, JEPA pour certains compromis, HiGHS pour la précision économique.
+Mathématicien	RH particulièrement utile sous délai court ; HiGHS améliore les coûts avec davantage de temps, sans éliminer tous les problèmes de service.
+
+
+Le routeur doit alors recevoir un besoin, en plus d’un scénario.
+
+Par exemple : « produire une réponse sous 30 secondes, sans énergie non servie, avec le coût le plus faible possible » conduit à un choix différent de « atteindre un coût à moins de 1 % de la référence, aussi rapidement que possible ».
+
+Ses entrées comprendraient donc :
+- les caractéristiques du scénario et les composantes de criticité ;
+- le délai maximal ;
+- l’exigence de qualité économique ;
+- le niveau d’énergie non servie acceptable ;
+- la tolérance au risque d’échec.
+Il devrait estimer, pour chaque méthode, la probabilité de satisfaire ces exigences et le temps nécessaire. Une exigence de preuve d’optimalité serait traitée séparément : être proche d’une référence ne constitue pas un certificat d’optimalité.
+
+Pour rendre cette histoire solide, nous devons figer plusieurs profils de besoins et les évaluer sur les mêmes scénarios, en comptant les échecs. Les essais à différents budgets étant indépendants, un gain de temps observé avec un budget de 120 secondes ne prouve pas automatiquement une réussite avec un budget de 30 secondes.
+
+La contribution commune aux deux papiers devient ainsi très concrète : caractériser les compromis disponibles, puis prédire quel compromis convient à une décision donnée. Les résultats actuels donnent déjà des exemples convaincants pour RH et des possibilités ciblées pour JEPA ; ils permettent aussi d’identifier honnêtement les situations où HiGHS reste le choix le plus pertinent.

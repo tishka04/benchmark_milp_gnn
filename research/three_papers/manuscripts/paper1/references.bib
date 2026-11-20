@@ -1,0 +1,764 @@
+% Bibliography for paper 1 -- revision sources checked 2026-11-12
+@techreport{terca2026flexibility,
+  author = {Ter\c{c}a, Gon\c{c}alo and Koolen, Derck and Miletic, Marija and Finck, Rafael},
+  title = {The development of flexibility provision in EU power systems},
+  institution = {Publications Office of the European Union},
+  number = {JRC144042}, year = {2026}, doi = {10.2760/6856407},
+  url = {https://publications.jrc.ec.europa.eu/repository/handle/JRC144042}
+}
+@misc{miplibselection,
+  author = {{MIPLIB}}, title = {{MIPLIB 2017: Selection Methodology}},
+  year = {2026}, note = {Accessed 12 November 2026},
+  url = {https://miplib.zib.de/Selection_Methodology.html}
+}
+@misc{pglibuc,
+  author = {{IEEE PES Task Force on Benchmarks for Validation of Emerging Power System Algorithms}},
+  title = {Power Grid Library: Unit Commitment Benchmarks},
+  year = {2026}, note = {Repository documentation accessed 12 November 2026; not used as experimental data},
+  url = {https://github.com/power-grid-lib/pglib-uc}
+}
+% Curated reference reservoir. Only cited entries appear in the manuscript.
+% Sources, roles and publication status: ../../bibliography/catalogue.json
+% Selection rationale and priority reading: README.md
+% No solver, statistical analysis, BibTeX or LaTeX compilation was executed.
+% Preprint status refers to the version cited, not a claim about all later versions.
+
+% ====================================================================
+% Unit commitment: formulations and computational structure
+% ====================================================================
+
+% Role: Contraintes intertemporelles et compromis nombre de variables/contraintes et performance de résolution.
+% Status: published; checked 2026-11-05
+% Verification: https://ieeexplore.ieee.org/document/1664974/
+@article{carrion2006,
+  author = {Carri{\'{o}}n, Miguel and Arroyo, Jos{\'{e}} M.},
+  title = {{A computationally efficient mixed-integer linear formulation for the thermal unit commitment problem}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2006},
+  volume = {21},
+  number = {3},
+  pages = {1371--1378},
+  doi = {10.1109/TPWRS.2006.876672},
+  url = {https://doi.org/10.1109/TPWRS.2006.876672},
+}
+
+% Role: Formulation thermique et effet du resserrement sur la résolution; référence de modèle, pas identité avec la formulation locale.
+% Status: published; checked 2026-11-05
+% Verification: https://research.tudelft.nl/en/publications/tight-and-compact-milp-formulation-for-the-thermal-unit-commitmen/
+% Original MILP-GNN.bib key: morales_espana_tight_2013
+@article{moralesespana2013,
+  author = {Morales-Espa{\~{n}}a, Germ{\'{a}}n and Latorre, Jesus M. and Ramos, Andres},
+  title = {{Tight and Compact MILP Formulation for the Thermal Unit Commitment Problem}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2013},
+  volume = {28},
+  number = {4},
+  pages = {4897--4908},
+  doi = {10.1109/TPWRS.2013.2251373},
+  url = {https://doi.org/10.1109/TPWRS.2013.2251373},
+}
+
+% Role: Comparer familles de formulations UC et effets sur le temps de calcul; fondement pour interpréter la difficulté.
+% Status: published; checked 2026-11-05
+% Verification: https://pubsonline.informs.org/doi/10.1287/ijoc.2019.0944
+@article{knueven2020,
+  author = {Knueven, Bernard and Ostrowski, James and Watson, Jean-Paul},
+  title = {{On Mixed-Integer Programming Formulations for the Unit Commitment Problem}},
+  journal = {INFORMS Journal on Computing},
+  year = {2020},
+  volume = {32},
+  number = {4},
+  pages = {857--876},
+  doi = {10.1287/ijoc.2019.0944},
+  url = {https://doi.org/10.1287/ijoc.2019.0944},
+}
+
+% Role: Lien entre réserves, structure polyédrale et difficulté de résolution; les contraintes du papier ne sont pas toutes celles du modèle local.
+% Status: published; checked 2026-11-05
+% Verification: https://research.polyu.edu.hk/en/publications/cutting-planes-for-security-constrained-unit-commitment-with-regu/
+% Original MILP-GNN.bib key: huang_cutting_2021
+@article{huang2021,
+  author = {Huang, Jianqiu and Pan, Kai and Guan, Yongpei},
+  title = {{Cutting planes for security-constrained unit commitment with regulation reserve}},
+  journal = {IISE Transactions},
+  year = {2021},
+  volume = {53},
+  number = {4},
+  pages = {437--452},
+  doi = {10.1080/24725854.2020.1823533},
+  url = {https://doi.org/10.1080/24725854.2020.1823533},
+}
+
+% Role: Lecture polyédrale des transitions binaires; contexte pour des proxies de variabilité, sans assimiler ceux-ci à une mesure exacte de difficulté.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S157252862300018X
+% Original MILP-GNN.bib key: buchheim_polytope_2023
+@article{buchheim2023,
+  author = {Buchheim, Christoph and H{\"{u}}gging, Maja},
+  title = {{The polytope of binary sequences with bounded variation}},
+  journal = {Discrete Optimization},
+  year = {2023},
+  volume = {48},
+  pages = {100776},
+  doi = {10.1016/j.disopt.2023.100776},
+  url = {https://doi.org/10.1016/j.disopt.2023.100776},
+}
+
+% ====================================================================
+% Physical stress and power-system flexibility
+% ====================================================================
+
+% Role: Indicateurs de disponibilité des ressources de rampe et échelles temporelles; risque physique distinct de la difficulté informatique.
+% Status: published; checked 2026-11-05
+% Verification: https://researchrepository.ucd.ie/entities/publication/c68c6298-d018-4950-830f-5d9ba1472659
+@article{lannoye2012,
+  author = {Lannoye, Eamonn and Flynn, Damian and O'Malley, Mark},
+  title = {{Evaluation of Power System Flexibility}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2012},
+  volume = {27},
+  number = {2},
+  pages = {922--931},
+  doi = {10.1109/TPWRS.2011.2177280},
+  url = {https://doi.org/10.1109/TPWRS.2011.2177280},
+}
+
+% Role: Interprétation physique des capacités de flexibilité; ne mesure pas la difficulté MILP.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0142061515001118
+@article{ulbig2015,
+  author = {Ulbig, Andreas and Andersson, G{\"{o}}ran},
+  title = {{Analyzing operational flexibility of electric power systems}},
+  journal = {International Journal of Electrical Power \& Energy Systems},
+  year = {2015},
+  volume = {72},
+  pages = {155--164},
+  doi = {10.1016/j.ijepes.2015.02.028},
+  url = {https://doi.org/10.1016/j.ijepes.2015.02.028},
+}
+
+% Role: Besoins de flexibilité selon plusieurs échelles temporelles et leurs déterminants.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0306261919302107
+@article{heggarty2019,
+  author = {Heggarty, Thomas and Bourmaud, Jean-Yves and Girard, Robin and Kariniotakis, Georges},
+  title = {{Multi-temporal assessment of power system flexibility requirement}},
+  journal = {Applied Energy},
+  year = {2019},
+  volume = {238},
+  pages = {1327--1336},
+  doi = {10.1016/j.apenergy.2019.01.198},
+  url = {https://doi.org/10.1016/j.apenergy.2019.01.198},
+}
+
+% ====================================================================
+% Instance features and empirical computational difficulty
+% ====================================================================
+
+% Role: Antécédent des modèles de difficulté empirique à partir de caractéristiques, avec une formulation résolue par CPLEX.
+% Status: published; checked 2026-11-05
+% Verification: https://link.springer.com/chapter/10.1007/3-540-46135-3_37
+@inproceedings{leytonbrown2002,
+  author = {Leyton-Brown, Kevin and Nudelman, Eugene and Shoham, Yoav},
+  title = {{Learning the Empirical Hardness of Optimization Problems: The Case of Combinatorial Auctions}},
+  booktitle = {Principles and Practice of Constraint Programming -- CP 2002},
+  series = {Lecture Notes in Computer Science},
+  volume = {2470},
+  year = {2002},
+  pages = {556--572},
+  publisher = {Springer},
+  doi = {10.1007/3-540-46135-3_37},
+  url = {https://doi.org/10.1007/3-540-46135-3_37},
+}
+
+% Role: Fondement principal de la distinction entre caractéristiques d’instance, taille et difficulté empirique dépendante de l’algorithme.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0305054811001997
+% Verification: https://www.cs.ubc.ca/labs/algorithms/EARG/stack/2012_ComputersAndOperationResearch_SmithMiles_MeasuringInstanceDifficulty.pdf
+@article{smithmiles2012,
+  author = {Smith-Miles, Kate and Lopes, Leo},
+  title = {{Measuring instance difficulty for combinatorial optimization problems}},
+  journal = {Computers \& Operations Research},
+  year = {2012},
+  volume = {39},
+  number = {5},
+  pages = {875--889},
+  doi = {10.1016/j.cor.2011.07.006},
+  url = {https://doi.org/10.1016/j.cor.2011.07.006},
+}
+
+% Role: Prédiction de performance, descripteurs et temps censurés; clé historique conservée malgré l’année de revue 2014.
+% Status: published; checked 2026-11-05
+% Verification: https://www.cl.cam.ac.uk/~ey204/teaching/ACS/R244_2017_2018/papers/hutter_ai_2014.pdf
+% Verification: https://arxiv.org/abs/1211.0906
+% Metadata: Clé historique conservée; la notice cite désormais la version revue de 2014.
+@article{hutter2013,
+  author = {Hutter, Frank and Xu, Lin and Hoos, Holger H. and Leyton-Brown, Kevin},
+  title = {{Algorithm runtime prediction: Methods \& evaluation}},
+  journal = {Artificial Intelligence},
+  year = {2014},
+  volume = {206},
+  pages = {79--111},
+  doi = {10.1016/j.artint.2013.10.003},
+  url = {https://doi.org/10.1016/j.artint.2013.10.003},
+}
+
+% Role: Évaluer les zones de réussite et d’échec dans l’espace des instances, au-delà des moyennes globales.
+% Status: published; checked 2026-11-05
+% Verification: https://orca.cardiff.ac.uk/id/eprint/53966/
+@article{smithmiles2014,
+  author = {Smith-Miles, Kate and Baatar, Davaatseren and Wreford, Brendan and Lewis, Rhyd},
+  title = {{Towards objective measures of algorithm performance across instance space}},
+  journal = {Computers \& Operations Research},
+  year = {2014},
+  volume = {45},
+  pages = {12--24},
+  doi = {10.1016/j.cor.2013.11.015},
+  url = {https://doi.org/10.1016/j.cor.2013.11.015},
+}
+
+% ====================================================================
+% Composite indicators and criticality
+% ====================================================================
+
+% Role: Normalisation, pondération, agrégation et sensibilité d’un indice composite; transfert méthodologique depuis les indicateurs de politique publique.
+% Status: published; checked 2026-11-05
+% Verification: https://www.oecd.org/en/publications/handbook-on-constructing-composite-indicators-methodology-and-user-guide_9789264043466-en.html
+@book{oecd2008,
+  author = {{OECD} and {European Union} and {European Commission, Joint Research Centre}},
+  title = {{Handbook on Constructing Composite Indicators: Methodology and User Guide}},
+  publisher = {OECD Publishing},
+  address = {Paris},
+  year = {2008},
+  doi = {10.1787/9789264043466-en},
+  url = {https://doi.org/10.1787/9789264043466-en},
+}
+
+% ====================================================================
+% Computational benchmarking and quality versus time
+% ====================================================================
+
+% Role: Comparer la performance sur un ensemble d’instances; ne remplace pas la mesure de sortie complète du processus.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.1007/S101070100263
+@article{dolan2002,
+  author = {Dolan, Elizabeth D. and Mor{\'{e}}, Jorge J.},
+  title = {{Benchmarking optimization software with performance profiles}},
+  journal = {Mathematical Programming},
+  year = {2002},
+  volume = {91},
+  pages = {201--213},
+  doi = {10.1007/s101070100263},
+  url = {https://doi.org/10.1007/s101070100263},
+}
+
+% Role: Situer les courbes qualité-temps et l’intégrale primale; distinguer incumbent disponible et programme terminé.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0167637713001181
+@article{berthold2013,
+  author = {Berthold, Timo},
+  title = {{Measuring the impact of primal heuristics}},
+  journal = {Operations Research Letters},
+  year = {2013},
+  volume = {41},
+  number = {6},
+  pages = {611--614},
+  doi = {10.1016/j.orl.2013.08.007},
+  url = {https://doi.org/10.1016/j.orl.2013.08.007},
+}
+
+% Role: Comparaison équitable, ressources, jeux d’instances et présentation des résultats.
+% Status: published; checked 2026-11-05
+% Verification: https://doi.org/10.1007/s11081-017-9366-1
+@article{beiranvand2017,
+  author = {Beiranvand, Vahid and Hare, Warren and Lucet, Yves},
+  title = {{Best practices for comparing optimization algorithms}},
+  journal = {Optimization and Engineering},
+  year = {2017},
+  volume = {18},
+  pages = {815--848},
+  doi = {10.1007/s11081-017-9366-1},
+  url = {https://doi.org/10.1007/s11081-017-9366-1},
+}
+
+% Role: Diversité et sélection d’instances MILP; bibliothèque externe, pas description du générateur énergétique local.
+% Status: published; checked 2026-11-05
+% Verification: https://miplib.zib.de/
+% Verification: https://publications.rwth-aachen.de/record/811575?ln=en
+@article{gleixner2021,
+  author = {Gleixner, Ambros and Hendel, Gregor and Gamrath, Gerald and Achterberg, Tobias and Bastubbe, Michael and Berthold, Timo and Christophel, Philipp M. and Jarck, Kati and Koch, Thorsten and Linderoth, Jeff and L{\"{u}}bbecke, Marco E. and Mittelmann, Hans D. and Ozyurt, Derya and Ralphs, Ted K. and Salvagnin, Domenico and Shinano, Yuji},
+  title = {{MIPLIB 2017: data-driven compilation of the 6th mixed-integer programming library}},
+  journal = {Mathematical Programming Computation},
+  year = {2021},
+  volume = {13},
+  number = {3},
+  pages = {443--490},
+  doi = {10.1007/s12532-020-00194-3},
+  url = {https://doi.org/10.1007/s12532-020-00194-3},
+}
+
+% ====================================================================
+% Learning for unit commitment: direct related work
+% ====================================================================
+
+% Role: Antécédent direct pour contraintes, solutions initiales et réduction d’espace apprises en SCUC; année du fascicule 2021, mise en ligne 2020.
+% Status: published; checked 2026-11-05
+% Verification: https://pubsonline.informs.org/doi/10.1287/ijoc.2020.0976
+% Metadata: Année du fascicule 2021; première publication en ligne en octobre 2020.
+@article{xavier2021,
+  author = {Xavier, {\'{A}}linson S. and Qiu, Feng and Ahmed, Shabbir},
+  title = {{Learning to Solve Large-Scale Security-Constrained Unit Commitment Problems}},
+  journal = {INFORMS Journal on Computing},
+  year = {2021},
+  volume = {33},
+  number = {2},
+  pages = {739--756},
+  doi = {10.1287/ijoc.2020.0976},
+  url = {https://doi.org/10.1287/ijoc.2020.0976},
+}
+
+% Role: Confiance, fixation partielle et réparation de faisabilité sur un problème opérationnel de grande taille.
+% Status: published; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2211.15755
+% Verification: https://repository.gatech.edu/server/api/core/bitstreams/f5377676-1314-4f11-876b-cfd85df90d39/content
+% Original MILP-GNN.bib key: park_confidence-aware_2023
+@article{park2024,
+  author = {Park, Seonho and Chen, Wenbo and Han, Dahye and Tanneau, Mathieu and Van Hentenryck, Pascal},
+  title = {{Confidence-Aware Graph Neural Networks for Learning Reliability Assessment Commitments}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2024},
+  volume = {39},
+  number = {2},
+  pages = {3839--3850},
+  doi = {10.1109/TPWRS.2023.3298735},
+  url = {https://doi.org/10.1109/TPWRS.2023.3298735},
+}
+
+% Role: Prédiction UC et garanties sous hypothèses; comparateur non GNN pour discuter performance hors échantillon.
+% Status: published; checked 2026-11-05
+% Verification: https://orbit.dtu.dk/en/publications/unit-commitment-predictor-with-a-performance-guarantee-a-support-/
+% Verification: https://backend.orbit.dtu.dk/ws/portalfiles/portal/359853413/SVM.pdf
+@article{pourahmadi2025,
+  author = {Pourahmadi, Farzaneh and Kazempour, Jalal},
+  title = {{Unit Commitment Predictor With a Performance Guarantee: A Support Vector Machine Classifier}},
+  journal = {IEEE Transactions on Power Systems},
+  year = {2025},
+  volume = {40},
+  number = {1},
+  pages = {715--727},
+  doi = {10.1109/TPWRS.2024.3400405},
+  url = {https://doi.org/10.1109/TPWRS.2024.3400405},
+}
+
+% ====================================================================
+% Generalization, graph size and distribution shift
+% ====================================================================
+
+% Role: Évaluation séparée des changements de distribution; benchmark externe, sans preuve de transfert pour les cas énergétiques locaux.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v139/koh21a.html
+@inproceedings{koh2021,
+  author = {Koh, Pang Wei and Sagawa, Shiori and Marklund, Henrik and Xie, Sang Michael and Zhang, Marvin and Balsubramani, Akshay and Hu, Weihua and Yasunaga, Michihiro and Phillips, Richard Lanas and Gao, Irena and Lee, Tony and David, Etienne and Stavness, Ian and Guo, Wei and Earnshaw, Berton and Haque, Imran and Beery, Sara M. and Leskovec, Jure and Kundaje, Anshul and Pierson, Emma and Levine, Sergey and Finn, Chelsea and Liang, Percy},
+  title = {{WILDS: A Benchmark of in-the-Wild Distribution Shifts}},
+  booktitle = {Proceedings of the 38th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  year = {2021},
+  volume = {139},
+  pages = {5637--5664},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v139/koh21a.html},
+}
+
+% Role: La capacité à traiter différentes tailles n’implique pas une généralisation à leurs structures locales.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v139/yehudai21a.html
+@inproceedings{yehudai2021,
+  author = {Yehudai, Gilad and Fetaya, Ethan and Meirom, Eli and Chechik, Gal and Maron, Haggai},
+  title = {{From Local Structures to Size Generalization in Graph Neural Networks}},
+  booktitle = {Proceedings of the 38th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  volume = {139},
+  pages = {11975--11986},
+  year = {2021},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v139/yehudai21a.html},
+}
+
+% Role: Diversité des classes MILP et transfert hors des classes d’entraînement; contexte récent pour les limites des cohortes synthétiques.
+% Status: published; checked 2026-11-05
+% Verification: https://openreview.net/pdf?id=6yENDA7J4G
+% Verification: https://www.microsoft.com/en-us/research/publication/towards-foundation-models-for-mixed-integer-linear-programming/
+@inproceedings{li2025foundation,
+  author = {Li, Sirui and Kulkarni, Janardhan and Menache, Ishai and Wu, Cathy and Li, Beibin},
+  title = {{Towards Foundation Models for Mixed Integer Linear Programming}},
+  booktitle = {International Conference on Learning Representations},
+  year = {2025},
+  url = {https://openreview.net/forum?id=6yENDA7J4G},
+}
+
+% ====================================================================
+% Power-grid graph learning: adjacent applications
+% ====================================================================
+
+% Role: Prédiction du risque physique et topologies changeantes; distinguer prédiction de risque et prédiction du succès informatique.
+% Status: preprint; checked 2026-11-05
+% Verification: https://arxiv.org/abs/2405.07343
+% Original MILP-GNN.bib key: zhang_graph_2024
+@misc{zhang2024risk,
+  author = {Zhang, Yadong and Karve, Pranav M. and Mahadevan, Sankaran},
+  title = {{Graph neural networks for power grid operational risk assessment under evolving grid topology}},
+  year = {2024},
+  eprint = {2405.07343},
+  archivePrefix = {arXiv},
+  url = {https://arxiv.org/abs/2405.07343},
+  note = {Preprint},
+}
+
+% Role: Prédiction rapide de sorties d’un modèle énergétique et identification de cas critiques; surrogate de planification, pas résolution UC complète sous délai.
+% Status: published; checked 2026-11-05
+% Verification: https://ieeexplore.ieee.org/abstract/document/11305443
+% Verification: https://portal.fis.tum.de/en/publications/graph-neural-network-surrogates-for-energy-system-modeling/
+% Original MILP-GNN.bib key: pjetri_graph_nodate
+% Metadata: Remplace la notice Authorea sans date du fichier initial par la publication ISGT Europe 2025.
+@inproceedings{pjetri2025,
+  author = {Pjetri, Gerild and Mohapatra, Anurag and Baecker, Beneharo Reveron and Hock, Maximilian and Hamacher, Thomas},
+  title = {{Graph Neural Network Surrogates for Energy System Modeling}},
+  booktitle = {2025 IEEE PES Innovative Smart Grid Technologies Conference Europe},
+  year = {2025},
+  doi = {10.1109/ISGTEurope64741.2025.11305443},
+  url = {https://doi.org/10.1109/ISGTEurope64741.2025.11305443},
+}
+
+% ====================================================================
+% Algorithm selection, portfolios and selection costs
+% ====================================================================
+
+% Role: Cadre historique reliant instance, caractéristiques, algorithme et critère de performance.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0065245808605203
+@incollection{rice1976,
+  author = {Rice, John R.},
+  title = {{The Algorithm Selection Problem}},
+  booktitle = {Advances in Computers},
+  year = {1976},
+  volume = {15},
+  pages = {65--118},
+  publisher = {Academic Press},
+  doi = {10.1016/S0065-2458(08)60520-3},
+  url = {https://doi.org/10.1016/S0065-2458(08)60520-3},
+}
+
+% Role: Sélection par prédiction de performance, caractéristiques et coût de préparation.
+% Status: published; checked 2026-11-05
+% Verification: https://arxiv.org/abs/1111.2249
+@article{xu2008,
+  author = {Xu, Lin and Hutter, Frank and Hoos, Holger H. and Leyton-Brown, Kevin},
+  title = {{SATzilla: Portfolio-based Algorithm Selection for SAT}},
+  journal = {Journal of Artificial Intelligence Research},
+  year = {2008},
+  volume = {32},
+  pages = {565--606},
+  doi = {10.1613/jair.2490},
+  url = {https://doi.org/10.1613/jair.2490},
+}
+
+% Role: Scénarios de sélection, coûts des caractéristiques et références meilleur algorithme fixe/oracle.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S0004370216300388
+% Verification: https://arxiv.org/abs/1506.02465
+@article{bischl2016,
+  author = {Bischl, Bernd and Kerschke, Pascal and Kotthoff, Lars and Lindauer, Marius and Malitsky, Yuri and Fr{\'{e}}chette, Alexandre and Hoos, Holger and Hutter, Frank and Leyton-Brown, Kevin and Tierney, Kevin and Vanschoren, Joaquin},
+  title = {{ASlib: A benchmark library for algorithm selection}},
+  journal = {Artificial Intelligence},
+  year = {2016},
+  volume = {237},
+  pages = {41--58},
+  doi = {10.1016/j.artint.2016.04.003},
+  url = {https://doi.org/10.1016/j.artint.2016.04.003},
+}
+
+% Role: Revue de cadrage de la sélection automatique et de ses critères d’évaluation.
+% Status: published; checked 2026-11-05
+% Verification: https://www.wi.uni-muenster.de/research/publications/144870
+% Verification: https://arxiv.org/abs/1811.11597
+@article{kerschke2019,
+  author = {Kerschke, Pascal and Hoos, Holger H. and Neumann, Frank and Trautmann, Heike},
+  title = {{Automated Algorithm Selection: Survey and Perspectives}},
+  journal = {Evolutionary Computation},
+  year = {2019},
+  volume = {27},
+  number = {1},
+  pages = {3--45},
+  doi = {10.1162/evco_a_00242},
+  url = {https://doi.org/10.1162/evco_a_00242},
+}
+
+% Role: Gestion des temps censurés et décision selon le risque; distinguer temps d’atteinte d’une cible et sortie de processus mesurée ici.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v129/tornede20a.html
+@inproceedings{tornede2020,
+  author = {Tornede, Alexander and Wever, Marcel and Werner, Stefan and Mohr, Felix and H{\"{u}}llermeier, Eyke},
+  title = {{Run2Survive: A Decision-theoretic Approach to Algorithm Selection based on Survival Analysis}},
+  booktitle = {Proceedings of the 12th Asian Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  year = {2020},
+  volume = {129},
+  pages = {737--752},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v129/tornede20a.html},
+}
+
+% Role: Alternative récente aux caractéristiques conçues manuellement; étude méthodologique sur domaines séquentiels, pas preuve en énergie.
+% Status: published; checked 2026-11-05
+% Verification: https://link.springer.com/article/10.1007/s10732-022-09505-4
+@article{alissa2023,
+  author = {Alissa, Mohamad and Sim, Kevin and Hart, Emma},
+  title = {{Automated Algorithm Selection: from Feature-Based to Feature-Free Approaches}},
+  journal = {Journal of Heuristics},
+  year = {2023},
+  volume = {29},
+  pages = {1--38},
+  doi = {10.1007/s10732-022-09505-4},
+  url = {https://doi.org/10.1007/s10732-022-09505-4},
+}
+
+% Role: Antécédent central pour une sélection dépendant explicitement du délai et de la qualité; la sortie complète et la validité physique restent spécifiques au projet.
+% Status: published; checked 2026-11-05
+% Verification: https://hochbaum.ieor.berkeley.edu/html/pub/PBO-anytime-CAOR2024.pdf
+% Verification: https://www.sciencedirect.com/science/article/pii/S0305054824003083
+@article{pezo2025,
+  author = {Pezo, Catalina and Hochbaum, Dorit and Godoy, Julio and As{\'{i}}n-Ach{\'{a}}, Roberto},
+  title = {{Automatic algorithm selection for Pseudo-Boolean optimization with given computational time limits}},
+  journal = {Computers \& Operations Research},
+  year = {2025},
+  volume = {173},
+  pages = {106836},
+  doi = {10.1016/j.cor.2024.106836},
+  url = {https://doi.org/10.1016/j.cor.2024.106836},
+}
+
+% ====================================================================
+% Statistical validation, calibration and uncertainty
+% ====================================================================
+
+% Role: Définition historique du score de Brier pour événements binaires.
+% Status: published; checked 2026-11-05
+% Verification: https://journals.ametsoc.org/view/journals/mwre/78/1/1520-0493_1950_078_0001_vofeit_2_0_co_2.xml
+% Verification: https://viterbi-web.usc.edu/~shaddin/teaching/cs699fa17/docs/Brier50.pdf
+@article{brier1950,
+  author = {Brier, Glenn W.},
+  title = {{Verification of forecasts expressed in terms of probability}},
+  journal = {Monthly Weather Review},
+  year = {1950},
+  volume = {78},
+  number = {1},
+  pages = {1--3},
+  url = {https://journals.ametsoc.org/view/journals/mwre/78/1/1520-0493_1950_078_0001_vofeit_2_0_co_2.xml},
+}
+
+% Role: Fondement du rééchantillonnage; dans ce projet l’unité doit rester le groupe scénario, pas chaque cellule budget.
+% Status: published; checked 2026-11-05
+% Verification: https://sites.stat.washington.edu/courses/stat527/s13/readings/ann_stat1979.pdf
+@article{efron1979,
+  author = {Efron, Bradley},
+  title = {{Bootstrap Methods: Another Look at the Jackknife}},
+  journal = {The Annals of Statistics},
+  year = {1979},
+  volume = {7},
+  number = {1},
+  pages = {1--26},
+  doi = {10.1214/aos/1176344552},
+  url = {https://doi.org/10.1214/aos/1176344552},
+}
+
+% Role: Calibration de modèles variés, dont arbres et modèles probabilistes; pertinence directe pour les sélecteurs simples.
+% Status: published; checked 2026-11-05
+% Verification: https://www.cs.cornell.edu/~alexn/papers/calibration.icml05.crc.rev3.pdf
+% Verification: https://www.cs.cornell.edu/~caruana/
+% Verification: https://doi.org/10.1145/1102351.1102430
+@inproceedings{niculescumizil2005,
+  author = {Niculescu-Mizil, Alexandru and Caruana, Rich},
+  title = {{Predicting Good Probabilities With Supervised Learning}},
+  booktitle = {Proceedings of the 22nd International Conference on Machine Learning},
+  year = {2005},
+  pages = {625--632},
+  publisher = {ACM},
+  doi = {10.1145/1102351.1102430},
+  url = {https://doi.org/10.1145/1102351.1102430},
+}
+
+% Role: Comparaisons multiples et unités indépendantes; ne pas traiter les budgets répétés d’un même scénario comme des jeux indépendants.
+% Status: published; checked 2026-11-05
+% Verification: https://jmlr.org/papers/v7/demsar06a.html
+@article{demsar2006,
+  author = {Dem{\v{s}}ar, Janez},
+  title = {{Statistical Comparisons of Classifiers over Multiple Data Sets}},
+  journal = {Journal of Machine Learning Research},
+  year = {2006},
+  volume = {7},
+  number = {1},
+  pages = {1--30},
+  url = {https://jmlr.org/papers/v7/demsar06a.html},
+}
+
+% Role: Règles de score propres pour probabilités de succès; justification de log loss et Brier.
+% Status: published; checked 2026-11-05
+% Verification: https://sites.stat.washington.edu/people/raftery/Research/PDF/Gneiting2007jasa.pdf
+@article{gneiting2007,
+  author = {Gneiting, Tilmann and Raftery, Adrian E.},
+  title = {{Strictly Proper Scoring Rules, Prediction, and Estimation}},
+  journal = {Journal of the American Statistical Association},
+  year = {2007},
+  volume = {102},
+  number = {477},
+  pages = {359--378},
+  doi = {10.1198/016214506000001437},
+  url = {https://doi.org/10.1198/016214506000001437},
+}
+
+% Role: Séparer choix des modèles et évaluation finale; prévenir l’optimisme dû aux comparaisons répétées.
+% Status: published; checked 2026-11-05
+% Verification: https://www.jmlr.org/papers/v11/cawley10a.html
+@article{cawley2010,
+  author = {Cawley, Gavin C. and Talbot, Nicola L. C.},
+  title = {{On Over-fitting in Model Selection and Subsequent Selection Bias in Performance Evaluation}},
+  journal = {Journal of Machine Learning Research},
+  year = {2010},
+  volume = {11},
+  number = {70},
+  pages = {2079--2107},
+  url = {https://www.jmlr.org/papers/v11/cawley10a.html},
+}
+
+% Role: Justifier l’analyse précision-rappel lorsque le succès ou l’échec opérationnel est rare.
+% Status: published; checked 2026-11-05
+% Verification: https://journals.plos.org/plosone/article/citation?id=10.1371%2Fjournal.pone.0118432
+@article{saito2015,
+  author = {Saito, Takaya and Rehmsmeier, Marc},
+  title = {{The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets}},
+  journal = {PLOS ONE},
+  year = {2015},
+  volume = {10},
+  number = {3},
+  pages = {e0118432},
+  doi = {10.1371/journal.pone.0118432},
+  url = {https://doi.org/10.1371/journal.pone.0118432},
+}
+
+% Role: Distinguer discrimination et calibration des probabilités; la calibration thermique n’est pas supposée déjà implémentée.
+% Status: published; checked 2026-11-05
+% Verification: https://proceedings.mlr.press/v70/guo17a.html
+@inproceedings{guo2017,
+  author = {Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.},
+  title = {{On Calibration of Modern Neural Networks}},
+  booktitle = {Proceedings of the 34th International Conference on Machine Learning},
+  series = {Proceedings of Machine Learning Research},
+  volume = {70},
+  pages = {1321--1330},
+  year = {2017},
+  publisher = {PMLR},
+  url = {https://proceedings.mlr.press/v70/guo17a.html},
+}
+
+% Role: Validation par groupes et transferts structurés; justification méthodologique, non étude de systèmes énergétiques.
+% Status: published; checked 2026-11-05
+% Verification: https://nsojournals.onlinelibrary.wiley.com/doi/full/10.1111/ecog.02881
+@article{roberts2017,
+  author = {Roberts, David R. and Bahn, Volker and Ciuti, Simone and Boyce, Mark S. and Elith, Jane and Guillera-Arroita, Gurutzeta and Hauenstein, Severin and Lahoz-Monfort, Jos{\'{e}} J. and Schr{\"{o}}der, Boris and Thuiller, Wilfried and Warton, David I. and Wintle, Brendan A. and Hartig, Florian and Dormann, Carsten F.},
+  title = {{Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure}},
+  journal = {Ecography},
+  year = {2017},
+  volume = {40},
+  number = {8},
+  pages = {913--929},
+  doi = {10.1111/ecog.02881},
+  url = {https://doi.org/10.1111/ecog.02881},
+}
+
+% Role: Dépendance de l’importance des variables à la classe de modèles; éviter une lecture causale des scores d’importance.
+% Status: published; checked 2026-11-05
+% Verification: https://www.jmlr.org/papers/v20/18-760.html
+@article{fisher2019,
+  author = {Fisher, Aaron and Rudin, Cynthia and Dominici, Francesca},
+  title = {{All Models are Wrong, but Many are Useful: Learning a Variable's Importance by Studying an Entire Class of Prediction Models Simultaneously}},
+  journal = {Journal of Machine Learning Research},
+  year = {2019},
+  volume = {20},
+  number = {177},
+  pages = {1--81},
+  url = {https://www.jmlr.org/papers/v20/18-760.html},
+}
+
+% Role: Prévenir la fuite entre scénarios apparentés, prétraitement, sélection de modèle et test final.
+% Status: published; checked 2026-11-05
+% Verification: https://www.sciencedirect.com/science/article/pii/S2666389923001599
+@article{kapoor2023,
+  author = {Kapoor, Sayash and Narayanan, Arvind},
+  title = {{Leakage and the reproducibility crisis in machine-learning-based science}},
+  journal = {Patterns},
+  year = {2023},
+  volume = {4},
+  number = {9},
+  pages = {100804},
+  doi = {10.1016/j.patter.2023.100804},
+  url = {https://doi.org/10.1016/j.patter.2023.100804},
+}
+
+% ====================================================================
+% Software and external benchmark resources
+% ====================================================================
+
+% Role: Bibliothèque prévue pour les modèles statistiques et le routage; préciser la version effectivement utilisée lors des futurs calculs.
+% Status: published; checked 2026-11-05
+% Verification: https://www.jmlr.org/papers/v12/pedregosa11a.html
+@article{pedregosa2011,
+  author = {Pedregosa, Fabian and Varoquaux, Ga{\"{e}}l and Gramfort, Alexandre and Michel, Vincent and Thirion, Bertrand and Grisel, Olivier and Blondel, Mathieu and Prettenhofer, Peter and Weiss, Ron and Dubourg, Vincent and Vanderplas, Jake and Passos, Alexandre and Cournapeau, David and Brucher, Matthieu and Perrot, Matthieu and Duchesnay, {\'{E}}douard},
+  title = {{Scikit-learn: Machine Learning in Python}},
+  journal = {Journal of Machine Learning Research},
+  year = {2011},
+  volume = {12},
+  number = {85},
+  pages = {2825--2830},
+  url = {https://www.jmlr.org/papers/v12/pedregosa11a.html},
+}
+
+% Role: Référence recommandée par HiGHS; article sur le simplexe LP, pas validation de performances UC ou de tous les composants MIP.
+% Status: published; checked 2026-11-05
+% Verification: https://ergo-code.github.io/HiGHS/dev/
+% Verification: https://link.springer.com/article/10.1007/S12532-017-0130-5
+@article{huangfu2018,
+  author = {Huangfu, Q. and Hall, J. A. J.},
+  title = {{Parallelizing the dual revised simplex method}},
+  journal = {Mathematical Programming Computation},
+  year = {2018},
+  volume = {10},
+  number = {1},
+  pages = {119--142},
+  doi = {10.1007/s12532-017-0130-5},
+  url = {https://doi.org/10.1007/s12532-017-0130-5},
+}
+
+% Role: Benchmark externe et formulations publiques; ce logiciel n’est pas utilisé comme provenance des résultats locaux.
+% Status: software; checked 2026-11-05
+% Verification: https://github.com/ANL-CEEESA/UnitCommitment.jl
+@misc{xavier2024ucjl,
+  author = {Xavier, Alinson S. and Kazachkov, Aleksandr M. and Yurdakul, Og{\"{u}}n and He, Jun and Qiu, Feng},
+  title = {{UnitCommitment.jl: A Julia/JuMP Optimization Package for Security-Constrained Unit Commitment}},
+  year = {2024},
+  howpublished = {Zenodo},
+  doi = {10.5281/zenodo.4269874},
+  note = {Version 0.4; concept DOI as recommended by the project},
+  url = {https://doi.org/10.5281/zenodo.4269874},
+}
+
+% Role: Référence fournisseur pour l’adaptateur et les futurs essais; ne présume pas que Gurobi a été exécuté ni qu’il est une action du sélecteur.
+% Status: software; checked 2026-11-05
+% Verification: https://support.gurobi.com/hc/en-us/articles/360013195592-How-do-I-cite-Gurobi-software-for-an-academic-publication
+@misc{gurobi2026,
+  author = {{Gurobi Optimization, LLC}},
+  title = {{Gurobi Optimizer Reference Manual}},
+  year = {2026},
+  url = {https://www.gurobi.com},
+  note = {Software documentation; record the version actually used in the experiments},
+}
+

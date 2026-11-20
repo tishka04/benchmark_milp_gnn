@@ -1,0 +1,86 @@
+{
+  "schema": "paper1_components_v1",
+  "seed": 20261111,
+  "method": "highs",
+  "repetition": 0,
+  "deadlines_s": [
+    5,
+    10,
+    30,
+    60,
+    120
+  ],
+  "expected_scenarios": 600,
+  "expected_families": 6,
+  "expected_per_family": 100,
+  "endpoints": [
+    "economic_5",
+    "economic_5_ens"
+  ],
+  "cost_tolerance": 0.05,
+  "zero_ens_tolerance_mwh": 0.001,
+  "reference_zero_eur": 1,
+  "near_zero_absolute_tolerance_eur": 1,
+  "outer_folds": 5,
+  "inner_folds": 3,
+  "regularization_C": [
+    0.1,
+    1,
+    10
+  ],
+  "max_iter": 2000,
+  "hinge_knots": [
+    0.25,
+    0.75
+  ],
+  "constant_tolerance": 1e-12,
+  "bootstrap_samples": 2000,
+  "calibration_bins": 10,
+  "support_bins": 5,
+  "minimum_surface_groups": 10,
+  "surface_deadline_s": 30,
+  "family_controls": [
+    false,
+    true
+  ],
+  "mixing_grid": [
+    0,
+    0.25,
+    0.5,
+    0.75,
+    1
+  ],
+  "targeted_components": [
+    "A2_residual_volatility",
+    "A6_peak_to_firm",
+    "A8_inv_storage_energy",
+    "A10_inv_dr_headroom",
+    "B3_binary_est",
+    "B7_ramp_tightness",
+    "B8_soc_tightness",
+    "B9_interconn_density"
+  ],
+  "interactions": [
+    [
+      "A2_residual_volatility",
+      "A8_inv_storage_energy"
+    ],
+    [
+      "A2_residual_volatility",
+      "B7_ramp_tightness"
+    ],
+    [
+      "A6_peak_to_firm",
+      "A10_inv_dr_headroom"
+    ],
+    [
+      "A8_inv_storage_energy",
+      "B8_soc_tightness"
+    ],
+    [
+      "B3_binary_est",
+      "B9_interconn_density"
+    ]
+  ],
+  "interpretation": "Exploratory development amendment; fixed candidates, no causal attribution. Pointwise intervals; independent confirmation remains pending."
+}

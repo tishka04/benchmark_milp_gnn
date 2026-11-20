@@ -1,0 +1,665 @@
+\input{preamble}
+\renewcommand{\draftstatus}{\begin{center}\small
+  \textbf{Research draft revised on 11 November 2026.}\\
+  Completed 600-scenario outcomes support retrospective, request-specific ceilings.
+  No requirement-aware router or criticality reweighting has been trained or evaluated.
+  Predictive selection, calibration and online benefit remain prospective.
+\end{center}}
+\date{11 November 2026}
+
+\title{Routing Energy-Optimization Methods for an Explicit Operational Need\\
+Available Time, Economic Cost, Unserved Energy and Selection Overhead}
+\begin{document}
+\maketitle
+\draftstatus
+\begin{abstract}
+Algorithm selection for energy optimization must specify the service to be
+delivered. We separate demonstrated portfolio complementarity from the
+prospective ability to identify useful methods before solving. A completed
+campaign supplies 16,800 primary trials on 600 scenarios and 1,680 additional
+repetitions for direct HiGHS, RH construction with repair, JEPA and an
+energy-based sixteen-candidate pipeline. For continuity within thirty
+seconds, retrospective coverage is 575/600 for the best fixed method,
+593/600 for a family-conditioned fixed choice and 597/600 for an individual
+oracle. For five-percent economic quality at 120 seconds, both HiGHS and the
+portfolio cover 505/600 cases. Adding a strict unserved-energy cap yields
+475 versus 477, with that difference disappearing at a one-MWh cap.
+Conditional time improvements remain possible: on the 475 joint-acceptable
+HiGHS cases, a perfect selector reduces mean completion time from 36.25 to
+34.16 seconds before selection overhead. We propose a router conditioned on
+scenario descriptors, deadline, economic tolerance, energy cap, risk tolerance
+and cost/time priority. Criticality components and their aggregation are
+treated as candidate predictive descriptions, not validated routing thresholds.
+Nested grouped learning, calibration, simple family and two-method baselines,
+and independent timed evaluation are required. No trained-selector advantage
+or reliability guarantee is claimed from the retrospective ceilings.
+
+\end{abstract}
+
+\section{Introduction}
+The companion comparison asks which operational services four methods can
+deliver. This paper asks whether the method suited to a particular service
+can be identified before solving. An operator requesting the lowest possible
+cost within thirty seconds without unserved energy poses a different problem
+from one requesting one-percent economic quality as quickly as possible.
+The latter request does not ensure continuity unless an unserved-energy cap
+is also included.
+
+The final campaign makes this distinction concrete. On 100 mathematician
+scenarios at thirty seconds, RH returns 96 outputs without ENS versus one
+for HiGHS; among 95 valid pairs RH has lower cost on 78. In 120-second trials,
+JEPA combines a faster exit than HiGHS, five-percent economic quality and no
+ENS on 25 medium-criticality, 43 VRE-with-batteries and 15 network cases.
+These are observed useful compromises at the stated allocation, not evidence
+that those cases can be recognized before solving. The full-cohort ceilings
+below show why a router must target explicit requests and beat simple rules.
+
+Per-instance algorithm selection is established. SATzilla uses
+instance-dependent performance models \citep{xu2008}; ASlib provides
+algorithm-selection scenarios \citep{bischl2016}; runtime prediction emphasizes
+informative features and careful evaluation \citep{hutter2013}. Here the
+specific question is selection for a stated energy-service requirement, with
+complete process exit, explicit unserved energy and online decision costs.
+
+Changing family-average rankings is not enough. A useful router requires
+complementarity under the requested criteria, distinguishable favorable cases
+using pre-solve information, and sufficient benefit to pay for selection.
+A member need not have an artificial winning niche for the portfolio to be
+studied. The strongest fixed choice may remain appropriate for many requests,
+including economically easy cases.
+
+\section{Evidence scope and shared protocol}
+All 16,800 primary trials are complete on 600 scenarios, 100 per family,
+with all four methods and seven independent budgets. Two extra repetitions
+on 30 preselected cases bring the total to 18,480. The final acceptance
+report records no missing reference and no invalid or late output counted
+as successful. Reference optimality is certified on 383/600 cases.
+
+The audited descriptive analysis already exists at
+\path{notes/final_results_2026-11-11.json}, with input-file hashes. Its primary
+coverage, paired comparisons, threshold sensitivity and retrospective
+ceilings are reported here; repetition diagnostics are separate. These
+results supersede the historical 126-case narrative. The whole cohort has
+now informed profile and narrative choices and is therefore a development
+resource, not independent confirmation of any fitted router.
+
+The evidence supports complementarity and its limits. Parameter estimation,
+criticality-driven selection, risk calibration and actual online routing
+have not been performed. The common protocol fixes the physical and timing
+interpretation of the completed outcomes.
+
+\input{common_protocol}
+
+\section{Decision problem: a scenario and an operational request}
+\subsection{Inputs, outcomes and acceptance conditions}
+Let $\mathcal M=\{\text{HiGHS},\text{RH},\text{JEPA},\text{pipeline}\}$.
+Write the request as
+\begin{equation}
+ r=(b,\tau,\bar E,\alpha,o),\qquad
+ \pi:(X_s,r)\longmapsto m\in\mathcal M,
+ \label{eq:request}
+\end{equation}
+where $X_s$ contains pre-solve scenario descriptors and criticality components,
+$b$ is the total decision deadline, $\tau$ the relative economic tolerance,
+$\bar E$ an unserved-energy cap in MWh, $\alpha$ the tolerated probability of
+failure, and $o\in\{\text{cost},\text{time}\}$ the priority among acceptable
+methods. The output is one method; the router does not run several portfolio
+members and retrospectively choose an output. Each member retains its
+existing candidate count, repair procedure and internal cost-based selection.
+
+Let $E_{smd}=\sum_{z,t}P^{\rm uns}_{smdzt}\Delta t$ denote unserved energy for
+an output produced with execution allowance $d$. The cost $C_{smd}$ is the
+full validated objective, including unserved-energy penalties. These
+penalties do not replace the independent service cap. Let $Q_{smd}(\tau)$
+be the economic condition in Eq.~\eqref{eq:economic}, with the same convention
+for near-zero reference costs. Define
+\begin{equation}
+ Y_{smd}(\tau,\bar E)
+ =F_{smd}\,Q_{smd}(\tau)\,\ind\{E_{smd}\leq\bar E\}.
+ \label{eq:joint_requirement}
+\end{equation}
+Setting $\tau=\infty$ disables the cost threshold and setting $\bar E=\infty$
+disables the energy cap; an inactive condition does not require its underlying
+measurement. The first case still permits cost minimization as the secondary
+objective. A zero-unserved-energy request uses a declared tolerance
+$\varepsilon_E=10^{-3}$ MWh, matching the final campaign analysis.
+Sensitivity to caps of 1, 10 and 100 MWh is available in the archived analysis.
+A confirmatory deployment profile must choose a meaningful cap before its
+test outcomes are observed; normalized demand-energy caps would be a distinct
+prospective requirement, not an already evaluated result.
+
+An observed failed, late or invalid execution is a failure of the joint
+request without an artificial cost or energy value. An unexecuted cell or an
+otherwise unassessable quality condition is unknown and its support is
+reported. In particular, missing references do not prevent assessment of
+a service-only request, but do prevent reference-relative assessment of an
+otherwise eligible output.
+
+\subsection{Illustrative request profiles}
+Table~\ref{tab:profiles} makes the distinction between constraints and priorities
+explicit. Their deterministic acceptance criteria can be evaluated
+retrospectively on the completed records; no risk-conditioned selector has
+been evaluated. They are exploratory profiles, not preregistered confirmatory
+endpoints. The exact profile set, risk tolerances and fallback must be locked
+before independent validation. No such evaluation is launched here.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Service profiles, each crossed with the five independent deadlines
+$b\in\{5,10,30,60,120\}$ seconds. Each also specifies $\alpha$.
+An infinite cap means the corresponding condition is not requested.}
+\label{tab:profiles}
+\begin{tabular}{p{.35\linewidth}rrl}
+\toprule
+Profile & $\tau$ & $\bar E$ & Priority $o$\\
+\midrule
+Urgent continuity & $\infty$ & $\varepsilon_E$ & Cost\\
+Balanced response & 0.05 & $\varepsilon_E$ & Time\\
+Economic precision & 0.01 & $\infty$ & Time\\
+Precision with continuity & 0.01 & $\varepsilon_E$ & Time\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The first profile asks for the least expensive response among those predicted
+to preserve service within the deadline at the requested reliability.
+The third asks for fast economic precision and makes no independent service
+promise; the fourth explicitly adds one. Each profile--deadline pair is a
+distinct request evaluated from its own executions. The JEPA examples observed
+with 120 seconds cannot be relabeled as thirty-second successes.
+
+\subsection{Allowable information and the reference distinction}
+The training and evaluation labels may use $C_s^{\rm ref}$, but online inputs
+cannot include that reference, its lower bound, its certification status,
+a solution, an incumbent or any post-solve statistic. A requested $\tau$ is
+a preference input; it is not access to the scenario's unknown reference.
+The router predicts the chance of meeting a reference-relative benchmark,
+rather than certifying that gap online. If an operator instead provides an
+absolute monetary ceiling before solving, that ceiling can define a separate
+observable cost condition; it must not be synthesized from a hidden reference.
+
+A requirement for a proof of optimality is separate from cost proximity.
+It would require an explicit solver certificate and a different acceptance
+label. The current four-action comparison and completed descriptive analysis do not
+establish such a certificate-aware router.
+
+Gurobi remains an external direct-solver comparator on its available support,
+not a fifth action with selectively observed labels. Scenario-specific
+retraining or fine-tuning is outside the routing decision.
+
+\section{Predictions and the selection rule}
+\subsection{Joint success, cost and complete execution time}
+For each method and execution allowance, the proposed predictor estimates
+\begin{align}
+ p_m(X_s,d,\tau,\bar E)
+ &=\Pr\{Y_{smd}(\tau,\bar E)=1\mid X_s,d,\tau,\bar E\},\\
+ c_m(X_s,d,\tau,\bar E)
+ &=\mathbb E[C_{smd}\mid Y_{smd}=1,X_s,d,\tau,\bar E],\\
+ t_m(X_s,d,\tau,\bar E)
+ &=\mathbb E[T_{smd}\mid Y_{smd}=1,X_s,d,\tau,\bar E].
+ \label{eq:prediction_targets}
+\end{align}
+The joint probability must be learned or calibrated as a joint event; separate
+marginal probabilities are not multiplied under an untested independence
+assumption. Cost and time predictions concern acceptable outputs and are
+reported with their support. Failed trials still enter the success model and
+the overall evaluation. Their missing cost or natural completion time is not
+replaced by zero or by the timeout. In particular, a forced termination does
+not provide an exact completion time.
+
+All predictions are conditional on the actual allocation $d$. The grid of
+independent budget runs is not a single runtime trajectory, and a short exit
+in a longer-budget run is not automatically a time-to-quality observation
+for a shorter run. Requests outside the evaluated allowance or requirement
+support must be identified as extrapolation.
+
+\subsection{Constrained choice rather than a weighted score}
+With estimates denoted by hats, define the supported set
+\begin{equation}
+ \mathcal A(X_s,r,d)=
+ \{m\in\mathcal M:\widehat p_m(X_s,d,\tau,\bar E)\geq1-\alpha\}.
+\end{equation}
+When this set is nonempty, choose
+\begin{equation}
+ \pi(X_s,r)=
+ \begin{cases}
+ \displaystyle\arg\min_{m\in\mathcal A}\widehat c_m,
+       & o=\text{cost},\\[3pt]
+ \displaystyle\arg\min_{m\in\mathcal A}\widehat t_m,
+       & o=\text{time}.
+ \end{cases}
+ \label{eq:selection}
+\end{equation}
+Only pre-solve predictions break these comparisons. Remaining ties use the
+predicted success probability and then a declared deterministic method order,
+never the realized test cost. The priority avoids an arbitrary conversion
+between euros, seconds and MWh, while the constraints preserve the requested
+economic and service conditions.
+
+If $\mathcal A$ is empty, the request is flagged as unsupported at its stated
+risk level. If an output method is still required, a declared fallback selects
+the highest predicted joint-success probability and explicitly retains that
+flag; it does not silently relax the energy cap, economic threshold or
+deadline. Fallback cases and their failures count in the complete evaluation.
+
+The threshold $1-\alpha$ is a model-based decision criterion, not a reliability
+guarantee. Calibration, sparse acceptable-output samples and distribution
+shift may undermine it. Reliability curves, proper probability scores and
+held-out violation rates therefore accompany the selection results.
+Even 100 favorable primary outcomes in a family do not by themselves
+certify a requested small deployment failure probability. The limited
+repetition subset and distribution shift must also be considered.
+
+\section{Complementarity before selector fitting}
+\subsection{Requirement-specific ceilings and fixed comparators}
+For each complete scenario--request cell, the retrospective coverage ceiling is
+\begin{equation}
+ O_{sr}=\max_{m\in\mathcal M}Y_{smb}(\tau,\bar E).
+\end{equation}
+It sees all realized outcomes and ignores selection overhead, so it is not
+deployable or an exact bound on unknown expected performance. It also does
+not establish a probabilistic risk guarantee from one observed outcome.
+
+Coverage alone can miss useful choice. Where several methods already satisfy
+a request, define a secondary oracle outcome
+\begin{equation}
+ J^*_{sr}=\min_{m:Y_{smb}(\tau,\bar E)=1}J_{smb},
+ \qquad
+ J_{smb}=
+ \begin{cases}
+ C_{smb},&o=\text{cost},\\
+ T_{smb},&o=\text{time}.
+ \end{cases}
+\end{equation}
+This value is undefined if no method succeeds; those cases remain failures
+in coverage. Comparing secondary outcomes only on acceptable cases does not
+erase the unsuccessful cases or establish all-scenario superiority. Report
+the coverage comparison and the common support of every conditional cost or
+time contrast together.
+
+The fixed comparator is selected on development groups separately for each
+request, including its deadline and priority. It is fixed across scenarios,
+not forced to be the same method for incompatible needs. The choice uses the
+same acceptance and cost/time priorities as the router. A family-based rule
+must likewise be conditioned on the request. Choosing a comparator on final
+test outcomes would contaminate the comparison.
+
+A complete-portfolio diagnostic requires known outcomes for all four methods
+under the same request. An observed failure is known, while an unexecuted or
+unassessable cell is missing. Report exclusions and their family/budget
+distribution; a ceiling on complete cases does not resolve selection bias
+from missing observations.
+
+\subsection{Observed ceilings in the completed cohort}
+The primary grid contains no missing scenario--method--budget cells.
+Table~\ref{tab:final_oracles} therefore compares the same 600 scenarios in every
+row. For this descriptive diagnostic, both fixed baselines are chosen
+retrospectively on the same cohort. Future validation must choose them using
+development data only; these ceilings are not held-out selector scores.
+
+\begin{table}[htbp]\centering\small
+\caption{Retrospective request satisfaction out of 600 scenarios. No selection
+overhead or probabilistic reliability guarantee is included.}
+\label{tab:final_oracles}
+\begin{tabular}{p{.39\linewidth}rrr}\toprule
+Request & Best fixed & Fixed by family & Individual oracle\\\midrule
+No ENS, 30 seconds & 575 & 593 & 597\\
+Five-percent quality, 120 seconds & 505 & 505 & 505\\
+Five-percent quality and no ENS, 10 seconds & 168 & 168 & 182\\
+Five-percent quality and no ENS, 120 seconds & 475 & 475 & 477\\\bottomrule
+\end{tabular}
+\end{table}
+
+At thirty seconds RH is the best fixed continuity choice, but a family rule
+already recovers 18 of the 22 additional cases accessible to the full oracle.
+At 120 seconds, the continuity counts are 577, 596 and 598 respectively.
+A sophisticated selector must therefore justify its incremental benefit
+over family-conditioned decisions, including cost and time at preserved service.
+
+For the joint requirement at ten seconds, VRE-with-batteries cases account
+for 13 of the 14 additions over the best fixed choice: HiGHS covers 46/100,
+the portfolio 59/100, and six cases are covered only by JEPA. This is a
+specific development target for identifying within-family complementarity.
+By contrast, the two joint additions at 120 seconds are due to HiGHS ENS
+of approximately 0.121 and 0.682 MWh. At a one-MWh cap, HiGHS and the oracle
+both cover 477/600. This sensitivity precludes presenting the strict-cap
+gain as a broad, threshold-independent routing advantage.
+
+Among the 475 scenarios where HiGHS already satisfies the strict joint
+requirement at 120 seconds, the fastest acceptable four-method oracle reduces
+mean exit time from 36.25 to 34.16 seconds (about 5.8\%). A HiGHS/RH-only
+oracle reaches 36.08 seconds on that same support. There are 68 cases with
+at least one second and ten percent saved; their median saving is 5.9 seconds.
+On the comparable family supports, mean time changes from 34.60 to 31.16
+seconds for medium criticality ($n=100$), 10.99 to 9.47 for VRE/batteries
+($n=100$), and 63.48 to 58.81 for network cases ($n=95$). These gains are
+conditional, retrospective and measured before feature or selection overhead.
+
+Repetitions also limit single-run labels. At 120 seconds, the strict joint
+criterion changes across three repetitions for six of the 30 repeated cases
+with HiGHS, three with the pipeline, one with JEPA and none with RH. HiGHS
+validity itself is stable on all 30. A stable low-quality method is not
+necessarily useful, and a single favorable label is not a calibrated
+probability of satisfying a service request.
+
+\subsection{Continuation must match the operational claim}
+The first service-v2 diagnostic pooled the seven historical deadlines within
+each profile and did not authorize fitting. Following inspection of that
+development result, the protocol was amended to evaluate the five deadlines
+$5,10,30,60,120$ seconds separately. This is a disclosed development amendment,
+not a preregistered confirmatory decision or evidence for a fitted selector.
+
+Each of the twenty profile--deadline pairs receives its own continuation
+decision. The coverage route requires an oracle gain of at least two
+percentage points and a positive lower endpoint of a grouped 95\% interval.
+The secondary route requires a conditional relative-cost gain of at least
+one percent or a time saving of at least 0.5 seconds, a positive lower
+endpoint on common acceptable pairs, oracle satisfaction at least
+$1-\alpha$, and a coverage-gain lower endpoint no smaller than minus one
+percentage point. Both routes require at least 90\% known portfolio cells
+and twenty scenario groups; the secondary route also requires twenty groups
+with acceptable pairs. These numerical thresholds are unchanged.
+No average across deadlines or positive result at another deadline can
+authorize a request. The intervals are pointwise, not simultaneous
+guarantees across the twenty comparisons.
+
+Predictors may share training observations with deadline as an input, while
+model choice, coverage, conditional cost/time contrasts and calibration
+reports remain separate for each profile--deadline pair. The amended
+configuration must be frozen before independent confirmation. No amended
+gate result or fitted selector is claimed by this implementation update.
+
+If neither form of useful complementarity is supported, the appropriate result
+is a limited or negative routing opportunity for that request. In particular,
+a saturated success rate from a fixed method leaves no coverage gain but may
+still leave cost or time variation; conversely, a lower conditional cost
+cannot justify a selector that loses the demanded service reliability.
+
+\section{From criticality sensitivity to router parameters: a proposed bridge}
+\subsection{Keep score parameters separate from operational preferences}
+The companion index study distinguishes raw scenario descriptors from the
+parameters used to aggregate them. Let $z_j$ be a fixed-bound normalized
+component and write
+\begin{equation}
+ I_{\theta}(s)=\lambda\sum_{j\in\mathcal A}w^A_jz_{sj}
+ +(1-\lambda)\sum_{j\in\mathcal B}w^B_jz_{sj},
+ \qquad \sum w^A_j=\sum w^B_j=1,\quad w_j\geq0.
+ \label{eq:router_index}
+\end{equation}
+The original common description uses $\lambda=0.5$ and equal within-block
+weights. The code calls this mixing parameter \texttt{alpha}; here
+$\lambda$ distinguishes it from the request's failure tolerance $\alpha$.
+Bounds, weights and clipping are score parameters; $(b,\tau,\bar E,\alpha,o)$
+are operational requirements. Changing the former does not change a scenario,
+its stored solver outcomes, or the latter's acceptance criteria.
+
+Raw arithmetic contributions explain why a score changes, not why a method
+succeeds. A constant component can contribute to the level of $I$ without
+distinguishing cases, and a clipped component can hide increasingly extreme
+inputs. The implementation fixes minimum-generation tightness at 0.35 and
+uses coarse generator proxies for storage and network conditions. Actual
+size, saturation indicators and missing-proxy flags should therefore remain
+visible alongside an aggregate; none has yet been shown predictive for the
+new request-specific outcomes.
+
+\subsection{Compare progressively richer parameterizations}
+The proposed hierarchy begins with size and budget, then adds the common
+scalar $I$, the separate stress/hardness axes, an interpretable component
+subset and all 22 components. Each level is compared with and without
+family controls, and against the simple request-conditioned family baseline.
+The extra complexity is retained only if it improves grouped validation
+loss and the declared routing objective beyond the simpler descriptions.
+
+A candidate joint-success model makes method and deadline interactions
+explicit, for example
+\begin{equation}
+ \operatorname{logit}\widehat p_m
+ =\beta_{0m}+f_m(\log d)+\boldsymbol\beta_m^\top\boldsymbol z_s
+ +\boldsymbol\gamma_m^\top\boldsymbol z_s\log d
+ +\boldsymbol\eta_m^\top h(\tau,\bar E).
+ \label{eq:component_router}
+\end{equation}
+This is a proposed regularized baseline, not a fitted result. The encoding
+$h$ uses active-condition indicators and finite threshold values; disabled
+constraints are not represented by infinite numeric features. Risk tolerance
+and priority act in the selection rule. More flexible component--requirement
+interactions must earn their complexity through nested grouped validation.
+For a fixed stored run, relaxing a quality or energy cap cannot reduce
+acceptance; model coherence should respect these nested events. Independent
+budget runs do not justify enforcing monotonicity in budget without testing it.
+
+An optional compact alternative learns a request-conditioned index
+$I_{\theta(r)}$ with nonnegative simplex weights, shrinkage toward the common
+weights and a small declared number of profiles. This produces a supervised
+selection feature, not a newly validated universal physical criticality
+measure. Its weights are learned once on development folds and frozen;
+there is no scenario-specific retraining or online weight search. Compare
+it against keeping $S,H$ or the components directly, since compressing
+opposing mechanisms into one scalar can lose useful information.
+
+\subsection{Mechanistic hypotheses are not selection thresholds}
+Three groups motivate tests. Size, binary-count and thermal/ramp proxies
+may distinguish long-search regimes; storage adequacy, residual variability
+and state-of-charge coupling may help identify the VRE cases where JEPA
+adds joint coverage; network/trade proxies may distinguish service-preserving
+RH responses from economically precise direct solutions. These are
+domain-informed hypotheses. The family results do not establish component
+effects, signs, useful cutoffs, or a causal explanation for a method's wins.
+
+The same input can affect several components in opposite directions.
+For example, greater intertie density decreases the inverse-congestion
+stress proxy but increases the interconnection-density hardness proxy.
+Thus an action cannot be assigned by a rule such as ``high index implies RH''
+without conditioning on deadline, economic tolerance and service cap.
+Paper 1's sensitivity diagnostics should identify stable descriptors and
+aggregation ambiguities; paper 3 must test their incremental decision value.
+
+\subsection{Nested tuning, stability and deployment safeguards}
+The proposed development study varies $\lambda$, simplex weights and
+predeclared normalization alternatives inside training folds only. It
+compares score/rank changes with paired changes in out-of-fold joint-success
+loss, selected-method frequency, request satisfaction and conditional
+cost/time regret. A large score change with unchanged decisions has no
+demonstrated routing value. A ranking improvement can also be useless if
+it does not distinguish the few cases with an alternative acceptable method.
+
+All budgets, repetitions, threshold profiles and variants of one scenario
+remain in one group. Reweighting, subset selection, bin boundaries and risk
+calibration occur inside the development procedure; the independent test
+cannot choose them. No sign constraint on solver success follows solely
+from a component's ``stress'' name. Unsupported or highly saturated inputs
+are reported as out-of-support warnings and use the declared fallback,
+not an invented reliability guarantee. Feature extraction and any extra
+computations remain inside the online deadline.
+
+\pending{No sensitivity sweep, feature-importance ranking, fitted weight,
+component-conditioned probability or threshold policy is measured in this
+revision. The arithmetic analysis in paper 1 and the retrospective ceilings
+here specify what to test; they do not provide trained router parameters.}
+
+\section{Candidate models and grouped development}
+The proposed first models are deliberately simple: one regularized logistic
+or shallow-tree joint-success predictor per method, with cost and exit-time
+regressors fitted on the corresponding acceptable outputs. Their inputs
+include size descriptors, the 22 common criticality components, execution
+allowance, economic tolerance and energy cap. The request priority and risk
+tolerance act in the selection rule. Sparse conditional supports must be
+reported; an elaborate model is not justified by the existence of four
+actions alone.
+
+Baselines include direct HiGHS, the development-selected fixed method for
+each request, and request-conditioned family or criticality-bin rules.
+Unknown groups use a declared fixed fallback. Family labels provide a useful
+descriptive baseline but may not exist in a deployment distribution.
+Calibration and model choice are performed within grouped development,
+with no privileged reference feature.
+
+All methods, budgets, repetitions and request profiles derived from the same
+scenario stay in one group. Paired structural variants share their base
+group. A scenario copied across several energy caps or cost thresholds is
+not several independent observations. Preprocessing and calibration are
+fitted only on training folds. The profiles were developed while
+inspecting the earlier subset and the complete 600-case campaign. This entire
+cohort remains exploratory; refitting or cross-validating a selector does not
+turn it into an untouched confirmatory test.
+
+Out-of-fold joint coverage, probability quality and cost/time contrasts inform
+model choice. They are not an unbiased final score for the selected model.
+The earlier broader design provides a separate 120-case final cohort and a
+controlled structural suite, whose use must preserve group independence.
+A design lock must record the exact profiles, caps, zero rule, risk thresholds,
+fallback, continuation criteria, selected models and case manifests before
+final outcomes are inspected. No new fitting or final evaluation is performed
+here.
+
+\section{Online execution and the available budget}
+Online feature extraction and selection consume the same decision budget as
+the chosen method. Let $T_X$, $T_\pi$ and $T_m$ denote their respective
+durations, with method execution including validation, output writing and
+closure. The available method allowance is
+\begin{equation}
+ d=b-T_X-T_\pi .
+\end{equation}
+Selection must score methods against the remaining allowance, using measured
+feature time and a declared conservative estimate of selection overhead
+before the choice, then deducting the actual elapsed overhead at dispatch.
+A nonpositive remainder is a deadline failure. Scoring with $b$ as if the
+selector were free overstates the available computation.
+
+The full decision is evaluated by
+\begin{equation}
+ Y^\pi_{sr}=\ind\{\text{valid returned output},\
+ T_X+T_\pi+T_m\leq b,\
+ Q^\pi_s(\tau)=1,\
+ E^\pi_s\leq\bar E\},
+ \label{eq:online}
+\end{equation}
+with the same inactive-constraint conventions. The full time also enters the
+time-priority comparison. The finalization-reserve policy and the requirement
+that the whole process tree terminate remain unchanged.
+
+A lookup of the selected member's full-budget historical outcome cannot
+establish Eq.~\eqref{eq:online}. Neither can a 120-second execution be
+substituted for an unobserved thirty-second allocation. Retrospective
+complementarity, predictive recovery and measured online benefit must remain
+separate claims.
+
+The existing architecture permits static library and model preload before
+receiving the scenario. Any scenario-specific graph, embedding or feature
+computation remains inside the clock. Preloading a portfolio also has memory
+and setup costs, which are reported even if excluded from the decision
+interval. Unused workers must still close within the deadline. Routing is
+not a cost-free table lookup.
+
+\section{Evaluation and conditional reporting}
+\subsection{What is established and what remains to be tested}
+The final primary records establish the descriptive ceilings in
+Table~\ref{tab:final_oracles}, the paired timing contrasts and their common
+supports, and the ENS-cap sensitivity. These are observed, retrospective
+properties of this portfolio. They neither establish predictive recovery of
+the oracle nor guarantee a requested risk level.
+
+\pending{Fit and calibrate candidate selectors only after locking the request
+profiles and grouped development procedure. Compare against request-conditioned
+fixed and family rules and a HiGHS/RH-only portfolio, include online overhead,
+and evaluate on independent cases. Criticality sensitivity, learned weights
+and component ablations described here have not been executed.}
+The amended service-v2 implementation prepares the five-deadline grid,
+request-specific continuation and model choice, grouped calibration,
+conditional cost/time prediction and constrained selection. This amendment
+has not been executed or validated; its diagnostic output is expected at:
+\tablepath{../runs/v2_service_by_deadline/artifacts/routing_diagnostic/tables/oracle_gain.csv}
+
+\subsection{Requirement satisfaction and useful conditional gains}
+For each profile--deadline pair, report complete observed support, joint satisfaction,
+separate deadline/validity/quality/service violation indicators, fallback
+frequency and uncertainty. Violations can overlap; they are not automatically
+disjoint failure classes. Cost and total-time differences on common acceptable
+outputs are presented with paired support and the all-trial coverage
+comparison, so that an attractive successful subset cannot conceal failures.
+Calibration and observed violations around the requested risk level must be
+shown rather than inferred from mean classification accuracy.
+
+A timed HiGHS-only selection rule separates routing overhead from direct
+HiGHS execution. Fixed, family, criticality-bin and learned rules must use the
+same request and execution boundary. The primary practical gain is the
+profile's declared coverage or cost/time improvement, not an unqualified
+five-percent success score or a change in selected-method frequencies.
+
+\pending{Selector comparison, model receipts and timed final results remain
+pending. The service-v2 code prepares these outputs; no fitted result or
+measured online benefit is claimed here.}
+\tablepath{../runs/v2_service_by_deadline/routing/development_predictions.csv}
+\tablepath{../runs/v2_service_by_deadline/artifacts/final_combined/tables/joint_paired.csv}
+\tablepath{../runs/v2_service_by_deadline/artifacts/final_router/tables/timed_request_rows.csv}
+
+\subsection{Independent and structural scope}
+The separate final design contains twenty fresh scenarios per family.
+The controlled suite contains thirty bases with paired size, line-structure,
+fleet and numbering changes. Claims require uncertainty at the base-scenario
+level, with the service profiles preserved across conditions. These are
+planned evaluations, not outcomes of the completed historical campaign.
+
+The current action set retains the compatible learned models. Longer
+48- and 72-hour cases are outside that set and are not encoded as learned
+method failures; a separately trained variable-horizon system belongs to
+the companion comparison and would define a different portfolio.
+\tablepath{../runs/v2_service_by_deadline/artifacts/controlled_test_combined/tables/joint_coverage.csv}
+
+\section{Discussion}
+The relevant choice is conditional on a request rather than an intrinsic
+ranking of algorithms. Lower economic cost does not ensure lower unserved
+energy, a fast exit does not ensure adequate quality, and an acceptable
+output does not certify optimality. The proposed inputs make these distinctions
+visible to the decision rule instead of hiding them in one utility weight.
+
+There are several legitimate negative outcomes. A fixed method may already
+satisfy a request well enough to leave little useful room. The portfolio may
+be complementary but its favorable cases may be hard to recognize before
+solving. Sparse or shifted data may prevent reliable probability estimates.
+Finally, selection overhead can erase an offline advantage. These outcomes
+require different explanations and are not interchangeable with low
+classification accuracy.
+
+Risk-conditioned selection is a modeling proposal, not a guaranteed service
+policy. A fallback can identify the least unsupported action without making
+the requested risk level true. Similarly, a conditional cost or time model
+must not conceal failures behind a lower average on a smaller successful
+subset. The completed primary grid has no missing portfolio cells
+or references; this does not remove synthetic-family selection, imperfect
+reference optimality, limited repetitions or the single-hardware scope.
+Extensions with missing outcomes must report their support explicitly.
+
+A pipeline member need not win to make the comparison informative. If it
+remains dominated for the declared profiles, that is a supported reason not
+to select it, rather than a reason to invent a specialty. The proposed
+study must allow RH, HiGHS or another fixed choice to remain preferable
+where the evidence warrants it.
+
+\section{Conclusion}
+The completed comparison demonstrates request-dependent complementarity and
+quantifies its ceilings. Short-budget VRE-with-batteries cases provide a
+concrete joint-coverage opportunity, while a simple family-conditioned rule
+already captures most continuity coverage at thirty seconds. Cost-only
+five-percent coverage at 120 seconds leaves no gain over HiGHS; useful
+conditional time improvements remain possible but are modest in aggregate
+before paying selection overhead.
+
+Criticality supplies candidate explanatory inputs, not an already validated
+action map. Its score sensitivity, predictive value beyond size and family,
+and effect on selected decisions must be tested separately. A demand-dependent
+router would estimate joint success, optimize the stated priority among
+supported methods and flag unsupported requests. Whether this recovers a
+useful fraction of the retrospective opportunity with calibrated reliability
+and positive online benefit remains open.
+
+\section*{Provenance and execution status}
+\input{notes/final_campaign_provenance}
+No requirement-aware router, learned criticality weighting, sensitivity grid
+or component-ablation study is trained or run in this writing revision.
+The service-v2 code now prepares the request-aware analyses and router.
+Learned criticality weights and the full sensitivity/subset study remain
+separate proposals; no training or new experiment was run in this update.
+
+\bibliographystyle{unsrtnat}\bibliography{paper3/references}
+\end{document}

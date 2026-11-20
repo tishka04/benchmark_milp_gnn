@@ -1,0 +1,130 @@
+{
+  "date": "2026-11-12",
+  "tests": {
+    "total": 20,
+    "passed": 19,
+    "skipped": 1,
+    "skip_reason": "Gurobi not installed",
+    "wall_seconds": 32.721,
+    "actual_process_checks": "HiGHS and RH on tiny 2-period/1-zone synthetic scenarios; valid exit within 5 s, including all child processes"
+  },
+  "historical": {
+    "observations": 18480,
+    "references": 600,
+    "certified_references": 383
+  },
+  "portable_reproduction": {
+    "tables": 11,
+    "matched": true,
+    "float_reading": "round_trip",
+    "numerical_check_rtol": 1e-12,
+    "numerical_check_atol": 1e-10
+  },
+  "planned": {
+    "blocks": [
+      {
+        "block": "independent_four",
+        "trials": 4800,
+        "allocated_hours": 60.0
+      },
+      {
+        "block": "energy_ablation",
+        "trials": 2400,
+        "allocated_hours": 30.0
+      },
+      {
+        "block": "structural_frozen",
+        "trials": 7200,
+        "allocated_hours": 90.0
+      },
+      {
+        "block": "multihorizon_primary",
+        "trials": 6300,
+        "allocated_hours": 78.75
+      },
+      {
+        "block": "training_seed_sensitivity",
+        "trials": 1080,
+        "allocated_hours": 22.5
+      },
+      {
+        "block": "timing_repeats",
+        "trials": 720,
+        "allocated_hours": 15.0
+      },
+      {
+        "block": "gurobi",
+        "trials": 1200,
+        "allocated_hours": 15.0
+      }
+    ],
+    "trials": 23700,
+    "references": 1200,
+    "allocated_trial_hours": 311.25,
+    "reference_cap_hours": 300.0,
+    "caveat": "Sums of allocations, not elapsed forecasts. Loading, training and analysis are additional."
+  },
+  "new_experiments_executed": 0,
+  "new_references_executed": 0,
+  "training_runs_executed": 0,
+  "environment": {
+    "python": "3.11.9",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "numpy": "2.1.3",
+    "pandas": "3.0.2",
+    "scipy": "1.17.1",
+    "scikit-learn": "1.8.0",
+    "matplotlib": "3.10.9",
+    "torch": "2.4.1+cu124",
+    "torch-geometric": "2.7.0",
+    "highspy": "1.14.0",
+    "pyomo": "6.10.0",
+    "psutil": "7.2.2",
+    "PyYAML": "6.0.3"
+  },
+  "limitations": [
+    "Gurobi license and equality test pending installation.",
+    "GPU inference and new multi-horizon training have not been executed in this revision.",
+    "Full encoder pretraining membership is not certified by checkpoint metadata.",
+    "The archive reproduces analyses; new campaigns also require original runtime/data/models."
+  ],
+  "local_checks": {
+    "manuscript_paths_and_citations": "passed",
+    "changed_scope_whitespace": [],
+    "repository_diff_check": "Existing unrelated trailing whitespace in pdfs/MILP-GNN.bib lines 377-378; not changed by this revision."
+  },
+  "pdf": {
+    "file": "output\\pdf\\paper2\\paper2_methods_generalization.pdf",
+    "sha256": "7fa4df7c6d72e4e07f4ddb17ff4c14a01cf111d890c71edab4516d358e37d64e",
+    "pages": 14,
+    "compiled": true,
+    "visually_inspected": true,
+    "overfull_boxes": false,
+    "undefined_references": false,
+    "note": "Minor underfull line-spacing warnings remain; no overflow or missing reference."
+  },
+  "source_files": {
+    "research\\paper2_revision\\analysis.py": "9c5a85fe679f95e59015d9b91251b5c66440cd6b2383f74ee2026f5eab9852da",
+    "research\\paper2_revision\\audit.py": "6ebcebfcf889b8c351eb7db40724dcede007017ecd0d4af46f8d2920498c33df",
+    "research\\paper2_revision\\cases.py": "320d1ee96e5fa1989db50c1feedc5f1ddcbc5ed4d359e3af3c9715d0106e10a5",
+    "research\\paper2_revision\\core.py": "4dd789af5fa27630de78dd351de8b6bebe70a636f3e9340227ab243841b3c287",
+    "research\\paper2_revision\\design.py": "855c94c6b89fb21d2c6f604cdd2bfc149a3f4c7fbad6395af1afbfd67d023946",
+    "research\\paper2_revision\\experiments.py": "2e9d771aafdcd2ecfa974d45a9cf29528e9bdd241d34d7e6f49da2cdad8f166e",
+    "research\\paper2_revision\\extract.py": "6b57cafd0f52e041db15737d6e6855729a24d0b24dc6554da8699c6069e6a41b",
+    "research\\paper2_revision\\fixed_generator.py": "bdbbf8c79723556d8cec8b6b598aaa7fb24b4ca0297feee33ce23f3fa1b14af7",
+    "research\\paper2_revision\\gurobi.py": "ad66a93885baf3ba0446710477767e8e3da6f5d9fa1c7de6c089bad40fccb73b",
+    "research\\paper2_revision\\manuscript.py": "c27adb03dc248bf1d18ccdad83bf452f534eebab05468375966383235aa5be4c",
+    "research\\paper2_revision\\multihorizon.py": "340570cf943b95e907dd8dfd10cd0280333021f08a5cd2826601de809c52822a",
+    "research\\paper2_revision\\physics_adapter.py": "a0de53b638e4c8e5af1c2fdfaf4be9f0dc33b2649d3295182b7d0ec4a0bb9b67",
+    "research\\paper2_revision\\reproduce.py": "f8347f83fe77ef08b11f7c64d957a0186fb8d880974de67cdf70f23212f3399f",
+    "research\\paper2_revision\\worker.py": "cc9c5f9d8485c36b6e4bd322c1e8507d498a503c6b77c3ed8b84de6dbf3839b6",
+    "research\\paper2_revision\\__init__.py": "b9258a8c01b8b12989cdbf96265abb98e7165f03edb4f317f1d1a32956b8a7d2",
+    "research\\paper2_revision\\__main__.py": "d3e75ef1200f414bf533a63bdd7fa5925aa7f653fb29002ac7f1ec69e20d7afb",
+    "research\\paper2_revision\\tests\\test_design.py": "c34c99f14c3f834acb36a94a66efd6ded7749c39946c32938a3ecb9ad61085d4",
+    "research\\paper2_revision\\tests\\test_physics_and_models.py": "394e99f0ce945e0cf233ea1b50569a576365c287560afbc48f5fd52a674c9b3b",
+    "research\\paper2_revision\\tests\\test_process_integration.py": "c95d0ae73e6633385c8977c201770307d163bf2d2a0de33b983b0a3982efdfd7",
+    "research\\paper2_revision\\tests\\test_statistics.py": "76934c84b8f85cd9ab8b0a161a3ed0c15ff4bdac9b39a2a80ab00413bad90be0",
+    "research\\paper2_revision\\config.json": "72526ceef8f315ec2d9480ab33459a0301464108b76e8a8eda97760aa810cb8a",
+    "research\\paper2_revision\\run_paper2.ps1": "92949fc292e6e3490d8cae59b4c5152f038a24200bc244020df6cc444383697b"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "version": "realized_milp_v1",
+  "representations": ["legacy_normalized", "legacy_raw", "legacy_without_disputed", "corrected_only", "realized", "realized_compact", "size", "model_size"],
+  "corrected_coordinates": ["A3", "B3", "B8", "B9"],
+  "removed_coordinates": ["A3", "B3", "B8", "B9"],
+  "continuous_primary": "positive",
+  "continuous_secondary": "signed",
+  "secondary_representations": ["legacy_raw", "realized"],
+  "binary_model": "logistic",
+  "ridge_grid": [0, 0.0001, 0.001, 0.01, 0.1, 1, 10],
+  "logistic_grid": [0.0001, 0.001, 0.01, 0.1, 1],
+  "scaling": "training-only mean and population standard deviation, refitted in every inner fold; training constants have zero coefficient",
+  "schemes": ["nested", "lofo"],
+  "bootstrap_samples": 2000,
+  "allocation_bootstrap_samples": 200,
+  "seed": 20261112,
+  "inference": "Primary realized versus legacy_raw: 35 simultaneous paired conditional contrasts (7 targets by 5 deadlines), separately per validation scheme. No model-refitting uncertainty.",
+  "scope": "Development amendment declared before independent physical outcomes; descriptive pre-solve features, not causal mechanisms or presolve/search statistics. Same dispatch labels, deadlines and scenario folds as historical analysis.",
+  "allocation": "ES primary, within each outer test portfolio. Retrospective reserves and observed exits; offline feature construction is timed separately and excluded from the existing deadlines."
+}

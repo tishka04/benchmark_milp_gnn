@@ -1,0 +1,22 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=25mm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,array,graphicx,microtype}
+\usepackage[numbers,sort&compress]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\newcommand{\pending}[1]{\par\noindent\textcolor{blue!60!black}{\textbf{Results pending.} #1}\par}
+\newcommand{\asset}[3]{\begin{figure}[htbp]\centering
+  \IfFileExists{#1}{\includegraphics[width=.94\linewidth]{#1}}
+  {\fbox{\parbox{.88\linewidth}{\centering\textbf{Figure not yet produced.}\\\small\path{#1}}}}
+  \caption{#2}\label{#3}\end{figure}}
+\newcommand{\tablepath}[1]{\par\noindent\textit{Machine-readable table to populate this result:} \path{#1}.\par}
+\newcommand{\draftstatus}{\begin{center}\small\textbf{Substantive research draft---5 November 2026.}\\
+  Numerical results under this protocol have not been produced or validated for this draft.
+  Code execution, statistical checks and \LaTeX{} compilation remain to be performed.\end{center}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\ind}{\mathbf{1}}
+\author{Th\'eotime Coudray, St\'ephane Goutte}
+\date{5 November 2026}

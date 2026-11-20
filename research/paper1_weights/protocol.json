@@ -1,0 +1,81 @@
+{
+  "schema": "paper1_weights_v2_variants",
+  "seed": 20261111,
+  "method": "highs",
+  "repetition": 0,
+  "deadlines_s": [
+    5,
+    10,
+    30,
+    60,
+    120
+  ],
+  "expected_scenarios": 600,
+  "expected_families": 6,
+  "expected_per_family": 100,
+  "outer_folds": 5,
+  "inner_folds": 3,
+  "ridge_grid": [
+    0,
+    0.0001,
+    0.001,
+    0.01,
+    0.1,
+    1,
+    10
+  ],
+  "bootstrap_samples": 500,
+  "constant_tolerance": 1e-12,
+  "zero_ens_tolerance_mwh": 0.001,
+  "reference_floor_eur": 1,
+  "cost_gap_scale": 0.05,
+  "ens_fraction_scale": 0.01,
+  "co2_intensity_scale_t_per_mwh": 0.72,
+  "non_delivery_score": 1,
+  "policies": {
+    "service3": {
+      "ens": 0.6,
+      "cost": 0.2,
+      "time": 0.2,
+      "co2": 0
+    },
+    "service4_co2": {
+      "ens": 0.6,
+      "cost": 0.13333333333333333,
+      "time": 0.13333333333333333,
+      "co2": 0.13333333333333333
+    },
+    "equal4": {
+      "ens": 0.25,
+      "cost": 0.25,
+      "time": 0.25,
+      "co2": 0.25
+    },
+    "time_priority": {
+      "ens": 0.13333333333333333,
+      "cost": 0.13333333333333333,
+      "time": 0.6,
+      "co2": 0.13333333333333333
+    },
+    "cost_priority": {
+      "ens": 0.13333333333333333,
+      "cost": 0.6,
+      "time": 0.13333333333333333,
+      "co2": 0.13333333333333333
+    },
+    "co2_priority": {
+      "ens": 0.13333333333333333,
+      "cost": 0.13333333333333333,
+      "time": 0.13333333333333333,
+      "co2": 0.6
+    }
+  },
+  "carbon": {
+    "scope": "direct_internal_thermal",
+    "thermal_factor_t_per_mwh": 0.72,
+    "import_factor_t_per_mwh": null,
+    "source": "src/milp/defaults.py:ThermalDefaults.emission_rate_t_per_mwh",
+    "reference_is_carbon_optimum": false
+  },
+  "interpretation": "Exploratory development fit on existing outcomes. Policy weights and scale anchors are conventions, not learned scientific constants. No family predictor. No new dispatch, MILP solve, or router change."
+}

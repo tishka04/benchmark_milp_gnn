@@ -1,0 +1,514 @@
+\input{preamble}
+\renewcommand{\draftstatus}{\begin{center}\small
+  \textbf{Research draft revised on 11 November 2026.}\\
+  Completed campaign: 600 scenarios, 16,800 primary trials and 1,680 extra repetitions.
+  Descriptive comparisons are supported by the accepted final records.
+  Causal component attribution, matched EBM ablation and generalization remain untested.
+\end{center}}
+\date{11 November 2026}
+
+\title{Which Operational Service Do Energy-Optimization Methods Deliver?\\
+Available Time, Economic Quality, Unserved Energy and Generalization}
+\begin{document}
+\maketitle
+\draftstatus
+\begin{abstract}
+The value of an energy-optimization method depends on the operational service
+requested, the scenario family and the available time. We compare direct
+HiGHS, rolling-horizon construction with repair (RH), one-candidate JEPA and
+a sixteen-candidate energy-based pipeline on 600 scenarios from six families,
+with seven independent execution budgets. All 16,800 primary trials and 1,680
+additional repetitions are complete. At 120 seconds, HiGHS returns a valid
+output for all 600 scenarios and reaches five-percent reference-relative
+quality on 505, whereas RH preserves service without unserved energy on 577
+scenarios versus 482 for HiGHS. Requiring both five-percent quality and no
+unserved energy yields 475 successes for HiGHS, 248 for the pipeline, 222 for
+JEPA and 76 for RH. These aggregate rankings conceal targeted compromises.
+At ten seconds on VRE-with-batteries cases, the four-method coverage ceiling
+for the joint requirement is 59/100 versus 46/100 for HiGHS, including six
+cases served only by JEPA. At longer allocations, JEPA can reduce completion
+time on selected acceptable cases; the pipeline improves some JEPA quality
+counts but rarely supplies the fastest acceptable output. The comparison
+includes online embeddings and full process exit, excludes static preload,
+and retains failed trials in coverage. Descriptive complementarity is
+established; pre-solve selection, independent transfer and an incremental
+benefit of energy-guided sampling remain to be tested.
+
+\end{abstract}
+
+\section{Introduction}
+An operator may need a dispatch within thirty seconds without unserved energy,
+while another decision may allow more time in exchange for a tighter economic
+target. These requests need not favor the same optimization method. A
+mathematically valid dispatch can satisfy the model while shedding load:
+economic penalties make this action costly, but do not prohibit it. We
+therefore distinguish physical validity, service continuity and economic
+quality, and ask what a method delivers before the decision deadline.
+
+The relevant time is complete execution, including scenario processing,
+candidate generation, repair, validation, output writing and process closure.
+An incumbent inside a still-running process is not an available operational
+response. Conversely, an output close to a common reference may be useful
+without constituting a proof of optimality. The operational question is thus
+not simply which algorithm has the lowest average objective, but which
+combination of time, cost and service it can deliver for a stated need.
+
+Learning to guide mixed-integer optimization has several established forms.
+Graph-based branching learns variable-selection decisions within an exact
+search procedure \citep{gasse2019}. Neural Diving generates partial assignments
+that a solver completes \citep{nair2021}; learned large-neighborhood search
+chooses neighborhoods for subsequent optimization \citep{sonnerat2022}.
+Our system generates zonal strategy tensors and reconstructs a dispatch
+through a shared repair cascade. The paper does not claim the general
+invention of learned optimization. It characterizes the usefulness and limits
+of these particular constructions alongside direct optimization and RH.
+
+Three questions structure the study. First, how do the available trade-offs
+between execution time, economic cost and unserved energy change with scenario
+family and allocated budget? Second, where do learned proposals provide a
+useful compromise, and which apparent gains can instead be explained by
+candidate count or solver repair? Third, would any observed usefulness survive
+structural or temporal changes? The completed campaign answers the first
+question descriptively and motivates the others; it does not answer the
+unexecuted ablation and generalization questions.
+
+\section{Evidence scope and common protocol}
+The final campaign contains \textbf{600 scenarios, 100 per family}, all four
+methods and all seven budgets: 16,800 primary executions. Two extra
+repetitions on 30 preselected scenarios add 1,680 executions; all 18,480
+expected records are present. The final acceptance report records 600 valid
+references and no invalid or late output incorrectly counted as successful.
+Timeouts, absent incumbents and a late exit remain observed failures.
+
+The present tables use primary repetitions, with repeated observations
+reported separately. The six families are three criticality strata and three
+specialized generator profiles, not six ordered severity levels. References
+are certified optimal on 383/600 scenarios; the remainder are validated
+incumbents. The final descriptive analysis was computed before this writing
+revision and is archived with source hashes in
+\path{notes/final_results_2026-11-11.json}. The earlier 126-case narrative is
+historical context only. Service profiles were motivated by inspected results,
+so the completed cohort is an exploratory development resource for routing,
+not an untouched test of the proposed selection rules.
+
+The common physical protocol below retains the historical five-percent
+economic endpoint. We additionally assess unserved energy explicitly.
+
+\input{common_protocol}
+
+\section{Operational requirements and reported outcomes}
+Let $T_{smb}$ be complete exit time and let $C_{smb}$ be the validated model
+objective. This cost includes the unserved-energy penalty; it is not a
+fuel-only or service-independent operating cost. For a returned valid dispatch,
+define delivered unserved energy in MWh as
+\begin{equation}
+ E_{smb}=\sum_{z,t}P^{\rm uns}_{smbzt}\Delta t .
+ \label{eq:ens}
+\end{equation}
+The objective and $E_{smb}$ must be reported separately: an economically
+acceptable solution can still violate an operator's service requirement.
+
+Write $Q_{smb}(\tau)$ for the cost condition in Eq.~\eqref{eq:economic},
+including its absolute-tolerance convention near a zero reference. With
+$\tau=\infty$, the cost constraint is disabled, so that $Q_{smb}(\infty)=1$
+does not require a reference. For a maximum acceptable unserved energy
+$\bar E$, the joint requirement outcome is
+\begin{equation}
+ Y_{smb}(\tau,\bar E)
+ =F_{smb}\,Q_{smb}(\tau)\,\ind\{E_{smb}\leq\bar E\}.
+ \label{eq:service}
+\end{equation}
+An observed execution failure has outcome zero without assigning a fictitious
+cost or unserved-energy value. Missing trials or missing information needed
+to assess an otherwise returned output remain unknown. On complete observed records, setting
+$\bar E=\infty$ recovers the cost-only endpoint; continuity-sensitive requests
+instead impose an explicit energy cap. An inactive condition does not require
+its underlying measurement.
+
+A zero-unserved-energy profile uses $\bar E=\varepsilon_E=10^{-3}$ MWh,
+matching the accepted campaign analysis. This aggregated energy tolerance is
+distinct from the power-balance tolerance. Sensitivity to less restrictive
+caps is reported explicitly; changing a cap changes the service requested.
+
+A requirement is described by a deadline, a cost tolerance, an unserved-energy
+cap and the operator's priority. For example, \emph{minimize cost within thirty
+seconds while preserving service} has no mandatory relative-cost threshold.
+In contrast, \emph{reach one-percent economic quality as quickly as possible}
+places a hard condition on quality and optimizes completion time; service
+continuity is required only if an energy cap is also stated. A tolerance to
+the risk of failing these requirements is an additional input to the companion
+router. These profiles are motivated by already inspected results and are
+exploratory on this completed cohort; confirmatory profiles must be frozen before an
+independent evaluation.
+
+Coverage counts all observed trials, including failures. Time, cost and energy
+summaries on returned solutions additionally state their support. A
+retrospective comparison can identify non-dominated outputs at a fixed budget,
+but it cannot select them before solving. Nor can a run allocated 120 seconds
+that finishes quickly be substituted for an independent thirty-second run:
+allocation changes the execution and repair allowances. The existing grid is
+not an anytime trajectory or a time-to-target curve.
+
+The amended joint-analysis plan focuses on five distinct deadlines:
+$5,10,30,60,120$ seconds. At each deadline, service profiles, coverage and
+paired cost/time/ENS contrasts are evaluated separately. Historical one- and
+two-second records remain archived; they are not pooled into this amended
+service analysis. This scope change does not revise the historical results
+reported below and remains exploratory on the inspected development cohort.
+
+\section{Methods and reusable learned representations}
+\subsection{Direct solver and rolling-horizon baseline}
+The direct HiGHS method constructs the corrected MILP from the scenario and
+uses sixteen CPU threads. Its internal time allowance is bounded by the
+remaining execution budget after the unchanged finalization-reserve policy.
+The reserve is part of the frozen protocol; it is not retuned on evaluation
+outcomes. Model construction and extraction remain in the measured interval.
+
+The rolling-horizon method constructs a discrete proposal from scenario physics
+and submits it to the same HiGHS repair cascade as the learned methods. The
+label ``rolling horizon'' therefore describes its proposal mechanism, not a
+guarantee that the final dispatch is heuristic-only or avoids mixed-integer
+optimization. All four methods use the same physical acceptance criterion.
+
+\subsection{Scenario graph, autoencoder and latent predictor}
+Following the existing methodological manuscript, the scenario is represented
+as a heterogeneous temporal graph connecting system, region, zone and equipment
+levels. A hierarchical temporal encoder produces scenario embeddings online.
+The frozen feature contract and training normalization accompany the encoder;
+evaluation scenarios and their embeddings are not preloaded.
+
+Each reference strategy is represented by
+\begin{equation}
+ u\in\{0,1\}^{Z\times T\times8},\quad
+ u_{zt}=[b^{\rm ch},b^{\rm dis},p^{\rm ch},p^{\rm dis},d^{\rm DR},v^{\rm th},u^{\rm th},i^{\rm imp}]_{zt}.
+\end{equation}
+The storage channels encode positive charging/discharging activity according
+to the label extractor, and permit an idle state. The import-mode label is a
+system-level binary broadcast over zones. The common repair interface consumes
+the first seven channels and retains import/export as a repair-model decision.
+Consequently, eight output channels do not imply eight independent operational
+degrees of freedom at every location and time.
+
+The autoencoder compresses the strategy into a fixed set of latent tokens and
+decodes per-zone, per-time logits. A scenario-to-latent predictor supplies an
+anchor without observing the reference strategy. The current AE checkpoint is
+configured for at most 300 zones and 24 time steps, with 32 tokens of dimension
+192. Its decoder contains learned zone and time index embeddings. The training
+support must be audited empirically; architectural capacity is not evidence
+that every compatible size was represented in training.
+The encoder reads zone trajectories with a BiGRU over $T$, mean-pools in time,
+and lets learned query tokens cross-attend over the masked zones. The decoder
+builds learned zone--time queries that cross-attend over the strategy tokens,
+with a projection of the scenario embedding as a local conditioning signal.
+This methodological description is adapted from the existing manuscript;
+its previous numerical conclusions are not reused here.
+
+\subsection{Energy sampling and shared repair}
+The JEPA method decodes one anchor. The pipeline generates sixteen latent
+candidates by seeded Langevin updates using the learned energy, decodes them,
+and attempts repair. The accepted result is the least-cost independently valid
+candidate completed within the allowed computation interval. Candidates still
+running cannot replace that result during finalization. Every child process
+must nevertheless terminate before the global deadline.
+
+The first repair stage fixes supplied targets, and later stages may release
+selected decisions under deviation and flip penalties. The amended runtime
+restores the original integer domains and structural fixes; this cascade may
+solve MILPs. Calling it a pure LP reconstruction would misstate the current
+algorithm. One-candidate methods allocate sixteen solver threads to their
+repair; sixteen-candidate methods allocate one thread to each candidate.
+
+The new service profiles assess the dispatch returned by each unchanged
+method. In particular, the pipeline still selects by cost internally; we do
+not retrospectively replace its output with a different candidate chosen
+using the new energy cap. Such a change would define a new method variant.
+
+\subsection{A planned matched test of the energy contribution}
+This control remains a prepared, unexecuted comparison in this revision.
+JEPA with $K=1$ versus the pipeline with $K=16$ conflates candidate count and
+energy guidance. The isolated \texttt{perturb16} control loads the same models,
+uses the same candidate seeds, initialization, noise, drift, clipping, iteration
+count and repair allocation, but sets the energy-gradient term to zero. Both
+methods receive the same wall-clock deadline and hardware envelope. Their
+realized computation times need not be identical because gradient evaluation
+has a cost. A difference can therefore be interpreted as the operational value
+of the energy term within this specified sampler and resource budget, rather
+than as a universal statement about EBMs.
+
+\section{Observed operational trade-offs on the complete cohort}
+\subsection{Changing the service changes the ranking}
+Table~\ref{tab:final_aggregate} counts every primary scenario, including failed
+executions. At 120 seconds HiGHS leads economic coverage whereas RH leads
+coverage without ENS. JEPA returns more valid outputs than the pipeline,
+but the pipeline satisfies the tighter joint requirement on more scenarios.
+These statements concern this implementation and resource envelope.
+
+\begin{table}[htbp]\centering\small
+\caption{Completed primary campaign at 120 seconds. Counts out of 600.
+Economic quality means $g\leq0.05$; all service and quality counts require
+a valid output and full exit within the deadline.}
+\label{tab:final_aggregate}
+\begin{tabular}{lrrrr}\toprule
+Criterion & HiGHS & Pipeline & JEPA & RH\\\midrule
+Valid timely output & 600 & 311 & 467 & 577\\
+Without ENS & 482 & 265 & 253 & 577\\
+Five-percent economic quality & 505 & 269 & 259 & 76\\
+Quality and no ENS & 475 & 248 & 222 & 76\\\bottomrule
+\end{tabular}
+\end{table}
+
+\asset{figures/final_service_coverage.png}
+{Final coverage at 30 and 120 seconds, with 100 scenarios in every family.
+Columns distinguish validity, continuity and their joint economic requirement.
+Budgets correspond to independent runs.}{fig:final_service}
+
+\subsection{Family-specific operational uses}
+\paragraph{Low criticality.}
+At five seconds HiGHS already returns 100/100 outputs within five percent of
+the reference, 99 without ENS, with a median exit time of about 2.1 seconds.
+The learned methods can solve this family, but a strong direct baseline leaves
+little room for useful acceleration. The single strict-ENS exception is
+examined in the threshold sensitivity below.
+
+\paragraph{Medium criticality.}
+At ten seconds RH returns 100/100 outputs without ENS versus 25/100 for HiGHS,
+while RH's median reference gap is approximately 32.5\% among its successful
+outputs. At sixty seconds HiGHS reaches the joint five-percent/no-ENS target
+on all 100 cases. At 120 seconds JEPA offers 25 cases combining a faster
+exit than HiGHS, five-percent quality and no ENS. The pipeline meets that
+joint target on 51 cases versus 36 for JEPA, but returns fewer valid outputs
+(79 versus 92) and incurs substantial execution overhead.
+
+\paragraph{High criticality.}
+At thirty seconds RH preserves service on 100/100 cases versus 8/100 for HiGHS.
+At 120 seconds HiGHS reaches five-percent economic quality on 77 cases and
+the joint no-ENS requirement on 61. RH remains fast, with a successful-output
+median exit of approximately 11 seconds, but its median reference gap is
+about 63.8\%. The joint target is reached by only two pipeline and one JEPA
+outputs. The dominant trade-off here is between rapid RH continuity and
+stronger HiGHS economic quality at a longer allocation.
+
+\paragraph{VRE with batteries.}
+At ten seconds the joint target is reached on 46 cases by HiGHS, 38 by JEPA,
+26 by RH and none by the pipeline. Their union covers 59 cases; six are
+covered only by JEPA. This is observed complementarity under an identical
+deadline and requirement. At 120 seconds HiGHS covers all 100 cases under
+the joint target, compared with 80 for the pipeline and 78 for JEPA.
+JEPA nevertheless returns a faster, joint-acceptable output than HiGHS on
+43 cases. Larger nominal allocations do not establish the same outcome
+under a shorter deadline.
+
+\paragraph{Network.}
+At thirty seconds RH returns 98 outputs without ENS versus 40 for HiGHS.
+At 120 seconds HiGHS satisfies the joint economic/service target on 95 cases.
+JEPA supplies 96 valid outputs but only 18 satisfy that joint target;
+15 of these are faster than HiGHS. Validity alone would therefore substantially
+overstate JEPA's coverage for an operator who also requires continuity.
+
+\paragraph{Mathematician.}
+At thirty seconds RH returns 96 outputs without ENS versus one for HiGHS.
+Among 95 cases where both return valid outputs, RH has lower cost on 78;
+cost differences greater than one euro define this comparison. At 120 seconds
+HiGHS improves economic quality but returns only 26 outputs without ENS,
+20 meeting the joint five-percent target. RH preserves its 96 no-ENS outputs,
+with a median reference gap near 99\%. Neither learned method meets the
+joint target in this family at the tested allocations.
+
+\subsection{What the learned methods add}
+Table~\ref{tab:jepa_final} reports paired speed opportunities at the same
+120-second allocation. Its joint column requires JEPA to satisfy quality and
+continuity as well as finish earlier; it is not a statement that all methods
+meet the joint requirement on the paired support. Differences of at least
+one second and ten percent are shown as a descriptive practical threshold,
+not a statistical significance test.
+\begin{table}[htbp]\centering\small
+\caption{JEPA versus HiGHS at 120 seconds; 100 evaluated scenarios per family.}
+\label{tab:jepa_final}
+\begin{tabular}{lrrrr}\toprule
+Family & Valid pairs & Faster JEPA & Faster + joint & Practical gain + joint\\\midrule
+Medium & 92 & 57 & 25 & 18\\
+VRE/batteries & 81 & 44 & 43 & 27\\
+Network & 96 & 82 & 15 & 14\\\bottomrule
+\end{tabular}
+\end{table}
+
+The pipeline improves one-percent economic coverage relative to JEPA on
+medium-criticality cases (42 versus 27 out of 100) and VRE-with-batteries
+cases (72 versus 62) at 120 seconds. HiGHS reaches 100 in both families.
+Across the 311 pipeline/HiGHS valid pairs, the pipeline is faster on 17;
+only seven also meet the joint five-percent/no-ENS target. It is the fastest
+joint-acceptable member on three cases in the full retrospective portfolio,
+including a case where HiGHS violates the strict ENS cap. These rare cases
+are not a broad winning regime, and neither candidate-count nor energy-model
+causality follows from the four-method comparison.
+
+\subsection{Repetitions and sensitivity of the service definition}
+Three executions are available for each of 30 size-spanning cases, five per
+family. At 120 seconds, all three HiGHS executions return valid outputs on
+all 30 cases, but joint quality/no-ENS acceptance changes between repetitions
+on six. The corresponding joint-acceptance variability counts are three for
+the pipeline, one for JEPA and zero for RH. RH's stability accompanies limited
+economic coverage; it is not evidence of higher quality. Repetitions are not
+additional independent scenarios, and this subset does not establish
+deployment risk guarantees.
+
+At 120 seconds a perfect retrospective selector covers 477 scenarios under
+the joint five-percent/no-ENS criterion versus 475 for HiGHS. The two additions
+are \path{low_criticality_scenarios/scenario_00066} and
+\path{persona_network_operator_scenarios/scenario_00039}; HiGHS returns about
+0.121 and 0.682 MWh of ENS respectively. With an allowable cap of 1 MWh,
+HiGHS and the portfolio both cover 477 cases. The small coverage gain is thus
+specific to a strict service request, not robust evidence of a large general
+advantage. Energy caps must have an operational interpretation.
+
+\subsection{A bounded opportunity for routing}
+For continuity at thirty seconds, the best fixed method covers 575/600 cases,
+the best retrospective family-conditioned fixed rule 593, and a perfect
+individual choice 597. For cost-only five-percent quality at 120 seconds,
+HiGHS and the portfolio both cover 505. At ten seconds, the joint
+quality/no-ENS ceiling is 182 versus 168 for the best fixed method.
+The opportunity therefore depends on the requested deadline and service.
+
+Among the 475 cases where HiGHS itself meets the joint target at 120 seconds,
+the perfect fastest acceptable choice reduces mean exit time from 36.25 to
+34.16 seconds, approximately 5.8\%, before any selection overhead. On 68 cases
+it saves at least one second and ten percent; their median saving is 5.9
+seconds. These are retrospective ceilings on realized outcomes, not measured
+router performance, expected deployment gains or an optimality guarantee.
+The companion routing paper distinguishes this evidence from all prospective
+prediction and online-evaluation claims.
+
+\section{Planned robustness and generalization tests}
+The designs below remain prospective. They do not contribute observed results
+to the completed 600-scenario map, and no data generation, training or experiment is
+launched in this revision. Their purpose is to test whether the relevant
+time--cost--service profiles would survive changes in the input distribution.
+\subsection{Stage A: frozen-model structural evaluation}
+The planned new cases would use independent identifiers and deterministic seeds. Separate
+planned development and final cohorts would each contain twenty cases per family. The
+generator uses the family parameter spaces, with a documented draw rule that
+does not reproduce the historical outcome-independent criticality ranking.
+This is a new sampled distribution, not an unqualified IID replication.
+
+The planned controlled suite would use five bases per family, giving thirty cases per
+condition, and keeps a distinct development suite. Each base has a 24-hour
+control, a doubled-system variant within 300 zones, a line-rewiring variant,
+a fleet-capacity variant and a consistent zone-renumbering variant. Renumbering
+maps demands, capacities, line endpoints and the external-trade anchor together;
+it should preserve the physical optimization problem up to relabeling. It
+directly probes sensitivity to learned index embeddings. Capacity changes keep
+initial and terminal storage quantities consistent. Doubled cases change both
+scale and the linking structure, so their effect is not attributed to size
+alone without further controls.
+
+The dimension audit would report actual training shapes, scenario descriptors and
+free model integers. ``Extrapolation'' is reserved for dimensions or structures
+outside the observed training support; a new draw inside the generator support
+is interpolation. Standard solvers already construct a model for new topologies
+without training. Learned generalization is useful only if it preserves a
+favorable time--cost--service profile against those solvers.
+
+\subsection{Stage B: a distinct variable-horizon model}
+The existing 24-step decoder is not applied beyond its capacity. A proposed separate
+architecture would replace learned index queries with scenario-conditioned queries
+and dynamically generated sinusoidal time positions. The AE, latent predictor
+and energy network are initialized and trained anew in that separate planned study on 12-, 24- and 48-hour
+cases; 72-hour cases are reserved for extrapolation. The frozen HTE weights
+and normalization are reused with an explicitly extended sinusoidal time buffer.
+This is partial reuse of a representation, not zero-shot transfer of the old
+UC stack.
+
+The prepared corpus design calls for 180 independent bases, each represented at three
+training horizons. All horizons of a base share the same training/validation
+assignment. Batch size one with gradient accumulation handles variable shapes
+without padded observations. Label validity and certification are stored
+separately. The prepared AE loss is weighted binary cross-entropy; the predictor
+combines latent regression and decoded binary supervision; the energy model
+learns a contrastive ranking of reference latents and local noisy proposals.
+These choices define an executable new baseline, not a claim to reproduce the
+historical training losses exactly.
+
+The horizon controls preserve the first day and extend it using specified daily
+scalings of demand and renewable availability, while maintaining hourly
+resolution and terminal constraints. Their structured synthetic nature limits
+claims about weather or demand forecast shift. Training and final structural
+test bases remain disjoint.
+
+\subsection{External solver comparison}
+The planned external comparison would evaluate Gurobi directly on 120 existing cases, twenty per family, selected
+by a fixed hash before its outcomes are observed. Its repair backend is not
+inserted into the four-method campaign. Its prerequisite and license checks
+must pass before the extension environment is frozen. Comparisons use common
+available cases and the same HiGHS-based reference cost; a negative Gurobi gap
+is retained as evidence of reference improvement.
+
+\section{Analyses that remain pending}
+The final coverage counts, paired contrasts, repetition summaries and
+retrospective service-profile ceilings have been reconciled with the accepted
+row-level analysis. They no longer await extraction. What remains is grouped
+uncertainty estimation, sensitivity to relative and absolute economic targets,
+and a decomposition of ENS and cost by physical scale. These analyses must
+retain all observed failures and distinguish conditional successful supports.
+
+\pending{Populate stage-time and repair-change analyses, the matched
+\texttt{perturb16} comparison, and structural, variable-horizon and
+external-solver evaluations. None is inferred from the completed primary
+comparison. No additional experiment is run for this manuscript revision.}
+Candidate stages may overlap, so elapsed components cannot be summed without
+respecting their execution structure. A valid dispatch after extensive repair
+does not by itself demonstrate an accurate learned proposal. Likewise, the
+pipeline--JEPA difference cannot isolate the energy-gradient contribution.
+
+\pending{The companion criticality study must test whether pre-solve
+components explain incremental outcome variation beyond size and family.
+The routing study must establish predictive recovery and timed benefit on
+independent data. Family-average contrasts are not fitted routing rules.}
+
+\section{Discussion and limitations}
+The completed evidence supports conditional operational roles. RH is useful
+when rapid continuity dominates precision, HiGHS when economic accuracy or
+already-easy cases dominate, and JEPA on selected time--cost--service
+compromises. The pipeline can improve JEPA's economic coverage while remaining
+less attractive than direct optimization for most measured requests. No method
+is assigned an artificial winning domain.
+
+ENS is penalized inside the cost but remains an independent service outcome.
+The economic objective includes export revenues, so net costs can be negative;
+relative gaps use the absolute reference denominator. Absolute currency
+differences and energy quantities should accompany percentage comparisons.
+Near-reference costs are not optimality certificates, and a zero-ENS profile
+is not a security, contingency or forecast-robustness guarantee.
+
+The profiles and narrative were developed while the cohort was being explored.
+Their final counts describe this cohort, not a preregistered confirmatory test
+or calibrated deployment probabilities. Repetitions cover 30 scenarios rather
+than the entire cohort. Synthetic families, a capacitated transport network,
+aggregate zonal commitment, frozen learned models, one machine and one shared
+HiGHS repair backend limit external validity. Low and high families were
+selected using criticality and related generator controls; their separation
+does not validate the index independently of size or family.
+
+Component effects, useful index reweighting, generalized topologies and a
+deployable router require distinct evidence. The companion papers preserve
+this distinction between arithmetic index sensitivity, out-of-sample
+performance prediction and actual decision benefit.
+
+\section{Conclusion}
+Changing the requested service changes the useful method. The final campaign
+demonstrates rapid continuity from RH on difficult families, strong economic
+coverage from HiGHS, and targeted JEPA gains including unique joint-service
+coverage on VRE-with-batteries cases at ten seconds. The pipeline improves
+some JEPA quality counts but its execution overhead limits its current role.
+
+Routing potential is request-dependent: coverage headroom is appreciable for
+some short-budget requests, small after a family-conditioned baseline for
+continuity at thirty seconds, and absent for cost-only five-percent quality
+at 120 seconds. Time gains remain possible among already acceptable outputs.
+Predicting those gains before solving, at sufficient reliability and after
+selection overhead, is the prospective claim of the routing paper.
+
+\section*{Data, provenance and execution status}
+\input{notes/final_campaign_provenance}
+
+\bibliographystyle{unsrtnat}\bibliography{paper2/references}
+\end{document}

@@ -1,0 +1,2596 @@
+{
+  "checked_on": "2026-11-05",
+  "references": [
+    {
+      "key": "dolan2002",
+      "type": "article",
+      "fields": {
+        "author": "Dolan, Elizabeth D. and Moré, Jorge J.",
+        "title": "Benchmarking optimization software with performance profiles",
+        "journal": "Mathematical Programming",
+        "year": "2002",
+        "volume": "91",
+        "pages": "201--213",
+        "doi": "10.1007/s101070100263"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "evaluation",
+      "role": "Comparer la performance sur un ensemble d’instances; ne remplace pas la mesure de sortie complète du processus.",
+      "status": "published",
+      "sources": [
+        "https://doi.org/10.1007/S101070100263"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "berthold2013",
+      "type": "article",
+      "fields": {
+        "author": "Berthold, Timo",
+        "title": "Measuring the impact of primal heuristics",
+        "journal": "Operations Research Letters",
+        "year": "2013",
+        "volume": "41",
+        "number": "6",
+        "pages": "611--614",
+        "doi": "10.1016/j.orl.2013.08.007"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "evaluation",
+      "role": "Situer les courbes qualité-temps et l’intégrale primale; distinguer incumbent disponible et programme terminé.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0167637713001181"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "beiranvand2017",
+      "type": "article",
+      "fields": {
+        "author": "Beiranvand, Vahid and Hare, Warren and Lucet, Yves",
+        "title": "Best practices for comparing optimization algorithms",
+        "journal": "Optimization and Engineering",
+        "year": "2017",
+        "volume": "18",
+        "pages": "815--848",
+        "doi": "10.1007/s11081-017-9366-1"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "evaluation",
+      "role": "Comparaison équitable, ressources, jeux d’instances et présentation des résultats.",
+      "status": "published",
+      "sources": [
+        "https://doi.org/10.1007/s11081-017-9366-1"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "gleixner2021",
+      "type": "article",
+      "fields": {
+        "author": "Gleixner, Ambros and Hendel, Gregor and Gamrath, Gerald and Achterberg, Tobias and Bastubbe, Michael and Berthold, Timo and Christophel, Philipp M. and Jarck, Kati and Koch, Thorsten and Linderoth, Jeff and Lübbecke, Marco E. and Mittelmann, Hans D. and Ozyurt, Derya and Ralphs, Ted K. and Salvagnin, Domenico and Shinano, Yuji",
+        "title": "MIPLIB 2017: data-driven compilation of the 6th mixed-integer programming library",
+        "journal": "Mathematical Programming Computation",
+        "year": "2021",
+        "volume": "13",
+        "number": "3",
+        "pages": "443--490",
+        "doi": "10.1007/s12532-020-00194-3"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "evaluation",
+      "role": "Diversité et sélection d’instances MILP; bibliothèque externe, pas description du générateur énergétique local.",
+      "status": "published",
+      "sources": [
+        "https://miplib.zib.de/",
+        "https://publications.rwth-aachen.de/record/811575?ln=en"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "smithmiles2012",
+      "type": "article",
+      "fields": {
+        "author": "Smith-Miles, Kate and Lopes, Leo",
+        "title": "Measuring instance difficulty for combinatorial optimization problems",
+        "journal": "Computers & Operations Research",
+        "year": "2012",
+        "volume": "39",
+        "number": "5",
+        "pages": "875--889",
+        "doi": "10.1016/j.cor.2011.07.006"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "instance_difficulty",
+      "role": "Fondement principal de la distinction entre caractéristiques d’instance, taille et difficulté empirique dépendante de l’algorithme.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0305054811001997",
+        "https://www.cs.ubc.ca/labs/algorithms/EARG/stack/2012_ComputersAndOperationResearch_SmithMiles_MeasuringInstanceDifficulty.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "smithmiles2014",
+      "type": "article",
+      "fields": {
+        "author": "Smith-Miles, Kate and Baatar, Davaatseren and Wreford, Brendan and Lewis, Rhyd",
+        "title": "Towards objective measures of algorithm performance across instance space",
+        "journal": "Computers & Operations Research",
+        "year": "2014",
+        "volume": "45",
+        "pages": "12--24",
+        "doi": "10.1016/j.cor.2013.11.015"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "instance_difficulty",
+      "role": "Évaluer les zones de réussite et d’échec dans l’espace des instances, au-delà des moyennes globales.",
+      "status": "published",
+      "sources": [
+        "https://orca.cardiff.ac.uk/id/eprint/53966/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "hutter2013",
+      "type": "article",
+      "fields": {
+        "author": "Hutter, Frank and Xu, Lin and Hoos, Holger H. and Leyton-Brown, Kevin",
+        "title": "Algorithm runtime prediction: Methods & evaluation",
+        "journal": "Artificial Intelligence",
+        "year": "2014",
+        "volume": "206",
+        "pages": "79--111",
+        "doi": "10.1016/j.artint.2013.10.003"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "instance_difficulty",
+      "role": "Prédiction de performance, descripteurs et temps censurés; clé historique conservée malgré l’année de revue 2014.",
+      "status": "published",
+      "sources": [
+        "https://www.cl.cam.ac.uk/~ey204/teaching/ACS/R244_2017_2018/papers/hutter_ai_2014.pdf",
+        "https://arxiv.org/abs/1211.0906"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [],
+      "metadata_note": "Clé historique conservée; la notice cite désormais la version revue de 2014."
+    },
+    {
+      "key": "rice1976",
+      "type": "incollection",
+      "fields": {
+        "author": "Rice, John R.",
+        "title": "The Algorithm Selection Problem",
+        "booktitle": "Advances in Computers",
+        "year": "1976",
+        "volume": "15",
+        "pages": "65--118",
+        "publisher": "Academic Press",
+        "doi": "10.1016/S0065-2458(08)60520-3"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Cadre historique reliant instance, caractéristiques, algorithme et critère de performance.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0065245808605203"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "gomes2001",
+      "type": "article",
+      "fields": {
+        "author": "Gomes, Carla P. and Selman, Bart",
+        "title": "Algorithm portfolios",
+        "journal": "Artificial Intelligence",
+        "year": "2001",
+        "volume": "126",
+        "number": "1--2",
+        "pages": "43--62",
+        "doi": "10.1016/S0004-3702(00)00081-3"
+      },
+      "papers": [
+        2,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Complémentarité et variabilité des algorithmes; exécution parallèle ou entrelacée à distinguer du routage vers une seule méthode.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0004370200000813"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "xu2008",
+      "type": "article",
+      "fields": {
+        "author": "Xu, Lin and Hutter, Frank and Hoos, Holger H. and Leyton-Brown, Kevin",
+        "title": "SATzilla: Portfolio-based Algorithm Selection for SAT",
+        "journal": "Journal of Artificial Intelligence Research",
+        "year": "2008",
+        "volume": "32",
+        "pages": "565--606",
+        "doi": "10.1613/jair.2490"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Sélection par prédiction de performance, caractéristiques et coût de préparation.",
+      "status": "published",
+      "sources": [
+        "https://arxiv.org/abs/1111.2249"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "bischl2016",
+      "type": "article",
+      "fields": {
+        "author": "Bischl, Bernd and Kerschke, Pascal and Kotthoff, Lars and Lindauer, Marius and Malitsky, Yuri and Fréchette, Alexandre and Hoos, Holger and Hutter, Frank and Leyton-Brown, Kevin and Tierney, Kevin and Vanschoren, Joaquin",
+        "title": "ASlib: A benchmark library for algorithm selection",
+        "journal": "Artificial Intelligence",
+        "year": "2016",
+        "volume": "237",
+        "pages": "41--58",
+        "doi": "10.1016/j.artint.2016.04.003"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Scénarios de sélection, coûts des caractéristiques et références meilleur algorithme fixe/oracle.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0004370216300388",
+        "https://arxiv.org/abs/1506.02465"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "kerschke2019",
+      "type": "article",
+      "fields": {
+        "author": "Kerschke, Pascal and Hoos, Holger H. and Neumann, Frank and Trautmann, Heike",
+        "title": "Automated Algorithm Selection: Survey and Perspectives",
+        "journal": "Evolutionary Computation",
+        "year": "2019",
+        "volume": "27",
+        "number": "1",
+        "pages": "3--45",
+        "doi": "10.1162/evco_a_00242"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Revue de cadrage de la sélection automatique et de ses critères d’évaluation.",
+      "status": "published",
+      "sources": [
+        "https://www.wi.uni-muenster.de/research/publications/144870",
+        "https://arxiv.org/abs/1811.11597"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "alissa2023",
+      "type": "article",
+      "fields": {
+        "author": "Alissa, Mohamad and Sim, Kevin and Hart, Emma",
+        "title": "Automated Algorithm Selection: from Feature-Based to Feature-Free Approaches",
+        "journal": "Journal of Heuristics",
+        "year": "2023",
+        "volume": "29",
+        "pages": "1--38",
+        "doi": "10.1007/s10732-022-09505-4"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Alternative récente aux caractéristiques conçues manuellement; étude méthodologique sur domaines séquentiels, pas preuve en énergie.",
+      "status": "published",
+      "sources": [
+        "https://link.springer.com/article/10.1007/s10732-022-09505-4"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "amadini2014",
+      "type": "article",
+      "fields": {
+        "author": "Amadini, Roberto and Gabbrielli, Maurizio and Mauro, Jacopo",
+        "title": "SUNNY: a Lazy Portfolio Approach for Constraint Solving",
+        "journal": "Theory and Practice of Logic Programming",
+        "year": "2014",
+        "volume": "14",
+        "number": "4--5",
+        "pages": "509--524",
+        "doi": "10.1017/S1471068414000179"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Approche par voisinage et ordonnancement; comparateur conceptuel, non assimilé au sélecteur mono-action du papier.",
+      "status": "published",
+      "sources": [
+        "https://www.cambridge.org/core/journals/theory-and-practice-of-logic-programming/article/abs/sunny-a-lazy-portfolio-approach-for-constraint-solving/F65F2BB44129A947982CF74830665F73"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "oecd2008",
+      "type": "book",
+      "fields": {
+        "author": "{OECD} and {European Union} and {European Commission, Joint Research Centre}",
+        "title": "Handbook on Constructing Composite Indicators: Methodology and User Guide",
+        "publisher": "OECD Publishing",
+        "address": "Paris",
+        "year": "2008",
+        "doi": "10.1787/9789264043466-en"
+      },
+      "papers": [
+        1
+      ],
+      "theme": "criticality",
+      "role": "Normalisation, pondération, agrégation et sensibilité d’un indice composite; transfert méthodologique depuis les indicateurs de politique publique.",
+      "status": "published",
+      "sources": [
+        "https://www.oecd.org/en/publications/handbook-on-constructing-composite-indicators-methodology-and-user-guide_9789264043466-en.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "ulbig2015",
+      "type": "article",
+      "fields": {
+        "author": "Ulbig, Andreas and Andersson, Göran",
+        "title": "Analyzing operational flexibility of electric power systems",
+        "journal": "International Journal of Electrical Power & Energy Systems",
+        "year": "2015",
+        "volume": "72",
+        "pages": "155--164",
+        "doi": "10.1016/j.ijepes.2015.02.028"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "energy_flexibility",
+      "role": "Interprétation physique des capacités de flexibilité; ne mesure pas la difficulté MILP.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0142061515001118"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "heggarty2019",
+      "type": "article",
+      "fields": {
+        "author": "Heggarty, Thomas and Bourmaud, Jean-Yves and Girard, Robin and Kariniotakis, Georges",
+        "title": "Multi-temporal assessment of power system flexibility requirement",
+        "journal": "Applied Energy",
+        "year": "2019",
+        "volume": "238",
+        "pages": "1327--1336",
+        "doi": "10.1016/j.apenergy.2019.01.198"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "energy_flexibility",
+      "role": "Besoins de flexibilité selon plusieurs échelles temporelles et leurs déterminants.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0306261919302107"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "moralesespana2013",
+      "type": "article",
+      "fields": {
+        "author": "Morales-España, Germán and Latorre, Jesus M. and Ramos, Andres",
+        "title": "Tight and Compact MILP Formulation for the Thermal Unit Commitment Problem",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2013",
+        "volume": "28",
+        "number": "4",
+        "pages": "4897--4908",
+        "doi": "10.1109/TPWRS.2013.2251373"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "unit_commitment",
+      "role": "Formulation thermique et effet du resserrement sur la résolution; référence de modèle, pas identité avec la formulation locale.",
+      "status": "published",
+      "sources": [
+        "https://research.tudelft.nl/en/publications/tight-and-compact-milp-formulation-for-the-thermal-unit-commitmen/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "morales_espana_tight_2013"
+      ]
+    },
+    {
+      "key": "xavier2021",
+      "type": "article",
+      "fields": {
+        "author": "Xavier, Álinson S. and Qiu, Feng and Ahmed, Shabbir",
+        "title": "Learning to Solve Large-Scale Security-Constrained Unit Commitment Problems",
+        "journal": "INFORMS Journal on Computing",
+        "year": "2021",
+        "volume": "33",
+        "number": "2",
+        "pages": "739--756",
+        "doi": "10.1287/ijoc.2020.0976"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "learning_uc",
+      "role": "Antécédent direct pour contraintes, solutions initiales et réduction d’espace apprises en SCUC; année du fascicule 2021, mise en ligne 2020.",
+      "status": "published",
+      "sources": [
+        "https://pubsonline.informs.org/doi/10.1287/ijoc.2020.0976"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [],
+      "metadata_note": "Année du fascicule 2021; première publication en ligne en octobre 2020."
+    },
+    {
+      "key": "cawley2010",
+      "type": "article",
+      "fields": {
+        "author": "Cawley, Gavin C. and Talbot, Nicola L. C.",
+        "title": "On Over-fitting in Model Selection and Subsequent Selection Bias in Performance Evaluation",
+        "journal": "Journal of Machine Learning Research",
+        "year": "2010",
+        "volume": "11",
+        "number": "70",
+        "pages": "2079--2107",
+        "url": "https://www.jmlr.org/papers/v11/cawley10a.html"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "validation",
+      "role": "Séparer choix des modèles et évaluation finale; prévenir l’optimisme dû aux comparaisons répétées.",
+      "status": "published",
+      "sources": [
+        "https://www.jmlr.org/papers/v11/cawley10a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "roberts2017",
+      "type": "article",
+      "fields": {
+        "author": "Roberts, David R. and Bahn, Volker and Ciuti, Simone and Boyce, Mark S. and Elith, Jane and Guillera-Arroita, Gurutzeta and Hauenstein, Severin and Lahoz-Monfort, José J. and Schröder, Boris and Thuiller, Wilfried and Warton, David I. and Wintle, Brendan A. and Hartig, Florian and Dormann, Carsten F.",
+        "title": "Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure",
+        "journal": "Ecography",
+        "year": "2017",
+        "volume": "40",
+        "number": "8",
+        "pages": "913--929",
+        "doi": "10.1111/ecog.02881"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "validation",
+      "role": "Validation par groupes et transferts structurés; justification méthodologique, non étude de systèmes énergétiques.",
+      "status": "published",
+      "sources": [
+        "https://nsojournals.onlinelibrary.wiley.com/doi/full/10.1111/ecog.02881"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "guo2017",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Guo, Chuan and Pleiss, Geoff and Sun, Yu and Weinberger, Kilian Q.",
+        "title": "On Calibration of Modern Neural Networks",
+        "booktitle": "Proceedings of the 34th International Conference on Machine Learning",
+        "series": "Proceedings of Machine Learning Research",
+        "volume": "70",
+        "pages": "1321--1330",
+        "year": "2017",
+        "publisher": "PMLR",
+        "url": "https://proceedings.mlr.press/v70/guo17a.html"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "validation",
+      "role": "Distinguer discrimination et calibration des probabilités; la calibration thermique n’est pas supposée déjà implémentée.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.mlr.press/v70/guo17a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "saito2015",
+      "type": "article",
+      "fields": {
+        "author": "Saito, Takaya and Rehmsmeier, Marc",
+        "title": "The Precision-Recall Plot Is More Informative than the ROC Plot When Evaluating Binary Classifiers on Imbalanced Datasets",
+        "journal": "PLOS ONE",
+        "year": "2015",
+        "volume": "10",
+        "number": "3",
+        "pages": "e0118432",
+        "doi": "10.1371/journal.pone.0118432"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "validation",
+      "role": "Justifier l’analyse précision-rappel lorsque le succès ou l’échec opérationnel est rare.",
+      "status": "published",
+      "sources": [
+        "https://journals.plos.org/plosone/article/citation?id=10.1371%2Fjournal.pone.0118432"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "demsar2006",
+      "type": "article",
+      "fields": {
+        "author": "Demšar, Janez",
+        "title": "Statistical Comparisons of Classifiers over Multiple Data Sets",
+        "journal": "Journal of Machine Learning Research",
+        "year": "2006",
+        "volume": "7",
+        "number": "1",
+        "pages": "1--30",
+        "url": "https://jmlr.org/papers/v7/demsar06a.html"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "validation",
+      "role": "Comparaisons multiples et unités indépendantes; ne pas traiter les budgets répétés d’un même scénario comme des jeux indépendants.",
+      "status": "published",
+      "sources": [
+        "https://jmlr.org/papers/v7/demsar06a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "gasse2019",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Gasse, Maxime and Chételat, Didier and Ferroni, Nicola and Charlin, Laurent and Lodi, Andrea",
+        "title": "Exact Combinatorial Optimization with Graph Convolutional Neural Networks",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "volume": "32",
+        "year": "2019",
+        "url": "https://proceedings.neurips.cc/paper/2019/hash/d14c2267d848abeb81fd590f371d39bd-Abstract.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_milp",
+      "role": "Branchement appris sur graphe biparti; distinguer guidage de recherche exacte et génération de candidats.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper/2019/hash/d14c2267d848abeb81fd590f371d39bd-Abstract.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "gasse_exact_2019"
+      ]
+    },
+    {
+      "key": "nair2021",
+      "type": "misc",
+      "fields": {
+        "author": "Nair, Vinod and Bartunov, Sergey and Gimeno, Felix and von Glehn, Ingrid and Lichocki, Pawel and Lobov, Ivan and O'Donoghue, Brendan and Sonnerat, Nicolas and Tjandraatmadja, Christian and Wang, Pengming and Addanki, Ravichandra and Hapuarachchi, Tharindi and Keck, Thomas and Keeling, James and Kohli, Pushmeet and Ktena, Ira and Li, Yujia and Vinyals, Oriol and Zwols, Yori",
+        "title": "Solving Mixed Integer Programs Using Neural Networks",
+        "year": "2021",
+        "eprint": "2012.13349",
+        "archivePrefix": "arXiv",
+        "primaryClass": "cs.LG",
+        "url": "https://arxiv.org/abs/2012.13349v3",
+        "note": "Preprint, version 3; first submitted in 2020"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_milp",
+      "role": "Neural Diving et Neural Branching; point de comparaison direct pour les affectations apprises complétées par un solveur.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2012.13349"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "sonnerat2022",
+      "type": "misc",
+      "fields": {
+        "author": "Sonnerat, Nicolas and Wang, Pengming and Ktena, Ira and Bartunov, Sergey and Nair, Vinod",
+        "title": "Learning a Large Neighborhood Search Algorithm for Mixed Integer Programs",
+        "year": "2022",
+        "eprint": "2107.10201",
+        "archivePrefix": "arXiv",
+        "primaryClass": "cs.LG",
+        "url": "https://arxiv.org/abs/2107.10201v3",
+        "note": "Preprint, version 3; first submitted in 2021"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_milp",
+      "role": "Choix appris des voisinages MILP; comparer le rôle du solveur et le coût complet de l’amélioration.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2107.10201",
+        "https://github.com/google-deepmind/neural_lns"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "bengio2021",
+      "type": "article",
+      "fields": {
+        "author": "Bengio, Yoshua and Lodi, Andrea and Prouvost, Antoine",
+        "title": "Machine learning for combinatorial optimization: A methodological tour d'horizon",
+        "journal": "European Journal of Operational Research",
+        "year": "2021",
+        "volume": "290",
+        "number": "2",
+        "pages": "405--421",
+        "doi": "10.1016/j.ejor.2020.07.063"
+      },
+      "papers": [
+        2,
+        3
+      ],
+      "theme": "learning_milp",
+      "role": "Taxonomie des interactions entre apprentissage et optimisation et choix des distributions d’entraînement.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0377221720306895"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "cappart2023",
+      "type": "article",
+      "fields": {
+        "author": "Cappart, Quentin and Chételat, Didier and Khalil, Elias B. and Lodi, Andrea and Morris, Christopher and Veličković, Petar",
+        "title": "Combinatorial Optimization and Reasoning with Graph Neural Networks",
+        "journal": "Journal of Machine Learning Research",
+        "year": "2023",
+        "volume": "24",
+        "number": "130",
+        "pages": "1--61",
+        "url": "https://www.jmlr.org/papers/v24/21-0449.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_milp",
+      "role": "Revue étendue des GNN pour optimisation; remplace la version courte IJCAI 2021.",
+      "status": "published",
+      "sources": [
+        "https://www.jmlr.org/papers/v24/21-0449.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "chen2023",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Chen, Ziang and Liu, Jialin and Wang, Xinshang and Lu, Jianfeng and Yin, Wotao",
+        "title": "On Representing Mixed-Integer Linear Programs by Graph Neural Networks",
+        "booktitle": "International Conference on Learning Representations",
+        "year": "2023",
+        "url": "https://openreview.net/forum?id=4gc3MGZra1d"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "generalization",
+      "role": "Limites d’expressivité des GNN sur les MILP; empêcher d’inférer une garantie de résolution à partir de l’architecture.",
+      "status": "published",
+      "sources": [
+        "https://openreview.net/pdf?id=4gc3MGZra1d"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "chen_representing_2023"
+      ]
+    },
+    {
+      "key": "qin2025",
+      "type": "article",
+      "fields": {
+        "author": "Qin, Jingtao and Yu, Nanpeng",
+        "title": "Solve Large-Scale Unit Commitment Problems by Physics-Informed Graph Learning",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2025",
+        "volume": "40",
+        "number": "6",
+        "pages": "4439--4451",
+        "doi": "10.1109/TPWRS.2025.3562886"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Graphe physique hiérarchique, neural diving et branching pour UC; voisin scientifique central.",
+      "status": "published",
+      "sources": [
+        "https://ieeexplore.ieee.org/document/10971920/",
+        "https://arxiv.org/abs/2311.15216"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "qin_solve_2023"
+      ]
+    },
+    {
+      "key": "park2024",
+      "type": "article",
+      "fields": {
+        "author": "Park, Seonho and Chen, Wenbo and Han, Dahye and Tanneau, Mathieu and Van Hentenryck, Pascal",
+        "title": "Confidence-Aware Graph Neural Networks for Learning Reliability Assessment Commitments",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2024",
+        "volume": "39",
+        "number": "2",
+        "pages": "3839--3850",
+        "doi": "10.1109/TPWRS.2023.3298735"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Confiance, fixation partielle et réparation de faisabilité sur un problème opérationnel de grande taille.",
+      "status": "published",
+      "sources": [
+        "https://arxiv.org/abs/2211.15755",
+        "https://repository.gatech.edu/server/api/core/bitstreams/f5377676-1314-4f11-876b-cfd85df90d39/content"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "park_confidence-aware_2023"
+      ]
+    },
+    {
+      "key": "yang2025fixation",
+      "type": "article",
+      "fields": {
+        "author": "Yang, Linfeng and Li, Peilun and Chen, Shifei and Zheng, Haiyan",
+        "title": "Stable Variable Fixation for Accelerated Unit Commitment via Graph Neural Network and Linear Programming Hybrid Learning",
+        "journal": "Applied Sciences",
+        "year": "2025",
+        "volume": "15",
+        "number": "8",
+        "pages": "4498",
+        "doi": "10.3390/app15084498"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Fixation stable et hybride GNN-LP; comparer explicitement la récupération de faisabilité.",
+      "status": "published",
+      "sources": [
+        "https://doi.org/10.3390/app15084498"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "yang_stable_2025"
+      ]
+    },
+    {
+      "key": "yang2025lns",
+      "type": "misc",
+      "fields": {
+        "author": "Yang, Linfeng and Li, Peilun and Jian, Jinbao",
+        "title": "Solving Unit Commitment Problems with Graph Neural Network based Initial Commitment Prediction and Large Neighborhood Search",
+        "year": "2025",
+        "eprint": "2505.14408",
+        "archivePrefix": "arXiv",
+        "url": "https://arxiv.org/abs/2505.14408",
+        "note": "Preprint"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Prédiction initiale, restauration de faisabilité puis voisinages appris; comparaison très proche de la chaîne candidats-réparation.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2505.14408"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "yang_solving_nodate"
+      ]
+    },
+    {
+      "key": "venkatesh2025",
+      "type": "article",
+      "fields": {
+        "author": "Venkatesh, Bala and Shekeew, Mohamed Ibrahim Abdelaziz and Ma, Jessie",
+        "title": "Feasibility-guaranteed machine learning unit commitment: Fuzzy Optimization approaches",
+        "journal": "Applied Energy",
+        "year": "2025",
+        "volume": "379",
+        "pages": "124923",
+        "doi": "10.1016/j.apenergy.2024.124923"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Intégrer des prédictions comme contraintes non obligatoires; autre stratégie de traitement des erreurs de prédiction.",
+      "status": "published",
+      "sources": [
+        "https://doi.org/10.1016/j.apenergy.2024.124923"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "fritz2026",
+      "type": "misc",
+      "fields": {
+        "author": "Fritz, Benjamin and Makrides, Andreas and Fetanat, Maryam and Pinson, Pierre",
+        "title": "Learning to Fix: Optimisation-Aware Machine Learning for Accelerated Unit Commitment",
+        "year": "2026",
+        "eprint": "2609.39396",
+        "archivePrefix": "arXiv",
+        "url": "https://arxiv.org/abs/2609.39396",
+        "note": "Preprint, submitted 30 September 2026"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Seuils de confiance tenant compte des conséquences économiques des erreurs de fixation; antécédent récent à discuter avec prudence.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2609.39396"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "xu2026uc",
+      "type": "article",
+      "fields": {
+        "author": "Xu, Hanyang and Zhou, Siyi and Xia, Min and Liang, Shi and Geng, Jian and Liu, Jun",
+        "title": "Graph neural network with physics-informed optimization layer for unit commitment and economic dispatch",
+        "journal": "International Journal of Electrical Power & Energy Systems",
+        "year": "2026",
+        "volume": "177",
+        "pages": "111821",
+        "doi": "10.1016/j.ijepes.2026.111821"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Séparation décisions discrètes/dispatch continu et correction physique; comparer hypothèses et contraintes avant tout rapprochement chiffré.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0142061526002632"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "wang2026cuts",
+      "type": "article",
+      "fields": {
+        "author": "Wang, Mengchang and Yu, Yuanxin and Ye, Jun and Huang, He and Chen, Yiping and Zhao, Huashi and Ma, Qian",
+        "title": "Adaptive cut generation via hypergraph neural networks for unit commitment problems",
+        "journal": "Expert Systems with Applications",
+        "year": "2026",
+        "volume": "324",
+        "pages": "132519",
+        "doi": "10.1016/j.eswa.2026.132519"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Accélération interne de MILP par hypergraphes et coupes, distincte de la génération externe de stratégies.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0957417426014326"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "dong2026",
+      "type": "article",
+      "fields": {
+        "author": "Dong, Jizhe and Xu, Chongshan and Zheng, Danchen and Zhu, Meng and Zhang, Yanbin and Zhao, Zehao and Han, Shunjie",
+        "title": "A deep learning unit commitment method based on confidence intervals",
+        "journal": "Electric Power Systems Research",
+        "year": "2026",
+        "pages": "112908",
+        "doi": "10.1016/j.epsr.2026.112908"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Initialisations différenciées selon la confiance des prédictions; numéro de volume non renseigné faute de confirmation primaire.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0378779626002014"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [],
+      "metadata_note": "DOI, titre, auteurs, année et numéro d’article confirmés par la notice éditeur; volume non renseigné car absent de la notice consultable."
+    },
+    {
+      "key": "pourahmadi2025",
+      "type": "article",
+      "fields": {
+        "author": "Pourahmadi, Farzaneh and Kazempour, Jalal",
+        "title": "Unit Commitment Predictor With a Performance Guarantee: A Support Vector Machine Classifier",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2025",
+        "volume": "40",
+        "number": "1",
+        "pages": "715--727",
+        "doi": "10.1109/TPWRS.2024.3400405"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Prédiction UC et garanties sous hypothèses; comparateur non GNN pour discuter performance hors échantillon.",
+      "status": "published",
+      "sources": [
+        "https://orbit.dtu.dk/en/publications/unit-commitment-predictor-with-a-performance-guarantee-a-support-/",
+        "https://backend.orbit.dtu.dk/ws/portalfiles/portal/359853413/SVM.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "pramita2026",
+      "type": "misc",
+      "fields": {
+        "author": "Pramita, Maharani Devira and O'Sullivan, Aidan",
+        "title": "Reinforcement learning on the EPRI AI-ccelerating Unit Commitment benchmark: diagnosing over-commitment and guiding MILP with learned policies",
+        "year": "2026",
+        "eprint": "2610.25544",
+        "archivePrefix": "arXiv",
+        "url": "https://arxiv.org/abs/2610.25544",
+        "note": "Preprint, submitted 18 October 2026"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Résultats négatifs et diagnostic du sur-engagement; comparaison entre politique autonome et politique guidant MILP.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2610.25544"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "assran2023",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Assran, Mahmoud and Duval, Quentin and Misra, Ishan and Bojanowski, Piotr and Vincent, Pascal and Rabbat, Michael and LeCun, Yann and Ballas, Nicolas",
+        "title": "Self-Supervised Learning From Images With a Joint-Embedding Predictive Architecture",
+        "booktitle": "Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition",
+        "year": "2023",
+        "pages": "15619--15629",
+        "url": "https://openaccess.thecvf.com/content/CVPR2023/html/Assran_Self-Supervised_Learning_From_Images_With_a_Joint-Embedding_Predictive_Architecture_CVPR_2023_paper.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Origine du principe de prédiction dans l’espace latent; I-JEPA image n’est pas la méthode énergétique locale ni une validation de celle-ci.",
+      "status": "published",
+      "sources": [
+        "https://openaccess.thecvf.com/content/CVPR2023/html/Assran_Self-Supervised_Learning_From_Images_With_a_Joint-Embedding_Predictive_Architecture_CVPR_2023_paper.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "bardes2022",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Bardes, Adrien and Ponce, Jean and LeCun, Yann",
+        "title": "VICReg: Variance-Invariance-Covariance Regularization for Self-Supervised Learning",
+        "booktitle": "International Conference on Learning Representations",
+        "year": "2022",
+        "url": "https://openreview.net/forum?id=iWpcWZ8phD"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Référence complémentaire sur la non-dégénérescence des représentations; ne pas prétendre utiliser VICReg sans vérifier les pertes locales.",
+      "status": "published",
+      "sources": [
+        "https://openreview.net/pdf?id=iWpcWZ8phD"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "lee2019",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Lee, Juho and Lee, Yoonho and Kim, Jungtaek and Kosiorek, Adam and Choi, Seungjin and Teh, Yee Whye",
+        "title": "Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks",
+        "booktitle": "Proceedings of the 36th International Conference on Machine Learning",
+        "series": "Proceedings of Machine Learning Research",
+        "volume": "97",
+        "pages": "3744--3753",
+        "year": "2019",
+        "publisher": "PMLR",
+        "url": "https://proceedings.mlr.press/v97/lee19d.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Agrégation de cardinalité variable par attention et tokens; distinguer cette propriété de l’équivariance du décodeur entier.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.mlr.press/v97/lee19d.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "cho2014",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Cho, Kyunghyun and van Merriënboer, Bart and Gulcehre, Caglar and Bahdanau, Dzmitry and Bougares, Fethi and Schwenk, Holger and Bengio, Yoshua",
+        "title": "Learning Phrase Representations using RNN Encoder--Decoder for Statistical Machine Translation",
+        "booktitle": "Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing",
+        "year": "2014",
+        "pages": "1724--1734",
+        "publisher": "Association for Computational Linguistics",
+        "doi": "10.3115/v1/D14-1179"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Source du GRU employé dans les encodeurs temporels; l’application initiale est la traduction.",
+      "status": "published",
+      "sources": [
+        "https://aclanthology.org/D14-1179/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "vaswani2017",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob and Jones, Llion and Gomez, Aidan N. and Kaiser, Łukasz and Polosukhin, Illia",
+        "title": "Attention Is All You Need",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "year": "2017",
+        "volume": "30",
+        "url": "https://proceedings.neurips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Attention et encodage positionnel; ne constitue pas une garantie de transfert vers de nouveaux horizons.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper_files/paper/2017/hash/3f5ee243547dee91fbd053c1c4a845aa-Abstract.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "vaswani2017attention"
+      ]
+    },
+    {
+      "key": "brody2022",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Brody, Shaked and Alon, Uri and Yahav, Eran",
+        "title": "How Attentive Are Graph Attention Networks?",
+        "booktitle": "International Conference on Learning Representations",
+        "year": "2022",
+        "url": "https://openreview.net/forum?id=F72ximsx7C1"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Référence GATv2 pour l’attention de graphe; utiliser seulement pour les blocs effectivement présents.",
+      "status": "published",
+      "sources": [
+        "https://openreview.net/pdf?id=F72ximsx7C1"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "brody_how_2022"
+      ]
+    },
+    {
+      "key": "yehudai2021",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Yehudai, Gilad and Fetaya, Ethan and Meirom, Eli and Chechik, Gal and Maron, Haggai",
+        "title": "From Local Structures to Size Generalization in Graph Neural Networks",
+        "booktitle": "Proceedings of the 38th International Conference on Machine Learning",
+        "series": "Proceedings of Machine Learning Research",
+        "volume": "139",
+        "pages": "11975--11986",
+        "year": "2021",
+        "publisher": "PMLR",
+        "url": "https://proceedings.mlr.press/v139/yehudai21a.html"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "generalization",
+      "role": "La capacité à traiter différentes tailles n’implique pas une généralisation à leurs structures locales.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.mlr.press/v139/yehudai21a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "joshi2022",
+      "type": "article",
+      "fields": {
+        "author": "Joshi, Chaitanya K. and Cappart, Quentin and Rousseau, Louis-Martin and Laurent, Thomas",
+        "title": "Learning the travelling salesperson problem requires rethinking generalization",
+        "journal": "Constraints",
+        "year": "2022",
+        "volume": "27",
+        "pages": "70--98",
+        "doi": "10.1007/s10601-022-09327-y"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "generalization",
+      "role": "Protocole de généralisation en optimisation neuronale; TSP est un domaine méthodologique adjacent, pas UC.",
+      "status": "published",
+      "sources": [
+        "https://link.springer.com/article/10.1007/s10601-022-09327-y"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "xu2019",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Xu, Keyulu and Hu, Weihua and Leskovec, Jure and Jegelka, Stefanie",
+        "title": "How Powerful are Graph Neural Networks?",
+        "booktitle": "International Conference on Learning Representations",
+        "year": "2019",
+        "url": "https://openreview.net/forum?id=ryGs6iA5Km"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "generalization",
+      "role": "Pouvoir expressif des agrégateurs de graphes et limites de distinction entre structures.",
+      "status": "published",
+      "sources": [
+        "https://openreview.net/pdf?id=ryGs6iA5Km"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "zaheer2017",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Zaheer, Manzil and Kottur, Satwik and Ravanbakhsh, Siamak and Poczos, Barnabas and Salakhutdinov, Ruslan and Smola, Alexander J.",
+        "title": "Deep Sets",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "year": "2017",
+        "volume": "30",
+        "url": "https://proceedings.neurips.cc/paper/2017/hash/f22e4747da1aa27e363d86d40ff442fe-Abstract.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "generalization",
+      "role": "Invariance aux permutations des ensembles; utile pour l’audit de renumérotation et la conception de la future architecture.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper/2017/hash/f22e4747da1aa27e363d86d40ff442fe-Abstract.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "welling2011",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Welling, Max and Teh, Yee Whye",
+        "title": "Bayesian Learning via Stochastic Gradient Langevin Dynamics",
+        "booktitle": "Proceedings of the 28th International Conference on Machine Learning",
+        "year": "2011",
+        "pages": "681--688",
+        "url": "https://ora.ox.ac.uk/objects/uuid:13ec7031-519b-4223-81cb-dd8de9213836"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "energy_models",
+      "role": "Fondement des mises à jour gradient-bruit; ne justifie pas une convergence stationnaire pour seize candidats ou un nombre fini de pas.",
+      "status": "published",
+      "sources": [
+        "https://ora.ox.ac.uk/objects/uuid%3A13ec7031-519b-4223-81cb-dd8de9213836"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "goshvadi2023",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Goshvadi, Katayoon and Sun, Haoran and Liu, Xingchao and Nova, Azade and Zhang, Ruqi and Grathwohl, Will and Schuurmans, Dale and Dai, Hanjun",
+        "title": "DISCS: A Benchmark for Discrete Sampling",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "year": "2023",
+        "volume": "36",
+        "pages": "79035--79066",
+        "url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/f9ad87c1ebbae8a3555adb31dbcacf44-Abstract-Datasets_and_Benchmarks.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "energy_models",
+      "role": "Comparaison contrôlée des échantillonneurs; le pipeline local échantillonne un latent continu, distinction à conserver.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper_files/paper/2023/hash/f9ad87c1ebbae8a3555adb31dbcacf44-Abstract-Datasets_and_Benchmarks.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "goshvadi_discs_2023"
+      ]
+    },
+    {
+      "key": "sun2022",
+      "type": "misc",
+      "fields": {
+        "author": "Sun, Haoran and Guha, Etash K. and Dai, Hanjun",
+        "title": "Annealed Training for Combinatorial Optimization on Graphs",
+        "year": "2022",
+        "eprint": "2207.11542",
+        "archivePrefix": "arXiv",
+        "url": "https://arxiv.org/abs/2207.11542",
+        "note": "Preprint; also presented at the OPT 2022 workshop"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "energy_models",
+      "role": "Lien EBM et optimisation combinatoire avec recuit; ne pas confondre énergie d’objectif et énergie latente apprise.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2207.11542",
+        "https://opt-ml.org/oldopt/papers/2022/paper58.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "sun_annealed_2022"
+      ]
+    },
+    {
+      "key": "alcazar2024",
+      "type": "article",
+      "fields": {
+        "author": "Alcazar, Javier and Vakili, Mohammad Ghazi and Kalayci, Can B. and Perdomo-Ortiz, Alejandro",
+        "title": "Enhancing combinatorial optimization with classical and quantum generative models",
+        "journal": "Nature Communications",
+        "year": "2024",
+        "volume": "15",
+        "pages": "2761",
+        "doi": "10.1038/s41467-024-46959-5"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "energy_models",
+      "role": "Génération de candidats au service de la recherche; retenir le cadre générique, sans revendiquer d’avantage quantique pour ce projet.",
+      "status": "published",
+      "sources": [
+        "https://www.nature.com/articles/s41467-024-46959-5"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "alcazar_enhancing_2024"
+      ]
+    },
+    {
+      "key": "knueven2020",
+      "type": "article",
+      "fields": {
+        "author": "Knueven, Bernard and Ostrowski, James and Watson, Jean-Paul",
+        "title": "On Mixed-Integer Programming Formulations for the Unit Commitment Problem",
+        "journal": "INFORMS Journal on Computing",
+        "year": "2020",
+        "volume": "32",
+        "number": "4",
+        "pages": "857--876",
+        "doi": "10.1287/ijoc.2019.0944"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "unit_commitment",
+      "role": "Comparer familles de formulations UC et effets sur le temps de calcul; fondement pour interpréter la difficulté.",
+      "status": "published",
+      "sources": [
+        "https://pubsonline.informs.org/doi/10.1287/ijoc.2019.0944"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "carrion2006",
+      "type": "article",
+      "fields": {
+        "author": "Carrión, Miguel and Arroyo, José M.",
+        "title": "A computationally efficient mixed-integer linear formulation for the thermal unit commitment problem",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2006",
+        "volume": "21",
+        "number": "3",
+        "pages": "1371--1378",
+        "doi": "10.1109/TPWRS.2006.876672"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "unit_commitment",
+      "role": "Contraintes intertemporelles et compromis nombre de variables/contraintes et performance de résolution.",
+      "status": "published",
+      "sources": [
+        "https://ieeexplore.ieee.org/document/1664974/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "lannoye2012",
+      "type": "article",
+      "fields": {
+        "author": "Lannoye, Eamonn and Flynn, Damian and O'Malley, Mark",
+        "title": "Evaluation of Power System Flexibility",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2012",
+        "volume": "27",
+        "number": "2",
+        "pages": "922--931",
+        "doi": "10.1109/TPWRS.2011.2177280"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "energy_flexibility",
+      "role": "Indicateurs de disponibilité des ressources de rampe et échelles temporelles; risque physique distinct de la difficulté informatique.",
+      "status": "published",
+      "sources": [
+        "https://researchrepository.ucd.ie/entities/publication/c68c6298-d018-4950-830f-5d9ba1472659"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "xavier2024ucjl",
+      "type": "misc",
+      "fields": {
+        "author": "Xavier, Alinson S. and Kazachkov, Aleksandr M. and Yurdakul, Ogün and He, Jun and Qiu, Feng",
+        "title": "UnitCommitment.jl: A Julia/JuMP Optimization Package for Security-Constrained Unit Commitment",
+        "year": "2024",
+        "howpublished": "Zenodo",
+        "doi": "10.5281/zenodo.4269874",
+        "note": "Version 0.4; concept DOI as recommended by the project"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "software",
+      "role": "Benchmark externe et formulations publiques; ce logiciel n’est pas utilisé comme provenance des résultats locaux.",
+      "status": "software",
+      "sources": [
+        "https://github.com/ANL-CEEESA/UnitCommitment.jl"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "huangfu2018",
+      "type": "article",
+      "fields": {
+        "author": "Huangfu, Q. and Hall, J. A. J.",
+        "title": "Parallelizing the dual revised simplex method",
+        "journal": "Mathematical Programming Computation",
+        "year": "2018",
+        "volume": "10",
+        "number": "1",
+        "pages": "119--142",
+        "doi": "10.1007/s12532-017-0130-5"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "software",
+      "role": "Référence recommandée par HiGHS; article sur le simplexe LP, pas validation de performances UC ou de tous les composants MIP.",
+      "status": "published",
+      "sources": [
+        "https://ergo-code.github.io/HiGHS/dev/",
+        "https://link.springer.com/article/10.1007/S12532-017-0130-5"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "gurobi2026",
+      "type": "misc",
+      "fields": {
+        "author": "{Gurobi Optimization, LLC}",
+        "title": "Gurobi Optimizer Reference Manual",
+        "year": "2026",
+        "url": "https://www.gurobi.com",
+        "note": "Software documentation; record the version actually used in the experiments"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "software",
+      "role": "Référence fournisseur pour l’adaptateur et les futurs essais; ne présume pas que Gurobi a été exécuté ni qu’il est une action du sélecteur.",
+      "status": "software",
+      "sources": [
+        "https://support.gurobi.com/hc/en-us/articles/360013195592-How-do-I-cite-Gurobi-software-for-an-academic-publication"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "gneiting2007",
+      "type": "article",
+      "fields": {
+        "author": "Gneiting, Tilmann and Raftery, Adrian E.",
+        "title": "Strictly Proper Scoring Rules, Prediction, and Estimation",
+        "journal": "Journal of the American Statistical Association",
+        "year": "2007",
+        "volume": "102",
+        "number": "477",
+        "pages": "359--378",
+        "doi": "10.1198/016214506000001437"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "validation",
+      "role": "Règles de score propres pour probabilités de succès; justification de log loss et Brier.",
+      "status": "published",
+      "sources": [
+        "https://sites.stat.washington.edu/people/raftery/Research/PDF/Gneiting2007jasa.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "brier1950",
+      "type": "article",
+      "fields": {
+        "author": "Brier, Glenn W.",
+        "title": "Verification of forecasts expressed in terms of probability",
+        "journal": "Monthly Weather Review",
+        "year": "1950",
+        "volume": "78",
+        "number": "1",
+        "pages": "1--3",
+        "url": "https://journals.ametsoc.org/view/journals/mwre/78/1/1520-0493_1950_078_0001_vofeit_2_0_co_2.xml"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "validation",
+      "role": "Définition historique du score de Brier pour événements binaires.",
+      "status": "published",
+      "sources": [
+        "https://journals.ametsoc.org/view/journals/mwre/78/1/1520-0493_1950_078_0001_vofeit_2_0_co_2.xml",
+        "https://viterbi-web.usc.edu/~shaddin/teaching/cs699fa17/docs/Brier50.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "niculescumizil2005",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Niculescu-Mizil, Alexandru and Caruana, Rich",
+        "title": "Predicting Good Probabilities With Supervised Learning",
+        "booktitle": "Proceedings of the 22nd International Conference on Machine Learning",
+        "year": "2005",
+        "pages": "625--632",
+        "publisher": "ACM",
+        "doi": "10.1145/1102351.1102430"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "validation",
+      "role": "Calibration de modèles variés, dont arbres et modèles probabilistes; pertinence directe pour les sélecteurs simples.",
+      "status": "published",
+      "sources": [
+        "https://www.cs.cornell.edu/~alexn/papers/calibration.icml05.crc.rev3.pdf",
+        "https://www.cs.cornell.edu/~caruana/",
+        "https://doi.org/10.1145/1102351.1102430"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "kapoor2023",
+      "type": "article",
+      "fields": {
+        "author": "Kapoor, Sayash and Narayanan, Arvind",
+        "title": "Leakage and the reproducibility crisis in machine-learning-based science",
+        "journal": "Patterns",
+        "year": "2023",
+        "volume": "4",
+        "number": "9",
+        "pages": "100804",
+        "doi": "10.1016/j.patter.2023.100804"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "validation",
+      "role": "Prévenir la fuite entre scénarios apparentés, prétraitement, sélection de modèle et test final.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S2666389923001599"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "efron1979",
+      "type": "article",
+      "fields": {
+        "author": "Efron, Bradley",
+        "title": "Bootstrap Methods: Another Look at the Jackknife",
+        "journal": "The Annals of Statistics",
+        "year": "1979",
+        "volume": "7",
+        "number": "1",
+        "pages": "1--26",
+        "doi": "10.1214/aos/1176344552"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "validation",
+      "role": "Fondement du rééchantillonnage; dans ce projet l’unité doit rester le groupe scénario, pas chaque cellule budget.",
+      "status": "published",
+      "sources": [
+        "https://sites.stat.washington.edu/courses/stat527/s13/readings/ann_stat1979.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "fisher2019",
+      "type": "article",
+      "fields": {
+        "author": "Fisher, Aaron and Rudin, Cynthia and Dominici, Francesca",
+        "title": "All Models are Wrong, but Many are Useful: Learning a Variable's Importance by Studying an Entire Class of Prediction Models Simultaneously",
+        "journal": "Journal of Machine Learning Research",
+        "year": "2019",
+        "volume": "20",
+        "number": "177",
+        "pages": "1--81",
+        "url": "https://www.jmlr.org/papers/v20/18-760.html"
+      },
+      "papers": [
+        1
+      ],
+      "theme": "validation",
+      "role": "Dépendance de l’importance des variables à la classe de modèles; éviter une lecture causale des scores d’importance.",
+      "status": "published",
+      "sources": [
+        "https://www.jmlr.org/papers/v20/18-760.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "koh2021",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Koh, Pang Wei and Sagawa, Shiori and Marklund, Henrik and Xie, Sang Michael and Zhang, Marvin and Balsubramani, Akshay and Hu, Weihua and Yasunaga, Michihiro and Phillips, Richard Lanas and Gao, Irena and Lee, Tony and David, Etienne and Stavness, Ian and Guo, Wei and Earnshaw, Berton and Haque, Imran and Beery, Sara M. and Leskovec, Jure and Kundaje, Anshul and Pierson, Emma and Levine, Sergey and Finn, Chelsea and Liang, Percy",
+        "title": "WILDS: A Benchmark of in-the-Wild Distribution Shifts",
+        "booktitle": "Proceedings of the 38th International Conference on Machine Learning",
+        "series": "Proceedings of Machine Learning Research",
+        "year": "2021",
+        "volume": "139",
+        "pages": "5637--5664",
+        "publisher": "PMLR",
+        "url": "https://proceedings.mlr.press/v139/koh21a.html"
+      },
+      "papers": [
+        1,
+        2,
+        3
+      ],
+      "theme": "generalization",
+      "role": "Évaluation séparée des changements de distribution; benchmark externe, sans preuve de transfert pour les cas énergétiques locaux.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.mlr.press/v139/koh21a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "lindauer2015",
+      "type": "article",
+      "fields": {
+        "author": "Lindauer, Marius and Hoos, Holger H. and Hutter, Frank and Schaub, Torsten",
+        "title": "AutoFolio: An Automatically Configured Algorithm Selector",
+        "journal": "Journal of Artificial Intelligence Research",
+        "year": "2015",
+        "volume": "53",
+        "pages": "745--778",
+        "doi": "10.1613/jair.4726"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Sélection automatique et configuration du sélecteur; référence d’état de l’art, pas obligation de complexifier le routage local.",
+      "status": "published",
+      "sources": [
+        "https://research.uni-hannover.de/en/publications/autofolio-an-automatically-configured-algorithm-selector/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "kotthoff2014",
+      "type": "article",
+      "fields": {
+        "author": "Kotthoff, Lars",
+        "title": "Algorithm Selection for Combinatorial Search Problems: A Survey",
+        "journal": "AI Magazine",
+        "year": "2014",
+        "volume": "35",
+        "number": "3",
+        "pages": "48--60",
+        "doi": "10.1609/aimag.v35i3.2460"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Revue structurante sur les caractéristiques, cibles de sélection et domaines combinatoires.",
+      "status": "published",
+      "sources": [
+        "https://github.com/larskotthoff/assurvey",
+        "https://onlinelibrary.wiley.com/doi/abs/10.1609/aimag.v35i3.2460"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "tornede2020",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Tornede, Alexander and Wever, Marcel and Werner, Stefan and Mohr, Felix and Hüllermeier, Eyke",
+        "title": "Run2Survive: A Decision-theoretic Approach to Algorithm Selection based on Survival Analysis",
+        "booktitle": "Proceedings of the 12th Asian Conference on Machine Learning",
+        "series": "Proceedings of Machine Learning Research",
+        "year": "2020",
+        "volume": "129",
+        "pages": "737--752",
+        "publisher": "PMLR",
+        "url": "https://proceedings.mlr.press/v129/tornede20a.html"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Gestion des temps censurés et décision selon le risque; distinguer temps d’atteinte d’une cible et sortie de processus mesurée ici.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.mlr.press/v129/tornede20a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "pezo2025",
+      "type": "article",
+      "fields": {
+        "author": "Pezo, Catalina and Hochbaum, Dorit and Godoy, Julio and Asín-Achá, Roberto",
+        "title": "Automatic algorithm selection for Pseudo-Boolean optimization with given computational time limits",
+        "journal": "Computers & Operations Research",
+        "year": "2025",
+        "volume": "173",
+        "pages": "106836",
+        "doi": "10.1016/j.cor.2024.106836"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Antécédent central pour une sélection dépendant explicitement du délai et de la qualité; la sortie complète et la validité physique restent spécifiques au projet.",
+      "status": "published",
+      "sources": [
+        "https://hochbaum.ieor.berkeley.edu/html/pub/PBO-anytime-CAOR2024.pdf",
+        "https://www.sciencedirect.com/science/article/pii/S0305054824003083"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "lindauer2017",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Lindauer, Marius and van Rijn, Jan N. and Kotthoff, Lars",
+        "title": "Open Algorithm Selection Challenge 2017: Setup and Scenarios",
+        "booktitle": "Proceedings of the Open Algorithm Selection Challenge",
+        "series": "Proceedings of Machine Learning Research",
+        "year": "2017",
+        "volume": "79",
+        "pages": "1--7",
+        "publisher": "PMLR",
+        "url": "https://proceedings.mlr.press/v79/lindauer17a.html"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Protocoles de comparaison de sélecteurs et scénarios de référence.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.mlr.press/v79/lindauer17a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "elkan2001",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Elkan, Charles",
+        "title": "The Foundations of Cost-Sensitive Learning",
+        "booktitle": "Proceedings of the Seventeenth International Joint Conference on Artificial Intelligence",
+        "year": "2001",
+        "pages": "973--977",
+        "url": "https://ijcai.org/proceedings/2001/133"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Distinguer précision de classification, coûts d’erreurs et utilité de la décision; ici la cible primaire est le succès conjoint.",
+      "status": "published",
+      "sources": [
+        "https://ijcai.org/proceedings/2001/133"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "fischetti2003",
+      "type": "article",
+      "fields": {
+        "author": "Fischetti, Matteo and Lodi, Andrea",
+        "title": "Local branching",
+        "journal": "Mathematical Programming",
+        "year": "2003",
+        "volume": "98",
+        "number": "1--3",
+        "pages": "23--47",
+        "doi": "10.1007/s10107-003-0395-5"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "repair_search",
+      "role": "Voisinages MILP autour d’un candidat; antécédent conceptuel de réparation/amélioration, sans prétendre que la cascade locale implémente local branching.",
+      "status": "published",
+      "sources": [
+        "https://publications.polymtl.ca/25914/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "danna2005",
+      "type": "article",
+      "fields": {
+        "author": "Danna, Emilie and Rothberg, Edward and Le Pape, Claude",
+        "title": "Exploring relaxation induced neighborhoods to improve MIP solutions",
+        "journal": "Mathematical Programming",
+        "year": "2005",
+        "volume": "102",
+        "number": "1",
+        "pages": "71--90",
+        "doi": "10.1007/s10107-004-0518-7"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "repair_search",
+      "role": "RINS et plongeons guidés; situer les améliorations par solveur face à une proposition apprise.",
+      "status": "published",
+      "sources": [
+        "https://link.springer.com/article/10.1007/s10107-004-0518-7"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "fischetti2005",
+      "type": "article",
+      "fields": {
+        "author": "Fischetti, Matteo and Glover, Fred and Lodi, Andrea",
+        "title": "The feasibility pump",
+        "journal": "Mathematical Programming",
+        "year": "2005",
+        "volume": "104",
+        "pages": "91--104",
+        "doi": "10.1007/s10107-004-0570-3"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "repair_search",
+      "role": "La faisabilité des entiers est un problème distinct de l’arrondi; référence de contexte, pas identité algorithmique.",
+      "status": "published",
+      "sources": [
+        "https://leeds-faculty.colorado.edu/glover/fred%20pubs/347%20-%20feasibility%20pump%20-%20w%20Fischetti%20%26%20Lodi%20published.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "pedregosa2011",
+      "type": "article",
+      "fields": {
+        "author": "Pedregosa, Fabian and Varoquaux, Gaël and Gramfort, Alexandre and Michel, Vincent and Thirion, Bertrand and Grisel, Olivier and Blondel, Mathieu and Prettenhofer, Peter and Weiss, Ron and Dubourg, Vincent and Vanderplas, Jake and Passos, Alexandre and Cournapeau, David and Brucher, Matthieu and Perrot, Matthieu and Duchesnay, Édouard",
+        "title": "Scikit-learn: Machine Learning in Python",
+        "journal": "Journal of Machine Learning Research",
+        "year": "2011",
+        "volume": "12",
+        "number": "85",
+        "pages": "2825--2830",
+        "url": "https://www.jmlr.org/papers/v12/pedregosa11a.html"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "software",
+      "role": "Bibliothèque prévue pour les modèles statistiques et le routage; préciser la version effectivement utilisée lors des futurs calculs.",
+      "status": "published",
+      "sources": [
+        "https://www.jmlr.org/papers/v12/pedregosa11a.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "li2025foundation",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Li, Sirui and Kulkarni, Janardhan and Menache, Ishai and Wu, Cathy and Li, Beibin",
+        "title": "Towards Foundation Models for Mixed Integer Linear Programming",
+        "booktitle": "International Conference on Learning Representations",
+        "year": "2025",
+        "url": "https://openreview.net/forum?id=6yENDA7J4G"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "generalization",
+      "role": "Diversité des classes MILP et transfert hors des classes d’entraînement; contexte récent pour les limites des cohortes synthétiques.",
+      "status": "published",
+      "sources": [
+        "https://openreview.net/pdf?id=6yENDA7J4G",
+        "https://www.microsoft.com/en-us/research/publication/towards-foundation-models-for-mixed-integer-linear-programming/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "demars2021",
+      "type": "article",
+      "fields": {
+        "author": "de Mars, Patrick and O'Sullivan, Aidan",
+        "title": "Applying reinforcement learning and tree search to the unit commitment problem",
+        "journal": "Applied Energy",
+        "year": "2021",
+        "volume": "302",
+        "pages": "117519",
+        "doi": "10.1016/j.apenergy.2021.117519"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Apprentissage guidant une recherche UC sous incertitude; les informations et objectifs diffèrent du benchmark déterministe local.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S0306261921008990"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "buchheim2023",
+      "type": "article",
+      "fields": {
+        "author": "Buchheim, Christoph and Hügging, Maja",
+        "title": "The polytope of binary sequences with bounded variation",
+        "journal": "Discrete Optimization",
+        "year": "2023",
+        "volume": "48",
+        "pages": "100776",
+        "doi": "10.1016/j.disopt.2023.100776"
+      },
+      "papers": [
+        1
+      ],
+      "theme": "unit_commitment",
+      "role": "Lecture polyédrale des transitions binaires; contexte pour des proxies de variabilité, sans assimiler ceux-ci à une mesure exacte de difficulté.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S157252862300018X"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "buchheim_polytope_2023"
+      ]
+    },
+    {
+      "key": "leytonbrown2002",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Leyton-Brown, Kevin and Nudelman, Eugene and Shoham, Yoav",
+        "title": "Learning the Empirical Hardness of Optimization Problems: The Case of Combinatorial Auctions",
+        "booktitle": "Principles and Practice of Constraint Programming -- CP 2002",
+        "series": "Lecture Notes in Computer Science",
+        "volume": "2470",
+        "year": "2002",
+        "pages": "556--572",
+        "publisher": "Springer",
+        "doi": "10.1007/3-540-46135-3_37"
+      },
+      "papers": [
+        1,
+        3
+      ],
+      "theme": "instance_difficulty",
+      "role": "Antécédent des modèles de difficulté empirique à partir de caractéristiques, avec une formulation résolue par CPLEX.",
+      "status": "published",
+      "sources": [
+        "https://link.springer.com/chapter/10.1007/3-540-46135-3_37"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "kadioglu2010",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Kadioglu, Serdar and Malitsky, Yuri and Sellmann, Meinolf and Tierney, Kevin",
+        "title": "ISAC -- Instance-Specific Algorithm Configuration",
+        "booktitle": "Proceedings of the 19th European Conference on Artificial Intelligence",
+        "year": "2010",
+        "url": "https://ai.dmi.unibas.ch/research/reading_group/kadioglu-et-al-ecai2010.pdf"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Configuration conditionnée par groupes d’instances; distinction à conserver avec le choix entre quatre méthodes figées.",
+      "status": "published",
+      "sources": [
+        "https://ai.dmi.unibas.ch/research/reading_group/kadioglu-et-al-ecai2010.pdf",
+        "https://webarchive.di.uminho.pt/ecai2010.appia.pt/index.php%3Foption%3Dcom_content%26task%3Dview%26id%3D73%26Itemid%3D124.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [],
+      "metadata_note": "Version auteur et acceptation ECAI 2010 identifiées; pagination et DOI non ajoutés faute de confirmation sur une source primaire accessible."
+    },
+    {
+      "key": "kadioglu2011",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Kadioglu, Serdar and Malitsky, Yuri and Sabharwal, Ashish and Samulowitz, Horst and Sellmann, Meinolf",
+        "title": "Algorithm Selection and Scheduling",
+        "booktitle": "Principles and Practice of Constraint Programming -- CP 2011",
+        "series": "Lecture Notes in Computer Science",
+        "volume": "6876",
+        "year": "2011",
+        "pages": "454--469",
+        "publisher": "Springer",
+        "doi": "10.1007/978-3-642-23786-7_35"
+      },
+      "papers": [
+        3
+      ],
+      "theme": "algorithm_selection",
+      "role": "Sélection et ordonnancement avec budget; mécanisme plus large que le routage mono-action proposé.",
+      "status": "published",
+      "sources": [
+        "https://link.springer.com/chapter/10.1007/978-3-642-23786-7_35",
+        "https://www.cs.cornell.edu/~sabhar/publications/alg-selection-scheduling-CP2011.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "huang2021",
+      "type": "article",
+      "fields": {
+        "author": "Huang, Jianqiu and Pan, Kai and Guan, Yongpei",
+        "title": "Cutting planes for security-constrained unit commitment with regulation reserve",
+        "journal": "IISE Transactions",
+        "year": "2021",
+        "volume": "53",
+        "number": "4",
+        "pages": "437--452",
+        "doi": "10.1080/24725854.2020.1823533"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "unit_commitment",
+      "role": "Lien entre réserves, structure polyédrale et difficulté de résolution; les contraintes du papier ne sont pas toutes celles du modèle local.",
+      "status": "published",
+      "sources": [
+        "https://research.polyu.edu.hk/en/publications/cutting-planes-for-security-constrained-unit-commitment-with-regu/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "huang_cutting_2021"
+      ]
+    },
+    {
+      "key": "donon2019",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Donon, Balthazar and Donnot, Benjamin and Guyon, Isabelle and Marot, Antoine",
+        "title": "Graph Neural Solver for Power Systems",
+        "booktitle": "2019 International Joint Conference on Neural Networks",
+        "year": "2019",
+        "pages": "1--8",
+        "doi": "10.1109/IJCNN.2019.8851855"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "power_graphs",
+      "role": "Transfert en taille pour calcul de flux; domaine adjacent, distinct de l’UC mixte entier et de la certification de faisabilité.",
+      "status": "published",
+      "sources": [
+        "https://ieeexplore.ieee.org/document/8851855/",
+        "https://hal.science/hal-02175989v1/file/Graph_Neural_Solver-7.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "donon_graph_2019"
+      ]
+    },
+    {
+      "key": "liu2023",
+      "type": "article",
+      "fields": {
+        "author": "Liu, Shaohui and Wu, Chengyang and Zhu, Hao",
+        "title": "Topology-Aware Graph Neural Networks for Learning Feasible and Adaptive AC-OPF Solutions",
+        "journal": "IEEE Transactions on Power Systems",
+        "year": "2023",
+        "volume": "38",
+        "number": "6",
+        "pages": "5660--5670",
+        "doi": "10.1109/TPWRS.2022.3230555"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "power_graphs",
+      "role": "Adaptation topologique et régularisation physique en AC-OPF; ne pas assimiler adaptation avec réentraînement et transfert figé.",
+      "status": "published",
+      "sources": [
+        "https://arxiv.org/abs/2205.10129"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "liu_topology-aware_2023"
+      ],
+      "metadata_note": "Titre, auteurs et méthode relus dans le dépôt auteur arXiv. Métadonnées de la version IEEE conservées du fichier MILP-GNN.bib fourni; page éditeur non récupérable pendant cette recherche."
+    },
+    {
+      "key": "zhang2024risk",
+      "type": "misc",
+      "fields": {
+        "author": "Zhang, Yadong and Karve, Pranav M. and Mahadevan, Sankaran",
+        "title": "Graph neural networks for power grid operational risk assessment under evolving grid topology",
+        "year": "2024",
+        "eprint": "2405.07343",
+        "archivePrefix": "arXiv",
+        "url": "https://arxiv.org/abs/2405.07343",
+        "note": "Preprint"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "power_graphs",
+      "role": "Prédiction du risque physique et topologies changeantes; distinguer prédiction de risque et prédiction du succès informatique.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2405.07343"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "zhang_graph_2024"
+      ]
+    },
+    {
+      "key": "zeng2024",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Zeng, Hongtai and Yang, Chao and Zhou, Yanzhen and Yang, Cheng and Guo, Qinglai",
+        "title": "GLinSAT: The General Linear Satisfiability Neural Network Layer By Accelerated Gradient Descent",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "year": "2024",
+        "volume": "37",
+        "url": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/dd73f39426a03131c38c8d943153d44b-Abstract-Conference.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "repair_search",
+      "role": "Projection différentiable sous contraintes linéaires; distinguer satisfiabilité linéaire bornée et intégralité de la solution UC.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper_files/paper/2024/hash/dd73f39426a03131c38c8d943153d44b-Abstract-Conference.html"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "zeng_glinsat_2024"
+      ]
+    },
+    {
+      "key": "donti2017",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Donti, Priya L. and Amos, Brandon and Kolter, J. Zico",
+        "title": "Task-based End-to-end Model Learning in Stochastic Optimization",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "year": "2017",
+        "volume": "30",
+        "url": "https://proceedings.neurips.cc/paper/2017/file/3fc2c60b5782f641f76bcefc39fb2392-Paper.pdf"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "decision_focused",
+      "role": "Aligner prédiction et coût de décision, avec applications énergétiques; distinct de l’imitation de stratégies connues.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper/2017/file/3fc2c60b5782f641f76bcefc39fb2392-Paper.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "donti_task_2017"
+      ]
+    },
+    {
+      "key": "wilder2019",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Wilder, Bryan and Dilkina, Bistra and Tambe, Milind",
+        "title": "Melding the Data-Decisions Pipeline: Decision-Focused Learning for Combinatorial Optimization",
+        "booktitle": "Proceedings of the AAAI Conference on Artificial Intelligence",
+        "year": "2019",
+        "volume": "33",
+        "number": "1",
+        "pages": "1658--1665",
+        "doi": "10.1609/aaai.v33i01.33011658"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "decision_focused",
+      "role": "Apprentissage à travers une relaxation de problème combinatoire; cadre voisin à distinguer du générateur latent local.",
+      "status": "published",
+      "sources": [
+        "https://ojs.aaai.org/index.php/AAAI/article/view/3982"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "wilder_melding_2019"
+      ]
+    },
+    {
+      "key": "elmachtoub2022",
+      "type": "article",
+      "fields": {
+        "author": "Elmachtoub, Adam N. and Grigas, Paul",
+        "title": "Smart ``Predict, then Optimize''",
+        "journal": "Management Science",
+        "year": "2022",
+        "volume": "68",
+        "number": "1",
+        "pages": "9--26",
+        "doi": "10.1287/mnsc.2020.3922"
+      },
+      "papers": [
+        2,
+        3
+      ],
+      "theme": "decision_focused",
+      "role": "Évaluer l’effet aval d’une prédiction; ne pas présenter le routage ou JEPA comme une implémentation de SPO.",
+      "status": "published",
+      "sources": [
+        "https://pubsonline.informs.org/doi/abs/10.1287/mnsc.2020.3922"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "elmachtoub_smart_2022"
+      ]
+    },
+    {
+      "key": "mandi2024",
+      "type": "article",
+      "fields": {
+        "author": "Mandi, Jayanta and Kotary, James and Berden, Senne and Mulamba, Maxime and Bucarey, Victor and Guns, Tias and Fioretto, Ferdinando",
+        "title": "Decision-Focused Learning: Foundations, State of the Art, Benchmark and Future Opportunities",
+        "journal": "Journal of Artificial Intelligence Research",
+        "year": "2024",
+        "volume": "80",
+        "pages": "1623--1701",
+        "doi": "10.1613/jair.1.15320"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "decision_focused",
+      "role": "Revue et benchmark pour distinguer apprentissage de paramètres, de décisions et de politiques de résolution.",
+      "status": "published",
+      "sources": [
+        "https://www.jair.org/index.php/jair/article/view/15320",
+        "https://arxiv.org/abs/2307.13565"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "mandi_decision_2024"
+      ],
+      "metadata_note": "Volume 80 retenu selon JAIR, qui prime sur des notices institutionnelles indiquant 81."
+    },
+    {
+      "key": "mandi2025",
+      "type": "misc",
+      "fields": {
+        "author": "Mandi, Jayanta and Defresne, Marianne and Berden, Senne and Guns, Tias",
+        "title": "Feasibility-Aware Decision-Focused Learning for Predicting Parameters in the Constraints",
+        "year": "2025",
+        "eprint": "2510.04951",
+        "archivePrefix": "arXiv",
+        "url": "https://arxiv.org/abs/2510.04951",
+        "note": "Preprint"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "decision_focused",
+      "role": "Tension entre qualité et faisabilité lorsque les contraintes contiennent des paramètres prédits; contexte différent de la réparation sous paramètres connus.",
+      "status": "preprint",
+      "sources": [
+        "https://arxiv.org/abs/2510.04951"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "mandi_feasibility_2025"
+      ]
+    },
+    {
+      "key": "wu2026",
+      "type": "article",
+      "fields": {
+        "author": "Wu, Yemin and Lu, Shuai and Gu, Wei and Zeng, Bo and Xu, Yijun and Dong, Zhaoyang",
+        "title": "Smart Predict-Then-Optimize-Based Unit Commitment for Integrated Energy Systems",
+        "journal": "IEEE Transactions on Industrial Informatics",
+        "year": "2026",
+        "volume": "22",
+        "number": "7",
+        "pages": "5736--5747",
+        "doi": "10.1109/TII.2026.3671325"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "decision_focused",
+      "role": "Application énergétique récente de SPO à des prévisions; différencier prévision des entrées et génération d’une stratégie.",
+      "status": "published",
+      "sources": [
+        "https://doi.org/10.1109/tii.2026.3671325",
+        "https://scholars.cityu.edu.hk/en/publications/smart-predict-then-optimize-based-unit-commitment-for-integrated-/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "wu_smart_2026"
+      ]
+    },
+    {
+      "key": "hu2020",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Hu, Ziniu and Dong, Yuxiao and Wang, Kuansan and Sun, Yizhou",
+        "title": "Heterogeneous Graph Transformer",
+        "booktitle": "Proceedings of The Web Conference 2020",
+        "year": "2020",
+        "publisher": "ACM",
+        "doi": "10.1145/3366423.3380027"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "architecture",
+      "role": "Attention avec types de nœuds et de relations; référence conceptuelle, le sigle HTE local ne signifie pas que HGT est implémenté à l’identique.",
+      "status": "published",
+      "sources": [
+        "https://arxiv.org/pdf/2003.01332"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [],
+      "metadata_note": "DOI et conférence confirmés dans la première page du manuscrit auteur; pagination finale omise, distincte de la longueur du préprint."
+    },
+    {
+      "key": "lecun2006",
+      "type": "misc",
+      "fields": {
+        "author": "LeCun, Yann and Chopra, Sumit and Hadsell, Raia and Ranzato, Marc'Aurelio and Huang, Fu Jie",
+        "title": "A Tutorial on Energy-Based Learning",
+        "year": "2006",
+        "url": "https://yann.lecun.org/exdb/publis/pdf/lecun-06.pdf",
+        "note": "Tutorial manuscript, version 1.0, 19 August 2006"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "energy_models",
+      "role": "Définition de l’énergie comme fonction de compatibilité et distinction entre inférence, apprentissage et normalisation probabiliste.",
+      "status": "technical_manuscript",
+      "sources": [
+        "https://yann.lecun.org/exdb/publis/pdf/lecun-06.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "du2019",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Du, Yilun and Mordatch, Igor",
+        "title": "Implicit Generation and Modeling with Energy Based Models",
+        "booktitle": "Advances in Neural Information Processing Systems",
+        "year": "2019",
+        "volume": "32",
+        "url": "https://papers.nips.cc/paper_files/paper/2019/hash/378a063b8fdb1db941e34f4bde584c7d-Abstract.html"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "energy_models",
+      "role": "Entraînement et génération avec EBM continus; titre final différent de la version arXiv sur la généralisation.",
+      "status": "published",
+      "sources": [
+        "https://proceedings.neurips.cc/paper_files/paper/2019/file/378a063b8fdb1db941e34f4bde584c7d-Paper.pdf"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [],
+      "metadata_note": "Titre final NeurIPS: Implicit Generation and Modeling with Energy Based Models; ne pas créer de doublon avec le titre arXiv Implicit Generation and Generalization in Energy-Based Models."
+    },
+    {
+      "key": "he2024",
+      "type": "inproceedings",
+      "fields": {
+        "author": "He, Xuan and Wen, Honglin and Zhang, Yufan and Chen, Yize and Tsang, Danny H. K.",
+        "title": "Fast Unit Commitment Constraint Screening with Learning-Based Cost Model",
+        "booktitle": "2024 IEEE International Conference on Communications, Control, and Computing Technologies for Smart Grids",
+        "year": "2024",
+        "pages": "295--300",
+        "doi": "10.1109/SmartGridComm60555.2024.10738113"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Réduction des contraintes par modèle de coût; méthode d’accélération distincte des candidats appris.",
+      "status": "published",
+      "sources": [
+        "https://researchportal.hkust.edu.hk/en/publications/fast-unit-commitment-constraint-screening-with-learning-based-cos/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "wei2025",
+      "type": "article",
+      "fields": {
+        "author": "Wei, Lishen and Ai, Xiaomeng and Fang, Jiakun and Cui, Shichang and Gao, Liqian and Li, Kun and Wen, Jinyu",
+        "title": "Data-augmentation acceleration framework by graph neural network for near-optimal unit commitment",
+        "journal": "Applied Energy",
+        "year": "2025",
+        "volume": "377",
+        "pages": "124332",
+        "doi": "10.1016/j.apenergy.2024.124332"
+      },
+      "papers": [
+        2
+      ],
+      "theme": "learning_uc",
+      "role": "Solutions proches de l’optimum pour augmenter l’apprentissage puis réparation; voisin direct du pipeline à documenter dans l’état de l’art.",
+      "status": "published",
+      "sources": [
+        "https://www.sciencedirect.com/science/article/pii/S030626192401715X"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": []
+    },
+    {
+      "key": "pjetri2025",
+      "type": "inproceedings",
+      "fields": {
+        "author": "Pjetri, Gerild and Mohapatra, Anurag and Baecker, Beneharo Reveron and Hock, Maximilian and Hamacher, Thomas",
+        "title": "Graph Neural Network Surrogates for Energy System Modeling",
+        "booktitle": "2025 IEEE PES Innovative Smart Grid Technologies Conference Europe",
+        "year": "2025",
+        "doi": "10.1109/ISGTEurope64741.2025.11305443"
+      },
+      "papers": [
+        1,
+        2
+      ],
+      "theme": "power_graphs",
+      "role": "Prédiction rapide de sorties d’un modèle énergétique et identification de cas critiques; surrogate de planification, pas résolution UC complète sous délai.",
+      "status": "published",
+      "sources": [
+        "https://ieeexplore.ieee.org/abstract/document/11305443",
+        "https://portal.fis.tum.de/en/publications/graph-neural-network-surrogates-for-energy-system-modeling/"
+      ],
+      "verified_on": "2026-11-05",
+      "original_keys": [
+        "pjetri_graph_nodate"
+      ],
+      "metadata_note": "Remplace la notice Authorea sans date du fichier initial par la publication ISGT Europe 2025."
+    }
+  ]
+}

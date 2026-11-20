@@ -1,0 +1,11 @@
+{
+  "analysis": "C:\\Users\\coudr\\OneDrive\\projects\\benchmark\\benchmark_milp_gnn\\research\\paper2_revision\\runs\\methods_v1\\analyses\\historical_b9ae4514449c597f",
+  "receipt_sha256": "a79c0c67659a85ad7718c25b562c007968e4853edd5a1508ac6e91c20843a9e3",
+  "source": {
+    "file": "C:\\Users\\coudr\\OneDrive\\projects\\benchmark\\benchmark_milp_gnn\\research\\three_papers\\runs\\v2_service_by_deadline\\main_rows.json",
+    "sha256": "1fa0209c5600c0041348bc84e4900512c5736786dd14fb070f2fcc7264f875d7",
+    "source_freeze": "7a1406992b01c7b5b038242b44a85806312a9a27bebbf999b7f7324c3d48e291",
+    "validation": "Reused sealed physical/process-validated extraction; no solver rerun"
+  },
+  "publication": "No new solver or training result is inferred from an absent record."
+}

@@ -1,0 +1,147 @@
+% Prepared on 19 November 2026 as an insertion-ready results subsection.
+% Evidence: research/paper1_revision/runs/revision_v1/diagnostics/final_external_v1_20261119T085611Z
+% Reproduction: python -m research.paper1_revision.diagnostics.final_external_v1
+% Integration also requires updating the abstract, evidence-status section,
+% discussion and conclusion, which currently describe an ongoing campaign.
+
+\subsection{Completed independent evaluation and descriptor transfer}
+\label{sec:final_independent_descriptors}
+The independent campaign completed all 3,067 planned executions on
+19 November 2026. Its predictive evaluation comprises 2,000 paired
+scenario--deadline observations from 400 new scenarios, with five deadlines
+per scenario (5, 10, 30, 60 and 120 seconds). Each of the four batches
+contains 100 scenarios: unfiltered draws, altered time structure, modified
+topology and decoupled parameters. All 400 reference runs delivered a valid
+solution; 389 references were certified optimal. The campaign also completed
+217 historical reference upgrades and 450 timing repetitions. The comparisons
+below use the predictor archive frozen before independent execution. The
+archive's integrity checks passed, and all 2,000 observations were matched to
+the saved predictions. The statistical sampling unit is the scenario.
+
+The primary descriptor comparison uses all 22 original raw generator
+descriptors or all 22 recomputed MILP descriptors, each standardized using
+historical training data. The continuous predictors are the frozen affine
+models with nonnegative coefficients; E and ES use their frozen logistic
+classifiers. Across all five continuous preferences, the original
+unprojected comparison favors the generator descriptors. Realized-descriptor
+MSE ranges from 0.40769 to 0.65939, compared with 0.04308 to 0.05618 for the
+generator descriptors. The realized affine predictions reach 6.97268 even
+though the target is bounded by one.
+
+As a secondary sensitivity analysis, we project the continuous predictions
+of every representation onto $[0,1]$. This substantially reduces the realized
+models' losses, but generator descriptors retain lower pooled MSE for all
+five preferences (Table~\ref{tab:final_independent_descriptors}). Their MSE
+is 12.3--41.4\% lower than that of the full realized representation after
+projection. These targets are preference-weighted combinations of cost,
+unserved energy, elapsed time and direct thermal CO$_2$ intensity. Equal
+preference assigns one quarter to each component; each priority assigns
+0.6 to the named component and $0.4/3$ to each remaining component.
+
+\begin{table}[htbp]
+\centering\small\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lrrrrr}
+\toprule
+Target & Generator & MILP & MILP, B9 limited & Trio & Dimensions\\
+\midrule
+Equal & 44.35 & 52.75 & 45.73 & 35.25 & 29.23\\
+Cost priority & 55.56 & 63.32 & 55.46 & 41.79 & 34.27\\
+CO$_2$ priority & 46.01 & 58.65 & 50.42 & 39.62 & 35.50\\
+Time priority & 43.07 & 73.52 & 42.00 & 38.31 & 31.14\\
+Service priority & 47.38 & 60.54 & 51.86 & 39.80 & 35.65\\
+\midrule
+Economic success E & 83.38 & 145.27 & 86.28 & 59.93 & 66.27\\
+Economic--service success ES & 128.72 & 131.52 & 132.02 & 98.00 & 107.86\\
+\bottomrule
+\end{tabular}
+\caption{Independent-test mean squared error multiplied by $10^3$; lower is
+better. Each entry averages 2,000 observations with equal weights. Continuous
+predictions are projected onto $[0,1]$; binary entries are Brier losses.
+Generator and MILP use 22 descriptors. Trio uses zones, unfixed binary
+variables and thermal-zone fraction. Dimensions uses zones, time steps,
+lines, variables, unfixed binaries and active constraints. The B9-limited
+column is a post-hoc sensitivity that clips the MILP B9 input to its
+historical range while retaining every fitted coefficient. It is distinct
+from the historical refitted B9 ablation.}
+\label{tab:final_independent_descriptors}
+\end{table}
+
+For pooled comparisons, 2,000 paired bootstrap resamples draw scenarios
+within each batch and retain their five deadlines together. Simultaneous
+95\% intervals across the seven generator--MILP target contrasts exclude
+zero in favor of generator descriptors for the five projected continuous
+targets and for E. For equal preference, the projected MILP-minus-generator
+MSE difference is 0.00840, with simultaneous interval [0.00268, 0.01412].
+For ES, losses are 0.12872 and 0.13152 for generator and MILP descriptors,
+respectively, with difference 0.00280 and interval [$-0.01174$, 0.01735].
+The interim ES advantage of the realized representation therefore does not
+persist in the complete point estimates, while the final comparison remains
+statistically unresolved. Restricting the analysis to the 389 scenarios
+with certified references preserves the direction of all seven pooled
+generator--MILP differences.
+
+The aggregate ordering varies with the distribution shift. Within the
+unfiltered batch, the full realized representation has lower projected MSE
+for all five continuous preferences. For equal preference, losses are
+0.03127 for MILP and 0.03414 for generator descriptors. Within the topology
+batch, the corresponding losses are 0.07198 and 0.04150, and time-priority
+losses are 0.16028 and 0.03331. These batch-level statements describe point
+estimates. The ordering of the two representations depends on the sampled
+distribution shift.
+
+\paragraph{B9 and extrapolation.}
+The historical networks are trees, so $B9^{\rm M}=|\mathcal L|/N=1-1/N$;
+its training range is [0.75, 0.99412]. In the independent topology batch,
+75 scenarios exceed that range, reaching 2.97297. They contribute 375 of
+the 2,000 observations; every other independent scenario remains within
+the historical B9 range. This is the high-B9 counterpart of the low-B9
+extrapolation diagnosed under historical low-criticality family holdout.
+
+To isolate the fitted predictor's sensitivity, we replace B9 by the nearest
+endpoint of its historical range only when it lies outside that range,
+retain the other inputs and fitted coefficients, and project the resulting
+continuous output. Equal-preference MILP MSE falls from 0.05275 to 0.04573,
+accounting for 83.6\% of its pooled gap to the generator comparator under
+this diagnostic intervention. Time-priority MSE falls from 0.07352 to
+0.04200, slightly below the generator value of 0.04307. The intervention
+also reduces CO$_2$- and service-priority losses, but residual differences
+remain. All five continuous improvements have positive lower bounds in
+simultaneous intervals over these five diagnostic contrasts. E Brier loss
+falls from 0.14527 to 0.08628, whereas ES slightly worsens from 0.13152 to
+0.13202. B9 thus accounts for a substantial, target-dependent part of the
+fitted model's transfer error. This decomposition provides predictive
+attribution; causal interpretation of network effects remains outside its
+scope.
+
+The bounded fractional-logistic regressions and refitted B9 ablations
+reported in the historical follow-up remain exploratory development
+results. They were outside the pre-execution predictor archive evaluated
+here. Independent validation of those fitted alternatives remains
+outstanding. Limiting an input at fixed coefficients and refitting a model
+after deleting that input address different questions.
+
+\paragraph{Compact predictors.}
+The frozen trio of zone count, unfixed binary count and thermal-zone fraction
+has 11.1--24.8\% lower projected MSE than the full generator representation
+across the five continuous preferences. Its E and ES Brier losses are
+0.05993 and 0.09800, reductions of 28.1\% and 23.9\%, respectively.
+Simultaneous intervals over its 14 pooled contrasts against the full
+generator and full MILP representations favor the trio throughout. The
+six-dimensional size representation further reduces continuous MSE by
+10.4--18.7\% relative to the trio, with simultaneous intervals over seven
+targets favoring it for all five continuous targets. For ES, the trio has
+lower loss; for E, their difference remains unresolved. These results
+support compact structural predictors as strong comparators, while leaving
+room for improvement beyond three indicators.
+
+The pooled summaries, projection and B9 sensitivity were specified after
+inspection of interim test outcomes. Their intervals are conditional on
+the fitted predictors and adjust within the stated contrast families;
+they omit refitting uncertainty and post-selection uncertainty. The
+predeclared primary comparison remains the unprojected frozen prediction
+comparison by deadline and batch. The completed test uses independent
+draws and controlled perturbations from the same generator lineage and
+HiGHS implementation. Generalization to other grid datasets, solvers or
+hardware remains to be evaluated. Realized feature construction is also
+excluded from the archived solve deadlines, so the predictive comparison
+alone leaves net online decision benefit unmeasured.

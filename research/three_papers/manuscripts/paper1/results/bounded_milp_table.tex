@@ -1,0 +1,20 @@
+\begin{table}[htbp]\centering\small
+\begin{tabular}{lrrrr}\toprule
+Preference & \shortstack{Projected\\linear} & \shortstack{Linear\\without B9} & \shortstack{Fractional\\logit} & \shortstack{Fractional logit\\without B9}\\\midrule
+\multicolumn{5}{l}{\textit{Scenario-grouped validation}}\\
+Equal & 0.01337 & 0.01401 & 0.00992 & 0.00992\\
+Cost & 0.02313 & 0.02386 & 0.01605 & 0.01604\\
+CO$_2$ & 0.01705 & 0.01748 & 0.01317 & 0.01317\\
+Time & 0.00828 & 0.00899 & 0.00660 & 0.00670\\
+Service & 0.01694 & 0.01757 & 0.01253 & 0.01253\\
+\addlinespace
+\multicolumn{5}{l}{\textit{Family-held-out validation}}\\
+Equal & 0.03605 & 0.05384 & 0.01504 & 0.01451\\
+Cost & 0.06047 & 0.08298 & 0.02529 & 0.02491\\
+CO$_2$ & 0.03376 & 0.05674 & 0.02437 & 0.01943\\
+Time & 0.01774 & 0.03702 & 0.01314 & 0.01099\\
+Service & 0.04410 & 0.06225 & 0.01776 & 0.01730\\
+\bottomrule
+\end{tabular}
+\caption{Exploratory historical MSE using realized MILP descriptors. Each cell averages 3,000 observations (600 scenarios, five deadlines). Both linear columns deliver predictions projected onto $[0,1]$; fractional-logistic outputs are bounded by their link. Models and tuning are specific to each deadline. The independent campaign contributes no outcomes.}\label{tab:bounded_milp}
+\end{table}

@@ -1,0 +1,8 @@
+paper1_criticality.tex: 467 lines; balanced braces/environments; 1 resolved references; 3 resolved citation keys.
+paper2_methods_generalization.tex: 507 lines; balanced braces/environments; 3 resolved references; 3 resolved citation keys.
+paper3_routing.tex: 653 lines; balanced braces/environments; 5 resolved references; 3 resolved citation keys.
+Final evidence JSON and figure are unchanged copies of the existing analysis.
+Campaign source-file hashes still match the archived analysis.
+Main aggregate and routing-ceiling tables match the archived final statistics.
+No solver, training, sensitivity sweep, new experiment or LaTeX compilation executed.
+PDF rendering and layout have not been verified.

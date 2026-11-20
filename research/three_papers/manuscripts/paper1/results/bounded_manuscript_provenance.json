@@ -1,0 +1,20 @@
+{
+  "scope": "Historical exploratory results only; no independent outcomes",
+  "source_hashes": {
+    "research\\paper1_revision\\runs\\revision_v1\\bounded_ablation_v1\\comparison.csv": "95481e1b141e5f4d59cba0be05d44fc0b2bed8456a8e5b5bfbb92f78e483e02b",
+    "research\\paper1_revision\\runs\\revision_v1\\bounded_ablation_v1\\lofo_family_scores.csv": "4d54e97b1943d5bf7b141e385301ae797858c65fe8b72ed818cd7b59e08e33bd",
+    "research\\paper1_revision\\runs\\revision_v1\\bounded_ablation_v1\\paired_contrasts.csv": "18a71c52d4510c0f20490be62286cb64ef1c4409f5d534250ca5819d725e4ccd",
+    "research\\paper1_revision\\runs\\revision_v1\\bounded_ablation_v1\\design.json": "a1c199e6482c1bded1566aad2b0184f864d4972a8af8a839e27ebc66dce29742",
+    "research\\paper1_revision\\runs\\revision_v1\\bounded_ablation_v1\\validation.json": "79571b44d4294ec7b3c76db8f8c55ea669d0391aa8220c34fd8bc31745350959"
+  },
+  "table_hashes": {
+    "research\\three_papers\\manuscripts\\paper1\\results\\bounded_milp_table.tex": "167ff68d9fcd000af8d942fb13bcd8517fcc5d8a64d28b779cfc36067f3420a8",
+    "research\\three_papers\\manuscripts\\paper1\\results\\bounded_legacy_table.tex": "b1f7013087691caa3d2cd33e504124e5dba2777d497942b9795301265b05368c",
+    "research\\three_papers\\manuscripts\\paper1\\results\\bounded_low_family_table.tex": "774df44f8e27c5a0ce30f975c4e8c5bc7c4ca60f91b7a886c47af803428a63b7",
+    "research\\three_papers\\manuscripts\\paper1\\results\\bounded_contrasts_table.tex": "d727fe51d3804b38a4315839f72ed5153233835107b03ae65f10d047dec36ca8"
+  },
+  "exporter_sha256": "99260269ea64f74103f200fd98d6739d910f79f5ecd9da240be3b6bef498ca42",
+  "frozen_comparison_unchanged": true,
+  "model_refits": 0,
+  "milp_solves": 0
+}

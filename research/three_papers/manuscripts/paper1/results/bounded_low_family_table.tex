@@ -1,0 +1,13 @@
+\begin{table}[htbp]\centering\small
+\begin{tabular}{lrrrr}\toprule
+Preference & \shortstack{Projected\\linear} & \shortstack{Linear\\without B9} & \shortstack{Fractional\\logit} & \shortstack{Fractional logit\\without B9}\\\midrule
+\multicolumn{5}{l}{\textit{Low-criticality family omitted from training}}\\
+Equal & 0.00560 & 0.13076 & 0.00394 & 0.00291\\
+Cost & 0.01157 & 0.15537 & 0.00110 & 0.00093\\
+CO$_2$ & 0.00462 & 0.13268 & 0.00360 & 0.00346\\
+Time & 0.01006 & 0.10080 & 0.01602 & 0.01293\\
+Service & 0.00205 & 0.14245 & 0.00116 & 0.00107\\
+\bottomrule
+\end{tabular}
+\caption{Historical MSE on the 100 low-criticality scenarios, averaging five deadlines per scenario. The bounded model without B9 improves four preferences relative to the projected linear comparator, but time priority remains worse. These 500 rows per preference are not independent scenarios.}\label{tab:bounded_low_family}
+\end{table}

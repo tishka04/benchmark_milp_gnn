@@ -1,0 +1,21 @@
+\begin{figure}[htbp]\centering
+\begin{tikzpicture}[node distance=6mm and 7mm,every node/.style={font=\scriptsize},
+ block/.style={draw,rounded corners,align=center,minimum height=9mm,text width=23mm},
+ arrow/.style={-{Stealth},thick}]
+\node[block,fill=scenarioBlue!12] (s) {Fixed scenario};
+\node[block,right=of s,fill=graphGreen!12] (g) {Graph and online encoder};
+\node[block,right=of g,fill=encoderPurple!12] (z) {Latent predictor};
+\node[block,right=of z,fill=ebmOrange!12] (u) {1 or 16 decoded strategies};
+\node[block,below=of u,fill=milpRed!10] (r) {Shared MILP repair};
+\node[block,left=of r,fill=graphGreen!12] (v) {Independent validation};
+\node[block,left=of v,fill=scenarioBlue!12] (o) {Least-cost valid output and full exit};
+\node[block,below=of s] (rh) {RH proposal};
+\node[block,below=of rh] (direct) {Direct solver};
+\draw[arrow] (s)--(g); \draw[arrow] (g)--(z); \draw[arrow] (z)--(u);
+\draw[arrow] (u)--(r); \draw[arrow] (r)--(v); \draw[arrow] (v)--(o);
+\draw[arrow] (s)--(rh); \draw[arrow] (rh.south) -- ++(0,-3mm) -| (r.south);
+\draw[arrow] (s.west) -- ++(-4mm,0) |- (direct.west);
+\draw[arrow] (direct.east) -- ++(3mm,0) -| (v.south);
+\end{tikzpicture}
+\caption{Execution paths. The interval begins with scenario input and ends after output writing and process-tree closure. Static preload is measured separately. Energy guidance acts before decoding; repair and acceptance use the physical model.}\label{fig:chain}
+\end{figure}
