@@ -20,6 +20,12 @@ verrouillage du test final. Le plan contient 23 700 essais et 1 200 références
 d'allocations d'essais et 300 h de plafonds de références, hors préchargements,
 entraînements et analyses. Ce ne sont pas des prévisions de durée réelle.
 
+`-Stage Estimate` affiche maintenant un suivi par étape et le temps restant,
+préchargements inclus, à partir des durées observées. Il distingue explicitement
+les estimations, les provisions pour les configurations encore non mesurées et
+les postes non chiffrés. Il peut être consulté pendant la campagne, en lecture
+seule. Voir le guide pour `-HoursPerDay`, `-Json` et la méthode d'estimation.
+
 ## Conventions scientifiques
 
 - Délais indépendants : 5, 10, 30, 60, 120 s. Une exécution de 120 s n'est jamais

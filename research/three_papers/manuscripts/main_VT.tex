@@ -19,28 +19,45 @@
 \renewcommand{\textfraction}{0.10}
 \raggedbottom
 
-\title{Critical for whom? Choosing scenarios for closer review in power-system flexibility studies}
-\author{Th\'eotime Coudray \and St\'ephane Goutte}
-\date{19 November 2026}
+\title{Critical for Whom? How Planning Priorities Shape Scenario Selection in Power System Flexibility Studies}
+\author{%
+  Th\'eotime Coudray and St\'ephane Goutte\\[0.5em]
+  \small UMI SOURCE, Universit\'e de Versailles Saint-Quentin-en-Yvelines\\
+  \small Universit\'e Paris-Saclay, France
+}
+ \date{}
 \begin{document}
 \maketitle
 
 \begin{abstract}
-Cold, still weather can raise electricity demand just as wind generation falls. Planners simulate such days to see how generation, storage and imports could meet demand. Which scenarios deserve closer review? We assess operating plans from five perspectives. Four give priority to serving demand, controlling costs, limiting direct emissions or obtaining a plan quickly. The fifth weighs these concerns equally. With two minutes to compute each plan, the five perspectives agreed on 48 of their 60 choices from 600 scenarios. Identifying these cases in advance proved harder. On 400 new scenarios, even the best forecast missed more than half the priority cases. We also examined 30 days on one grid. The six days with the highest demand left after wind and solar included some days prioritised for emissions and none of those prioritised for avoidable costs. A planning authority choosing days for review should therefore test its selection rule against the outcome it wants to investigate.
+Which power system scenarios should planners review when they can examine only one in ten? For each of 600 simulated scenarios, we give a scheduling model up to two minutes to produce an operating plan. We then rank the same 600 plans from five perspectives. Four give greater weight to one concern: unmet electricity demand, operating costs, direct emissions, or the time needed to compute the plan. The fifth weighs all four concerns equally. Each ranking selects 60 cases for review, and 48 appear on all five lists. Switching the review priority from unmet demand to cost changes 9 of the 60 selections. We then test what planners can identify before computing a plan. On 400 new scenarios, the best result was for computing time: the forecast identified 16 of the 40 cases later flagged under that priority. We also studied 30 days on the same grid. After subtracting available wind and solar generation from hourly demand, we selected the six days with the highest remaining peaks. Two of those days appeared on the emissions shortlist and none appeared on the cost shortlist. These results show that a planner who relies on a single shortlist risks overlooking scenarios that matter for other priorities.
 \end{abstract}
 \noindent\textbf{Keywords:} power-system flexibility, scenario selection, electricity planning, decision support
 
 \section{Introduction}
 
-Electricity demand and renewable generation follow different rhythms. Solar output can fall late in the day while households are still using electricity. A power system can respond by increasing output from other plants, drawing on stored energy, importing power or shifting some consumption to a later hour. Its ability to adjust supply and demand in this way is called \emph{flexibility} \citep{lannoye2012,ulbig2015}. What the system needs depends on when and where these changes occur. Climate change can shift the season of peak demand, while the mix of wind, solar, storage and transmission determines which adjustments are available \citep{wenz2017,heggarty2019,brown2018}.
+Electricity demand and renewable generation follow different rhythms. Solar output can fall late in the day while households are still using electricity. A power system can respond by increasing output from other plants, drawing on stored energy, importing power or shifting some consumption to a later hour. Its ability to adjust supply and demand in this way is called \emph{flexibility} \citep{lannoye2012,ulbig2015}. What the system needs depends on when and where these changes occur. Climate change can shift the season of peak demand, while the mix of wind, solar, dispatchable generation, storage and transmission determines which adjustments are available \citep{wenz2017,heggarty2019,brown2018}.
 
-Planning authorities use scenarios to explore those possibilities. A scenario describes a particular electricity system and the conditions it faces over a period of time. Analysts might, for example, study an evening with little wind on a network with limited imports. Using a model, they calculate an \emph{operating plan} that specifies which plants generate, when storage charges or discharges, and how power moves between areas. Repeating the exercise for different networks, technologies and weather conditions produces many plans to examine. The European methodology for assessing flexibility needs distinguishes several reasons for examining them, including the integration of renewables and the ability to adjust output as demand changes \citep{acer2025}.
+\paragraph{}
+Planning authorities use scenarios to explore those possibilities. A scenario describes a particular electricity system and the conditions it faces over a period of time. Analysts might, for example, study an evening with little wind on a grid with limited imports. Using a model, they calculate an \emph{operating plan} that specifies which plants generate, when storage charges or discharges, and how power moves between areas. Repeating the exercise for different grids, technologies and weather conditions produces many plans to examine. The European methodology for assessing flexibility needs distinguishes several reasons for examining them, including the integration of renewables and the ability to adjust output as demand changes \citep{acer2025}.
 
-Which scenarios merit a closer look depends on the purpose of that review. Consider a plan that supplies every customer by running thermal plants through the evening. A team responsible for continuity of supply would see its immediate requirement met. A climate analyst might flag the same plan because of the emissions per unit of electricity supplied. An economist would want to know whether another feasible plan could have served the same system more cheaply. The team running the simulations may also flag a case if obtaining a plan takes nearly all the time available. A planning panel might ask how the case fares across all four concerns. These are different questions about a shared result, and one organisation may need to ask several of them.
+\paragraph{}
+Which scenarios merit a closer look depends on the purpose of that review. Consider a plan that supplies every customer by running thermal plants through the evening. A team responsible for continuity of supply would see its immediate requirement met. A climate analyst might flag the same plan because of the emissions per unit of electricity supplied. An economist would want to know whether another feasible plan could have served the same system more cheaply. The team running the simulations may also flag a case if obtaining a plan takes nearly all the computing time available. A planning panel might ask how the case fares across all four concerns. These are different questions about a shared result, and one organisation may need to ask several of them.
 
-Existing work gives planners ways to describe the flexibility available in a system \citep{papaefthymiou2018}, to elicit stakeholders' priorities for energy scenarios \citep{voegele2023,hofer2020}, and to select periods that retain important extremes while reducing the work of simulation \citep{hilbers2019}. Here the team must decide which cases to investigate before it knows how their plans will turn out. Characteristics such as the number of areas connected by the grid are already known. Whether a satisfactory plan can be found in time also depends on the scheduling method \citep{smithmiles2012,knueven2020}. Our question is twofold. \emph{Which scenarios warrant closer review under different priorities? How well can we identify them before calculating an operating plan?} We call a scenario \emph{critical} for a given purpose when the plan falls short on the outcomes that matter for that purpose, or when no usable plan is ready in time.
+\paragraph{}
+Studies of energy transitions show how the same scenarios can receive different assessments. In a study of four pathways for Germany's energy transition, \citet{hofer2020} asked stakeholders which outcomes mattered to them. Their assessments reflected concerns ranging from greenhouse gas emissions to the effects of energy infrastructure on the landscape. \citet{voegele2023} examined how much the importance attached to such criteria would have to change before a stakeholder would favour a different pathway. In a flexibility study, the decision is which operating plans deserve closer review. We can therefore ask how often reviewers with different priorities would choose the same cases from the same set of plans.
 
-We first compare the cases the five perspectives single out once the plans are known. We then ask what could have been identified beforehand in two settings. In one, the team compares different power systems. In the other, it studies different days on the same grid, where counting lines and plants tells it little about which day to examine. We also vary the time allowed to find a plan. This lets us ask whether a team with a fixed number of computing hours can obtain more plans that meet both cost and service requirements by giving some cases more time than others.
+\paragraph{}
+The choice of which cases to retain also arises when planners use a limited number of periods to decide how much generating capacity to build. Using 36 years of British demand and wind data, \citet{hilbers2019} retained the hours with the highest estimated generation costs, alongside a sample of other hours. This helped preserve conditions that influenced how much capacity the system needed. \citet{teichgraeber2021} showed why selecting the day of highest demand can be insufficient. A system designed to cope with that day could still leave demand unserved at other times. They tested the proposed system over the full record and used the results to identify periods to add. In both studies, the reason for keeping a period follows from the decision it is meant to inform.
+
+\paragraph{}
+In our study, we first ask which scenarios each reviewer would select after seeing all the operating plans. We call a scenario \emph{critical} for a given review when its plan performs poorly on the outcomes that matter for that review, or when no usable plan is available by the deadline. The resulting lists give us a benchmark for a second question: \emph{How many of the same cases could planners have identified before the plans were computed?}
+
+\paragraph{}
+Before scheduling, planners already know the expected demand and wind and solar generation. They can also describe the resources available to respond, including storage, flexible generation and connections to neighbouring areas \citep{papaefthymiou2018}. A high-demand evening with little wind may therefore be easy to spot. Whether the plan for that evening will leave demand unserved or cost more than another feasible plan is harder to anticipate. The time needed to obtain a plan also depends on the characteristics of the problem and on how the scheduling model is formulated \citep{smithmiles2012,knueven2020}. We test which of these early clues help planners find the cases they would want to review.
+
+\paragraph{}
+The rest of the paper is organized as follows. Section~2 describes how we build the scenarios, compute an operating plan for each one and assess the same plans from five perspectives. Section~3 first examines which cases the five perspectives select for closer review once the plans are known. It then tests how many of those cases can be identified in advance, both across different power systems and across different days on the same grid. Finally, it asks whether giving some scenarios more computing time than others yields more plans that meet both cost and service requirements within a fixed computing budget. Section~4 discusses what these findings mean for planners and how far they may apply to other systems. Section~5 concludes with the implications for choosing scenarios in future flexibility studies.
 
 \section{Methods}
 \subsection{From a power system to an operating schedule}
@@ -48,7 +65,7 @@ We first compare the cases the five perspectives single out once the plans are k
 
 To build a scenario, we specify the power plants and storage facilities in each area, together with the transmission lines between areas. We then supply time series for demand, wind and solar availability, and water inflows to hydroelectric reservoirs. These inputs describe what the system has to work with over the period being studied.
 
-We study 600 simulated scenarios, referred to as the \emph{development cases}. Each covers one day and contains between 4 and 170 geographical zones. Six groups, or \emph{families}, provide 100 cases each. Three are selected for low, medium or high values of an initial difficulty index within separate pools of candidate cases. The others emphasise renewables and storage, network structure or the number of operating decisions. Every perspective assesses every case.
+We study 600 simulated scenarios, referred to as the \emph{development cases}. Each covers one day and contains between 4 and 170 geographical zones. Six groups, or \emph{families}, provide 100 cases each. Three are selected for low, medium or high values of an initial difficulty index within separate pools of candidate cases. The others emphasise renewables and storage, grid structure or the number of operating decisions. Every perspective assesses every case.
 
 The scheduling model seeks the lowest-cost plan that respects the limits on power plants, storage and lines. The operating plan, also called a \emph{dispatch}, specifies how much power to generate, store and exchange, and how much consumption to shift to a later hour. A time-limited calculation can return a feasible plan even when a cheaper one exists. The model combines continuous choices, such as power output, with discrete choices, such as whether to start a plant. This makes it a mixed-integer linear program (MILP). It can leave demand unserved at a penalty, so a schedule that satisfies its constraints can still fall short of the study team's service requirement.
 
@@ -87,9 +104,9 @@ We use completed development runs to learn which indicators predict high scores 
 
 At 120 seconds we compare the five lists of 60 cases that would merit review if all 600 outcomes were known. To test what the team could have identified beforehand, we then use forecasts. We divide the 600 cases into five groups of 120, with every family represented in each. We fit the forecast on four groups and test it on the fifth, rotating the test group. All runs from one case stay together \citep{cawley2010,roberts2017}. With 12 reviews available in each group, \emph{recall} is the fraction of its 12 highest-scoring cases that the forecast selects. A separate test withholds an entire scenario family.
 
-We next apply the fitted forecasts to 400 independently generated cases. One group of 100 is drawn directly from the scenario generator, without first selecting for difficulty. The other three change the operating period or time resolution, the layout of the network, or how storage power, storage duration and the shape of demand vary together. We measure score accuracy by the average squared difference between forecast and observation (\emph{mean squared error}). For a predicted probability of success, the same calculation against the observed zero or one is called the \emph{Brier score} \citep{gneiting2007}. Smaller values indicate more accurate forecasts. Appendix~\ref{app:validation} distinguishes the tests planned in advance from later checks.
+We next apply the fitted forecasts to 400 independently generated cases. One group of 100 is drawn directly from the scenario generator, without first selecting for difficulty. The other three change the operating period or time resolution, the layout of the grid, or how storage power, storage duration and the shape of demand vary together. We measure score accuracy by the average squared difference between forecast and observation (\emph{mean squared error}). For a predicted probability of success, the same calculation against the observed zero or one is called the \emph{Brier score} \citep{gneiting2007}. Smaller values indicate more accurate forecasts. Appendix~\ref{app:validation} distinguishes the tests planned in advance from later checks.
 
-To test whether the same forecasts can help choose days on one grid, we keep a 56-zone network, its generators and its initial storage levels fixed. We vary hourly demand and the availability of wind and solar over 30 synthetic days. For each day we start two separate runs, one with 30 seconds and one with 120 seconds to return a plan. A third, longer run provides that day's reference cost. From the information available before each run, we select six days for each priority. Once the plans are known, we compare the mean score of our six choices with that of the six highest-scoring days. We also count how many days the two lists share. Appendix~\ref{app:fixeddays} describes the rules and the comparison with random selection.
+To test whether the same forecasts can help choose days on one grid, we keep a 56-zone grid, its generators and its initial storage levels fixed. We vary hourly demand and the availability of wind and solar over 30 synthetic days. For each day we start two separate runs, one with 30 seconds and one with 120 seconds to return a plan. A third, longer run provides that day's reference cost. From the information available before each run, we select six days for each priority. Once the plans are known, we compare the mean score of our six choices with that of the six highest-scoring days. We also count how many days the two lists share. Appendix~\ref{app:fixeddays} describes the rules and the comparison with random selection.
 
 Finally we ask how a team should share a fixed amount of computing time to deliver as many acceptable schedules as possible. A schedule meets the \emph{cost requirement} (E) if it arrives on time and its cost overrun stays within 5\% of the absolute reference cost. For reference costs within one euro of zero, we allow an overrun of one euro. The \emph{joint requirement} (ES) also limits unserved energy to 0.001 MWh. We assign a deadline to each case using its predicted chance of meeting both requirements, then count how many of the schedules at those deadlines actually succeed. Giving each case the same time provides the comparison.
 
@@ -153,7 +170,7 @@ Only the time priority gained cases from tailoring the forecast in both tests. O
 
 How well did the system descriptions carry over to the new cases? The six counts, which include the numbers of zones, lines and decisions, are a simple starting point. On the 400 independent cases, these counts gave the smallest average error for all five priority scores among the linear models compared. Here we set forecasts below zero to zero and those above one to one, so they fall on the same scale as the observed scores. For the balanced panel, the six counts also found one additional priority case. For the time-priority list, they found three fewer than the tailored forecast using all 22 indicators. A forecast can therefore estimate scores accurately across the whole sample and still miss cases at the top of the list.
 
-The number of lines per zone illustrates why a forecast can lose accuracy on a new network. The development networks had no loops. In a connected network of this kind (a tree), there is one fewer line than there are zones. The ratio of lines to zones was therefore always below one. Some new grids connected existing zones with additional lines. The model had learned its relationship between network density and the balanced score on trees alone. Applied to the more interconnected grids, it produced scores above six on a scale whose maximum is one (Figure~\ref{fig:transfer} in Appendix~\ref{app:external}). In a later check, limiting this single indicator to its training range removed much of the excess error for the balanced score. Appendix~\ref{app:external} gives that comparison and distinguishes it from the forecasts made before the independent runs.
+The number of lines per zone illustrates why a forecast can lose accuracy on a new grid. The development grids had no loops. In a connected grid of this kind (a tree), there is one fewer line than there are zones. The ratio of lines to zones was therefore always below one. Some new grids connected existing zones with additional lines. The model had learned its relationship between grid density and the balanced score on trees alone. Applied to the more interconnected grids, it produced scores above six on a scale whose maximum is one (Figure~\ref{fig:transfer} in Appendix~\ref{app:external}). In a later check, limiting this single indicator to its training range removed much of the excess error for the balanced score. Appendix~\ref{app:external} gives that comparison and distinguishes it from the forecasts made before the independent runs.
 
 
 
@@ -171,6 +188,7 @@ Which daily conditions gave a useful warning? Selecting the six days with the hi
 \label{fig:fixed_grid_days}
 \end{figure}
 
+\enlargethispage{\baselineskip}
 A rule can miss the exact top six and still select days of comparable concern. We therefore also compared the average score of the six days each rule chose. Selecting the days with the sharpest hour-to-hour rise in residual load gave a slightly higher average score than random selection under all five priorities at both deadlines. Each uncertainty interval for this gain included zero (Appendix~\ref{app:fixeddays}). On these 30 days, the evidence for using hourly changes as a screening rule is therefore inconclusive.
 
 \subsection{Can the indicators help distribute computing time?}
@@ -203,11 +221,11 @@ The computing-time result matters to the team responsible for delivering the stu
 
 The weights in this study illustrate choices a planning body might make. A decision-making body can choose its own weights or set a condition that every acceptable plan must meet. An equal-weight score allows good performance on one criterion to offset poor performance on another. A binding service threshold rules out that trade-off. In either case, a team using a forecast to select cases could report how many consequential cases it missed in a separate test and show the size of the omissions in physical units. In our independent test, one case missed by the service forecast left 3,501 MWh unserved. That quantity conveys a consequence that the number of missed cases alone cannot.
 
-Our test covers new simulated systems designed with the same modelling tools. Varying network connections and the length of the operating period tests whether relationships learned under familiar conditions still hold when those features change. It gives no estimate of how often a critical situation occurs on a real grid. The model represents regional energy balances and limits on power flows. Assessing voltage, frequency or the consequences of losing a line would require further engineering analysis.
+Our test covers new simulated systems designed with the same modelling tools. Varying grid connections and the length of the operating period tests whether relationships learned under familiar conditions still hold when those features change. It gives no estimate of how often a critical situation occurs on a real grid. The model represents regional energy balances and limits on power flows. Assessing voltage, frequency or the consequences of losing a line would require further engineering analysis.
 
 The daily study also shows why a review team needs to look at the quantity behind a rank. On the same 30 days, 22 plans met both the service and cost requirements at 30 seconds and 28 did so at two minutes. At two minutes all 30 plans served demand in full, yet only one day appeared on all five lists of six. Even the service-priority list distinguished among days, because cost, time and emissions still carried some weight. A reviewer investigating potential shortages would learn more at that point by checking the unserved energy directly.
 
-The daily experiment covers one simulated network and one timed run per day and deadline. Other grids and repeated runs under the same operating conditions would help establish how often these rules miss consequential days. The development study also illustrates uncertainty in cost and timing. There, longer reference runs changed one member of the emissions list and left the other four lists intact. In a separate timing check, five of 30 selected development cases met the joint requirements in some two-minute runs and missed them in others. Changes close to a numerical cutoff deserve particular care when they determine whether a case receives further attention.
+The daily experiment covers one simulated grid and one timed run per day and deadline. Other grids and repeated runs under the same operating conditions would help establish how often these rules miss consequential days. The development study also illustrates uncertainty in cost and timing. There, longer reference runs changed one member of the emissions list and left the other four lists intact. In a separate timing check, five of 30 selected development cases met the joint requirements in some two-minute runs and missed them in others. Changes close to a numerical cutoff deserve particular care when they determine whether a case receives further attention.
 
 \section{Conclusions and policy implications}
 
@@ -215,81 +233,8 @@ When an authority commissions a flexibility study, the purpose of the review sho
 
 Choosing cases before their schedules are known is harder. At a review quota of one case in ten, even the best forecast in our independent comparison recovered fewer than half the cases reviewers would have selected with hindsight. A rule that helps compare different grids also needs a separate test before it is used to select days on one grid. In our daily study, the largest peaks in demand left after wind and solar identified some days of concern for direct emissions and missed all the priority days for cost. Reporting which days a rule would leave out, and what happened on those days, makes its consequences visible to reviewers. A team with limited computing time can count how many additional schedules meet its requirements when it lets some runs continue longer. An indicator is worth collecting for that decision if it helps produce more acceptable schedules within the time the team has.
 
-\setlength{\bibsep}{0.28\baselineskip}
-\begin{thebibliography}{99}
-\bibitem[ACER(2025)]{acer2025}
-European Union Agency for the Cooperation of Energy Regulators (ACER), 2025.
-Type and format of data and the methodology for TSOs' and DSOs' flexibility needs analysis.
-Decision No.~05/2025, Annex~I, 25 July.
-\href{https://www.acer.europa.eu/sites/default/files/documents/Individual\%20Decisions_annex/ACER-Decision-05-2025-FNAM-Annex-I.pdf}{Flexibility needs assessment methodology}.
-
-\bibitem[Brown et~al.(2018)]{brown2018}
-Brown, T., Schlachtberger, D., Kies, A., Schramm, S., Greiner, M., 2018.
-Synergies of sector coupling and transmission reinforcement in a cost-optimised, highly renewable European energy system.
-\emph{Energy} 160, 720--739. \doi{10.1016/j.energy.2018.06.222}.
-
-\bibitem[Cawley and Talbot(2010)]{cawley2010}
-Cawley, G.C., Talbot, N.L.C., 2010. On over-fitting in model selection and subsequent selection bias in performance evaluation.
-\emph{Journal of Machine Learning Research} 11, 2079--2107. \url{https://www.jmlr.org/papers/v11/cawley10a.html}.
-
-\bibitem[Gneiting and Raftery(2007)]{gneiting2007}
-Gneiting, T., Raftery, A.E., 2007. Strictly proper scoring rules, prediction, and estimation.
-\emph{Journal of the American Statistical Association} 102, 359--378. \doi{10.1198/016214506000001437}.
-
-\bibitem[Heggarty et~al.(2019)]{heggarty2019}
-Heggarty, T., Bourmaud, J.-Y., Girard, R., Kariniotakis, G., 2019.
-Multi-temporal assessment of power system flexibility requirement.
-\emph{Applied Energy} 238, 1327--1336. \doi{10.1016/j.apenergy.2019.01.198}.
-
-\bibitem[Hilbers et~al.(2019)]{hilbers2019}
-Hilbers, A.P., Brayshaw, D.J., Gandy, A., 2019.
-Importance subsampling: improving power system planning under climate-based uncertainty.
-\emph{Applied Energy} 251, 113114. \doi{10.1016/j.apenergy.2019.04.110}.
-
-\bibitem[H\"ofer and Madlener(2020)]{hofer2020}
-H\"ofer, T., Madlener, R., 2020.
-A participatory stakeholder process for evaluating sustainable energy transition scenarios.
-\emph{Energy Policy} 139, 111277. \doi{10.1016/j.enpol.2020.111277}.
-
-\bibitem[Knueven et~al.(2020)]{knueven2020}
-Knueven, B., Ostrowski, J., Watson, J.-P., 2020. On mixed-integer programming formulations for the unit commitment problem.
-\emph{INFORMS Journal on Computing} 32, 857--876. \doi{10.1287/ijoc.2019.0944}.
-
-\bibitem[Lannoye et~al.(2012)]{lannoye2012}
-Lannoye, E., Flynn, D., O'Malley, M., 2012. Evaluation of power system flexibility.
-\emph{IEEE Transactions on Power Systems} 27, 922--931. \doi{10.1109/TPWRS.2011.2177280}.
-
-\bibitem[Newbery and Biggar(2024)]{newbery2024}
-Newbery, D.M., Biggar, D.R., 2024. Marginal curtailment of wind and solar PV: Transmission constraints, pricing and access regimes for efficient investment.
-\emph{Energy Policy} 191, 114206. \doi{10.1016/j.enpol.2024.114206}.
-
-\bibitem[Papaefthymiou et~al.(2018)]{papaefthymiou2018}
-Papaefthymiou, G., Haesen, E., Sach, T., 2018. Power System Flexibility Tracker: Indicators to track flexibility progress towards high-RES systems.
-\emph{Renewable Energy} 127, 1026--1035. \doi{10.1016/j.renene.2018.04.094}.
-
-\bibitem[Roberts et~al.(2017)]{roberts2017}
-Roberts, D.R., Bahn, V., Ciuti, S., Boyce, M.S., Elith, J., Guillera-Arroita, G., Hauenstein, S., Lahoz-Monfort, J.J., Schr\"oder, B., Thuiller, W., Warton, D.I., Wintle, B.A., Hartig, F., Dormann, C.F., 2017.
-Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure.
-\emph{Ecography} 40, 913--929. \doi{10.1111/ecog.02881}.
-
-\bibitem[Smith-Miles and Lopes(2012)]{smithmiles2012}
-Smith-Miles, K., Lopes, L., 2012. Measuring instance difficulty for combinatorial optimization problems.
-\emph{Computers \& Operations Research} 39, 875--889. \doi{10.1016/j.cor.2011.07.006}.
-
-\bibitem[Ulbig and Andersson(2015)]{ulbig2015}
-Ulbig, A., Andersson, G., 2015. Analyzing operational flexibility of electric power systems.
-\emph{International Journal of Electrical Power \& Energy Systems} 72, 155--164. \doi{10.1016/j.ijepes.2015.02.028}.
-
-\bibitem[V\"ogele et~al.(2023)]{voegele2023}
-V\"ogele, S., Teja Josyabhatla, V., Ball, C., Rhoden, I., Grajewski, M., R\"ubbelke, D., Kuckshinrichs, W., 2023.
-Robust assessment of energy scenarios from stakeholders' perspectives.
-\emph{Energy} 282, 128326. \doi{10.1016/j.energy.2023.128326}.
-
-\bibitem[Wenz et~al.(2017)]{wenz2017}
-Wenz, L., Levermann, A., Auffhammer, M., 2017. North--south polarization of European electricity consumption under future warming.
-\emph{Proceedings of the National Academy of Sciences} 114, E7910--E7918. \doi{10.1073/pnas.1704339114}.
-\end{thebibliography}
-
+\bibliographystyle{plainnat}
+\bibliography{references}
 \clearpage
 
 \appendix
@@ -350,7 +295,7 @@ Let \(g_{zi}\) be total local generation, including thermal, nuclear, solar, win
  &=D_{zi}+r_{zi}+\sum_a p_{zi}^{a,+}+o_{zi}.
  \label{eq:dispatch-balance}
 \end{align}
-Here \(D_{zi}\) is demand, \(d_{zi}\) is demand deferred, \(r_{zi}\) is previously deferred demand recovered, and \(o_{zi}\) is excess power disposed of. The signed flow on line \(\ell\) obeys \(|f_{\ell i}|\leq\bar F_\ell\), where \(\bar F_\ell\) is its transfer capacity. The incidence coefficient \(A_{z\ell}\) is \(+1\) at the receiving zone, \(-1\) at the sending zone and zero elsewhere. Only the external trade zone has \(\delta_z=1\). A binary trade mode permits either imports or exports within the external transfer limit. These equations represent a lossless transport network in which each line flow is limited by its transfer capacity.
+Here \(D_{zi}\) is demand, \(d_{zi}\) is demand deferred, \(r_{zi}\) is previously deferred demand recovered, and \(o_{zi}\) is excess power disposed of. The signed flow on line \(\ell\) obeys \(|f_{\ell i}|\leq\bar F_\ell\), where \(\bar F_\ell\) is its transfer capacity. The incidence coefficient \(A_{z\ell}\) is \(+1\) at the receiving zone, \(-1\) at the sending zone and zero elsewhere. Only the external trade zone has \(\delta_z=1\). A binary trade mode permits either imports or exports within the external transfer limit. These equations represent a lossless transport grid in which each line flow is limited by its transfer capacity.
 
 \paragraph{Commitment and storage.}
 A single binary decision \(u_{zi}\) commits the thermal fleet in a zone. Its output satisfies \(\underline P_z u_{zi}\leq p^{\rm th}_{zi}\leq\bar P_z u_{zi}\), where \(\underline P_z,\bar P_z\) are minimum and maximum thermal output when online. A start occurs exactly when the commitment switches from zero to one. Ramp limits apply during operation, start-up and shutdown, using the case's initial status and output. Nuclear output is continuous within capacity and ramp limits. Wind and solar output plus curtailment equal their available power. Run-of-river generation is specified at each time step. Reservoirs can retain inflows, release water for generation or spill it, subject to storage and turbine capacities.
@@ -471,13 +416,13 @@ A12 & Peak demand divided by the sum of all line capacities & & \\
 
 For the ratios of aggregate powers, energies and costs in A1--A12 and B5--B7, the respective denominators have floors of 1 MW, 1 MWh and one euro. Positive residual energy sums only the hours or fractions of an hour when demand exceeds available wind, solar and run-of-river generation. For B8 the permitted final range is its width divided by installed energy capacity, with a floor of 0.01. B8 is zero if there is no usable storage. B10 is zero if total line capacity is zero. Standard deviations use all steps or zones, as applicable.
 
-These distinctions matter in the development cases. The generator's A3 and A5 reflect nearly the same demand multiplier (correlation 0.99998). Its B2 and B5 are constant, and 383 of 600 cases reach the A6 upper normalisation bound. The constructed model has 264--17,232 free binary choices (B3) and a thermal plant in 18.8--100\% of zones (B4). The generator samples a battery duration for B8, while the development schedules use four-hour batteries. B9 counts potential connections between regions in the generator and actual lines per zone in the model. All development networks are trees, so their \(N-1\) lines keep the latter ratio in \([0.75,0.99412]\). For the independent forecasts we centre and scale each input using the development mean and standard deviation. The reference index uses the fixed bounds in Tables~\ref{tab:physical} and~\ref{tab:structural}.
+These distinctions matter in the development cases. The generator's A3 and A5 reflect nearly the same demand multiplier (correlation 0.99998). Its B2 and B5 are constant, and 383 of 600 cases reach the A6 upper normalisation bound. The constructed model has 264--17,232 free binary choices (B3) and a thermal plant in 18.8--100\% of zones (B4). The generator samples a battery duration for B8, while the development schedules use four-hour batteries. B9 counts potential connections between regions in the generator and actual lines per zone in the model. All development grids are trees, so their \(N-1\) lines keep the latter ratio in \([0.75,0.99412]\). For the independent forecasts we centre and scale each input using the development mean and standard deviation. The reference index uses the fixed bounds in Tables~\ref{tab:physical} and~\ref{tab:structural}.
 
 \section{Validation and sensitivity analysis}
 \label{app:validation}
 
 \paragraph{Reference dispatches and case construction.}
-All 600 development references passed the physical checks under an initial 600-second solver limit. HiGHS certified 383 as optimal within tolerance. The later campaign allocated a solver limit of 1,800 seconds to each of the other 217, retained the better feasible cost, and brought the number certified to 398. We distinguish the original targets used to fit the predictors from the rescored development outcomes. All 400 independent references passed validation and 389 were certified. The independent reference runs also used a 1,800-second solver limit. The independent batches vary (i) the operating window among 12, 48 or 72 hours at hourly resolution and 24 hours at 30- or 120-minute resolution, (ii) the number of transport lines in a connected network, or (iii) storage power and energy independently, along with the shape of demand at fixed total demand. The fourth group is the unfiltered comparison. Together with 2,000 independent timed trials and 450 timing repetitions, these independent references and development upgrades account for 3,067 executions. The fixed-grid study adds 90 separate executions.
+All 600 development references passed the physical checks under an initial 600-second solver limit. HiGHS certified 383 as optimal within tolerance. The later campaign allocated a solver limit of 1,800 seconds to each of the other 217, retained the better feasible cost, and brought the number certified to 398. We distinguish the original targets used to fit the predictors from the rescored development outcomes. All 400 independent references passed validation and 389 were certified. The independent reference runs also used a 1,800-second solver limit. The independent batches vary (i) the operating window among 12, 48 or 72 hours at hourly resolution and 24 hours at 30- or 120-minute resolution, (ii) the number of transport lines in a connected grid, or (iii) storage power and energy independently, along with the shape of demand at fixed total demand. The fourth group is the unfiltered comparison. Together with 2,000 independent timed trials and 450 timing repetitions, these independent references and development upgrades account for 3,067 executions. The fixed-grid study adds 90 separate executions.
 
 \paragraph{Development comparisons.}
 In the five training/test splits, three inner folds select the penalty for model fitting. A second design leaves one of the six families out for evaluation and tunes by holding out each remaining family in turn. A family label enters only the development comparisons that explicitly test its explanatory value. The binary size controls are zone count, step count, line count and the zone--step product. At a single resolution on trees, only one of these four dimensions varies independently. The nominal three-indicator model uses B1, B3 and B4. The six-indicator model uses A2, A6, A8, A10, B3 and B7. These refer to generator indicators in Tables~\ref{tab:physical} and \ref{tab:structural}. The independent three- and six-variable models use the constructed measurements defined in Section~\ref{sec:indicators}.
@@ -532,7 +477,7 @@ D-00035 & 65 & 56 & -13.3 & +8.1 & 398 & 0.048 & 35.18 & 41.59 & 84.3 & 7.20\\
 H-00047 & 72 & 58 & -29.7 & +0.8 & 196 & 0.025 & 8.63 & 40.96 & 84.3 & 4.16\\
 \bottomrule\end{tabular}
 \par\smallskip\begin{minipage}{\linewidth}\footnotesize
-H denotes the high-criticality family, D the discrete-decision family and N the network family. The number is the case identifier within its family. Rank 1 has the largest loss. Each margin is the case's score minus its profile's 60th-highest score, multiplied by 1,000. A positive margin places the case inside the shortlist. Unserved energy is also expressed as a percentage of demand. Cost excess is the dispatch cost minus its reference, expressed in millions of euros and as a percentage of the absolute reference cost. Thermal is internal thermal generation as a percentage of served energy.
+H denotes the high-criticality family, D the discrete-decision family and N the grid family. The number is the case identifier within its family. Rank 1 has the largest loss. Each margin is the case's score minus its profile's 60th-highest score, multiplied by 1,000. A positive margin places the case inside the shortlist. Unserved energy is also expressed as a percentage of demand. Cost excess is the dispatch cost minus its reference, expressed in millions of euros and as a percentage of the absolute reference cost. Thermal is internal thermal generation as a percentage of served energy.
 \end{minipage}\end{table}
 
 \begin{table}[H]\centering\small
@@ -640,7 +585,7 @@ The three measures improve on the 22 generator indicators for each of the five p
 \begin{figure}[H]
 \centering
 \includegraphics[width=.94\linewidth]{figures/vt_topology_transfer.pdf}
-\caption{Predicting the balanced score on unfamiliar networks. Each of the 100 cases is shown twice, with its observed score and its five-second forecast from the model using 22 measurements of the scheduling problem. Shading marks the range of lines per zone in training.}
+\caption{Predicting the balanced score on unfamiliar grids. Each of the 100 cases is shown twice, with its observed score and its five-second forecast from the model using 22 measurements of the scheduling problem. Shading marks the range of lines per zone in training.}
 \label{fig:transfer}
 \end{figure}
 
@@ -651,7 +596,7 @@ With all forecasts left unadjusted, pooled errors across the five deadlines rang
 \label{app:fixeddays}
 
 \paragraph{Design.}
-We selected the first numbered network in the medium-difficulty family before running the experiment. Its 56 zones and 55 lines, plant capacities, costs, hydro inflows and initial storage stayed fixed. Each synthetic day starts from the same initial conditions and spans 24 hours. We draw one of four demand patterns (flat, evening peak, double peak or office-hours peak), give it equal weight with each zone's original pattern, and scale the resulting peak to 75--125\% of that zone's original peak. The hourly wind and solar series combine a regional weather pattern (75\% weight) with the zone's original availability (25\%). We then scale solar availability by a factor drawn from 0.40--1.00 and wind availability by a factor drawn from 0.35--1.00. The share of demand that can be shifted stays fixed.
+We selected the first numbered grid in the medium-difficulty family before running the experiment. Its 56 zones and 55 lines, plant capacities, costs, hydro inflows and initial storage stayed fixed. Each synthetic day starts from the same initial conditions and spans 24 hours. We draw one of four demand patterns (flat, evening peak, double peak or office-hours peak), give it equal weight with each zone's original pattern, and scale the resulting peak to 75--125\% of that zone's original peak. The hourly wind and solar series combine a regional weather pattern (75\% weight) with the zone's original availability (25\%). We then scale solar availability by a factor drawn from 0.40--1.00 and wind availability by a factor drawn from 0.35--1.00. The share of demand that can be shifted stays fixed.
 
 We set the daily inputs and selection rules and applied the fitted forecasts before solving. Each day had two timed runs and a separate reference run with a 600-second solver limit. All 60 timed runs delivered valid plans on time. All 30 reference runs delivered feasible plans, and the solver certified four as optimal within tolerance. Reported cost overruns use each day's feasible reference. At 30 seconds, 24 plans met the cost requirement and 22 also met the service requirement. The corresponding counts at 120 seconds were 28 and 28.
 
